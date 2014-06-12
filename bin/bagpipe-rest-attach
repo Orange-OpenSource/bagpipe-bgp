@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+#
+# Copyright 2014 Orange
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#    http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import os
+
+import sys
+import urllib2
+import json
+
+from optparse import OptionParser
+from copy import copy
+
+from bagpipe.bgp.common.run_command import runCommand
+
+import logging
+
+NS2VPN_INTERFACE_PREFIX = "tovpn--"
+VPN2NS_INTERFACE_PREFIX = "to-ns--"
+
+LINUX_DEV_LEN = 15
+
+
+logFormatter = logging.Formatter("[%(levelname)-5.5s]  %(message)s")
+log = logging.getLogger()
+
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logFormatter)
+log.addHandler(consoleHandler)
+
+log.setLevel(logging.WARNING)
+
+def create_veth_pair(vpn_interface,ns_interface,ns_name):
+    runCommand(log,"ip netns exec %s ip link delete %s" % (ns_name,ns_interface), raiseExceptionOnError=False )
+    runCommand(log,"ip link add %s type veth peer name %s netns %s" % (vpn_interface,ns_interface,ns_name), raiseExceptionOnError=False )
+    runCommand(log,"ip link set dev %s up" % vpn_interface )
+    runCommand(log,"ip netns exec %s ip link set dev %s up" % (ns_name,ns_interface) )
+
+
+
+def getSpecialNetNSPortMacPort(namespace):
+    ns2vpn_if_name = (NS2VPN_INTERFACE_PREFIX+ namespace)[:LINUX_DEV_LEN]
+    vpn2ns_if_name = (VPN2NS_INTERFACE_PREFIX+ namespace)[:LINUX_DEV_LEN]
+    
+    port = vpn2ns_if_name
+
+    # options.mac is the MAC address of the ns2vpn interface
+    (output,returnCode) = runCommand(log,"ip netns exec %s ip -o link show %s | perl -pe 's|.* link/ether ([^ ]+) .*|$1|'" % (namespace,ns2vpn_if_name))
+    if "does not exist" in output[0]:
+        raise Exception("special netns interface does not exist: %s"% output)  
+    mac =  output[0]   
+    
+    return (mac,port)
+
+def createSpecialNetNSPort(options):
+    
+    print "Will plug local namespace %s into network" % options.vpn_instance_id
+
+    ns2vpn_if_name = (NS2VPN_INTERFACE_PREFIX+ options.vpn_instance_id)[:LINUX_DEV_LEN]
+    vpn2ns_if_name = (VPN2NS_INTERFACE_PREFIX+ options.vpn_instance_id)[:LINUX_DEV_LEN]
+
+    netns_name = options.vpn_instance_id
+
+    # create namespace    
+    runCommand(log,"ip netns add %s" % netns_name, raiseExceptionOnError=False)
+    
+    # create veth pair and move one into namespace
+    create_veth_pair(vpn2ns_if_name, ns2vpn_if_name, netns_name)
+    
+    runCommand(log,"ip netns exec %s ip addr add %s/%d dev %s" % (netns_name, options.ip, 24, ns2vpn_if_name), raiseExceptionOnError=False)
+
+    runCommand(log,"ip netns exec %s ip route add default dev %s via %s" % (netns_name,ns2vpn_if_name ,options.gw_ip), 
+               raiseExceptionOnError=False)
+
+    # need
+    runCommand(log,"ip netns exec %s ip link set %s mtu 1420" % (netns_name, ns2vpn_if_name), raiseExceptionOnError=False)
+
+
+if __name__=="__main__": 
+    usage = "usage: %prog [--attach|--detach] --port (<port>|netns) --ip <ip> --network-type <type> [options] (see --help)"
+    parser = OptionParser(usage)
+
+    parser.add_option("--rt", dest="routeTargets", help="route target [default: 64512:0]  (can be specified multiple times)", default=[], action="append")
+    parser.add_option("--import-rt", dest="importOnlyRouteTargets", help="import-only route target (can be specified multiple times)", default=[], action="append")
+    parser.add_option("--export-rt", dest="exportOnlyRouteTargets", help="export-only route target (can be specified multiple times)", default=[], action="append")
+    parser.add_option("--vpn-instance-id", dest="vpn_instance_id", help="UUID for the network instance [default: %default]", default="dc3ef23c-0132-4cf1-b4d0-084c8727e6fd")
+    parser.add_option("--network-type", dest="network_type", help="network type (ipvpn or evpn)", choices=["ipvpn","evpn"])
+    parser.add_option("--attach", dest="operation", action="store_const", const="attach",  help="attach local port")
+    parser.add_option("--detach", dest="operation", action="store_const", const="detach",  help="detach local port")
+    parser.add_option("--port",  dest="port", help="local port to attach/detach (use special port 'netns' to have a local netns attached/detached)")
+    parser.add_option("--ip",  dest="ip", help="IP address")
+    parser.add_option("--gateway-ip",  dest="gw_ip", help="IP address of network gateway (optional, default: %default)", default="10.0.0.1")
+    parser.add_option("--mac", dest="mac", help="MAC address (required for evpn if port is not 'netns')")
+    parser.add_option("--ovs-hybrid-vif-hack", action="store_true", dest="iohv_hack", default=False)
+
+    (options, args) = parser.parse_args()
+
+    if ( len(options.routeTargets)==0 and 
+        not (options.importOnlyRouteTargets or options.exportOnlyRouteTargets)):
+        options.routeTargets = ["64512:0"]
+    
+    importRTs = copy(options.routeTargets or [])
+    for rt in options.importOnlyRouteTargets:
+        importRTs.append(rt) 
+
+    exportRTs = copy(options.routeTargets or [])
+    for rt in options.exportOnlyRouteTargets:
+        exportRTs.append(rt)
+
+    if not(options.operation):
+        parser.error("Need to specify --attach or --detach")
+    
+    if not(options.port):
+        parser.error("Need to specify --port <localport>")
+    
+    if not(options.ip):
+        parser.error("Need to specify --ip")
+
+    if not(options.network_type):
+        parser.error("Need to specify --network-type")
+        
+    if options.iohv_hack:
+        
+        if not options.network_type == "ipvpn":
+            parser.error("--ovs-hybrid-vif-hack is not yet supported for evpn")
+        if not options.port == "netns":
+            parser.error("--ovs-hybrid-vif-hack requires the use of special port 'netns'")
+        else:
+            print "ovs-hybrid-vif-hack => using 'qvoXXXX' as the interface name..."
+            VPN2NS_INTERFACE_PREFIX="qvo"
+
+    if options.port == "netns" :
+        createSpecialNetNSPort(options)
+        (options.mac,options.port) = getSpecialNetNSPortMacPort(options.vpn_instance_id)
+        
+        if options.iohv_hack:
+            #plug the port on ovs
+            runCommand(log,"ovs-vsctl del-port ovsbr0 %s" %(options.port),raiseExceptionOnError=False)
+            runCommand(log,"ovs-vsctl add-port ovsbr0 %s" %(options.port))
+            pass
+        
+        print "Local port: %s (%s)" % (options.port,options.mac)
+        runCommand(log,"ip link show %s" % options.port) 
+    
+
+    if not(options.mac):
+        if options.network_type == "ipvpn":
+            options.mac = "52:54:00:99:99:22"
+        else:
+            parser.error("Need to specify --mac for an EVPN network attachment if port is not 'netns'")
+
+    json_data = json.dumps({
+                            "import_rt":  ",".join(importRTs),
+                            "export_rt":  ",".join(exportRTs), 
+                            "local_port":  options.port, 
+                            "vpn_instance_id":  options.vpn_instance_id,
+                            "vpn_type":    options.network_type,
+                            "gateway_ip":  options.gw_ip,
+                            "mac_address": options.mac,
+                            "ip_address":  "%s/24" % options.ip 
+                            }
+                           )
+    
+    print "request: %s" % json_data
+    
+    os.environ['NO_PROXY'] = "127.0.0.1"
+    req = urllib2.Request("http://127.0.0.1:8082/%s_localport" % options.operation, json_data, {'Content-Type': 'application/json'})
+    try:
+        response = urllib2.urlopen(req)
+        response_content = response.read()
+        response.close()
+
+        print "response: %d %s" % (response.getcode(),response_content)
+    except urllib2.HTTPError as e:
+        print "error %d, reason: %s" % (e.code,e.reason) 
+        error_content = e.read()
+        print "   %s" % error_content
+
+

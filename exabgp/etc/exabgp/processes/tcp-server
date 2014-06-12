@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import readline
+import signal
+import socket
+import time
+import select
+
+from SocketServer import TCPServer,StreamRequestHandler
+
+class Control (StreamRequestHandler):
+	def handle(self):
+		command = 'go'
+		while command not in ['quit','exit']:
+			# reading the command on TCP
+			self.wfile.write('> ')
+
+			# relaying it to exabgp via the socket
+			command = self.rfile.readline().strip()
+
+			if command in ['quit','exit']:
+				continue
+
+			if command in ['help','?']:
+				self.wfile.write('exabgp tcp-control help\n')
+				self.wfile.write('\n')
+				self.wfile.write('This program is just a way to manually enter commands using telnet\n')
+				self.wfile.write('routes and flows syntax are parsed like normal configuration\n')
+				self.wfile.write('\n')
+				self.wfile.write('quit (close the telnet connection)\n')
+				self.wfile.write('exit (close the telnet connection)\n')
+				self.wfile.write('\n')
+				self.wfile.write('version (returns the version of exabgp)\n')
+				self.wfile.write('reload (reload the configuration - cause exabgp to forget all routes learned via external processes)\n')
+				self.wfile.write('restart (reload the configuration and bounce all BGP session)\n')
+				self.wfile.write('shutdown (politely terminate all session and exit)\n')
+				self.wfile.write('\n')
+				self.wfile.write('WARNING : The result of the following commands will depend on the route, it could even cause the BGP session to drop)\n')
+				self.wfile.write('WARNING : It could even cause the BGP session to drop, for example if you send flow routes to a router which does not support it\n')
+				self.wfile.write('\n')
+				self.wfile.write('The route will be sent to ALL the peers (there is no way to filter the announcement yet)\n')
+				self.wfile.write('\n')
+				self.wfile.write('annouce route\n')
+				self.wfile.write(' The multi-line syntax is currently not supported\n')
+				self.wfile.write(' example: announce route 1.2.3.4 next-hop 5.6.7.8\n')
+				self.wfile.write('withdraw route\n')
+				self.wfile.write(' example: withdraw route (example: withdraw route 1.2.3.4 next-hop 5.6.7.8)\n')
+				self.wfile.write('announce flow\n')
+				self.wfile.write(' exabgp does not have a single line flow syntax so you must use the multiline version indicating newlines with \\n\n')
+				self.wfile.write(' example: announce flow route {\\n match {\\n source 10.0.0.1/32;\\n destination 1.2.3.4/32;\\n }\\n then {\\n discard;\\n }\\n }\\n\n')
+				self.wfile.write('withdraw flow\n')
+				self.wfile.write(' exabgp does not have a single line flow syntax so you must use the multiline version indicating newlines with \\n\n')
+				self.wfile.write(' example: withdraw flow route {\\n match {\\n source 10.0.0.1/32;\\n destination 1.2.3.4/32;\\n }\\n then {\\n discard;\\n }\\n }\\n\n')
+				self.wfile.write('\n')
+				continue
+
+			if command.startswith('announce '):
+				sys.stdout.write('%s\n' % command)
+				sys.stdout.flush()
+				self.wfile.write('requested %s annoucement\n' % command.split(' ')[1])
+				continue
+
+			if command.startswith('withdraw '):
+				sys.stdout.write('%s\n' % command)
+				sys.stdout.flush()
+				self.wfile.write('request %s withdrawal\n' % command.split(' ')[1])
+				continue
+
+			if command in ['shutdown','reload','restart','version']:
+				sys.stdout.write('%s\n' % command)
+				sys.stdout.flush()
+				r, waiting_answer = True, True
+				while r or waiting_answer:
+					try:
+						r,_,_ = select.select([sys.stdin], [], [], 1.0)
+					except select.error,e:
+						raise KeyboardInterrupt('SIGNAL received in select')
+					if r:
+						waiting_answer = False
+						response = sys.stdin.readline()
+						self.wfile.write(response)
+					time.sleep(0.1)
+				continue
+
+			self.wfile.write('unknown command, try: help\n')
+
+def sig (signum, frame):
+	# outch rude but pervent silly trace on exit if waiting for a read on stdin :p
+	os.kill(os.getpid(),signal.SIGKILL)
+
+signal.signal(signal.SIGINT, sig)
+signal.signal(signal.SIGTERM, sig)
+
+#def intercept (type, value, trace):
+#	pass
+#
+#sys.excepthook = intercept
+
+host, port = "localhost", 9999
+
+count = 0
+connected = False
+while not connected:
+	try:
+		server = TCPServer((host, port), Control)
+		connected = True
+	except socket.error:
+		count += 1
+		if count % 10 == 0:
+			print >> sys.stderr, 'tcp-server still trying to bind to %s:%d' % (host,port)
+		# we can not connect to the socket, retrying (happens if respawns too quickly)
+		time.sleep(1)
+server.serve_forever()
+

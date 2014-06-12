@@ -1,0 +1,72 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides: bagpipe-fakerr
+# Should-Start:
+# Required-Stop:
+# Required-Start:
+# Should-Stop:
+# Default-Start:  2 3 4 5
+# Default-Stop:   0 1 6
+# Short-Description: BaGPipe fake BGP Route Reflector
+# Description: Provides a fake BGP Route Reflector limited to two BGP peers
+### END INIT INFO
+#
+# Copyright 2014 Orange
+
+
+NAME="BaGPipe fakeRR"
+
+PIDFILE=/var/run/bagpipe-fakerr/fakerr.pid
+
+FAKERR=$(which bagpipe-fakerr)
+
+mkdir -p `dirname $PIDFILE`
+
+if [ ! -x `which twistd` ]; then
+    echo "ERROR: twistd not found..."
+    exit 1
+fi
+
+if [ ! -f "$FAKERR" ]; then
+    echo "ERROR: FakeRR bootstrap not found: $FAKERR..."
+    exit 1
+fi
+
+case "$1" in
+  start)
+    # Start the daemon
+    if [ "$(pgrep -fl $FAKERR)" == "" ]; then
+	    echo "Starting $NAME..."
+    	twistd --syslog --pidfile $PIDFILE --prefix bagpipe-fakerr -y $FAKERR
+    else
+    	echo "WARNING: $NAME has already been started..."
+    fi
+    ;;
+  stop)
+    # Stop the daemon with dataplane cleanup
+    echo "Stopping $NAME..."
+    if [ "$(pgrep -fl $FAKERR)" != "" ]; then
+	    kill `cat $PIDFILE`	
+	else
+    	echo "WARNING: $NAME has already been stopped..."
+	fi
+    ;;
+  restart)
+  	$0 stop
+  	$0 start
+    ;;
+  status)
+    if [ "$(pgrep -fl $FAKERR)" != "" ]; then
+    	echo "$NAME component is running."
+    else
+    	echo "$NAME component is stopped."
+    fi
+    ;;
+  *)
+    # Refuse to do other stuff
+    echo "Usage: service bagpipe-fakerr {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+
+exit 0

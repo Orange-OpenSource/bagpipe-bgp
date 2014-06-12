@@ -1,0 +1,46 @@
+[BGP]
+local_address=192.168.100.177
+peers=192.168.0.101
+my_as=64512
+enable_rtc=True
+
+
+[API]
+# BGP component API IP address and port
+# (api_host is currently ignored, and we bind to 0.0.0.0)
+api_host=localhost 
+api_port=8082
+
+
+[DATAPLANE_DRIVER_IPVPN]
+# IP VPN dataplane driver class
+# (bagpipe.bgp, bgp., or bagpipe.bgp.ipvpn can be omitted)
+# Example values: 
+# - dataplane_driver = bagpipe.bgp.vpn.ipvpn.DummyDataplaneDriver
+# - dataplane_driver = bgp.vpn.ipvpn.mpls_linux_dataplane.MPLSLinux32DataplaneDriver
+# - dataplane_driver = mpls_linux_dataplane.MPLSLinuxDataplaneDriver
+# - dataplane_driver = mpls_ovs_dataplane.MPLSOVSDataplaneDriver
+dataplane_driver = DummyDataplaneDriver
+
+# MPLS outgoing interface (for MPLSLinuxDataplaneDriver and MPLSOVSDataplaneDriver)
+#
+# (for MPLSLinuxDataplaneDriver, special value *gre* means that the driver will instantiate
+# a special gre interface for MPLS/GRE encapsulation)
+# mpls_interface=*gre*
+
+mpls_interface=eth0
+
+# GRE source IP address (for MPLSLinux32DataplaneDriver and MPLSLinuxDataplaneDriver)
+gre_src_address=192.168.100.177
+
+# required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
+ovsbr_interfaces_mtu=4000
+
+
+[DATAPLANE_DRIVER_EVPN]
+# EVPN dataplane driver class
+# (bagpipe.bgp, bgp., or bagpipe.bgp.evpn can be omitted)
+# Example values:
+# - dataplane_driver = DummyDataplaneDriver
+dataplane_driver = DummyDataplaneDriver
+

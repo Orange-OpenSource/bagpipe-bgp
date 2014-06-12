@@ -1,0 +1,97 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides: bagpipe-bgp
+# Should-Start:
+# Required-Stop:
+# Required-Start:
+# Should-Stop:
+# Default-Start:  2 3 4 5
+# Default-Stop:   0 1 6
+# Short-Description: BGP component daemon service
+# Description: Provides BGP component daemon service
+### END INIT INFO
+#
+# Copyright 2014 Orange
+
+PID_DIR=/var/run/bagpipe-bgp
+LOG_DIR=/var/log/bagpipe-bgp
+
+BGP_DAEMON=$(which bagpipe-bgp)
+BGP_DATAPLANE_CLEANUP=$(which bagpipe-bgp-cleanup)
+
+#OPTIONS="--config-file=/etc/bagpipe-bgp/conf_alt.conf --log-file=/etc/bagpipe-bgp/debug_log.conf"
+
+mkdir -p "$PID_DIR"
+
+
+if [ ! -f "$BGP_DAEMON" ]; then
+    echo "ERROR: BGP component daemon service not found..."
+    exit 1
+fi
+
+case "$1" in
+  start)
+    # Start the daemon
+    if [ "$(pgrep -fl $BGP_DAEMON)" == "" ]; then
+	    echo "Starting BGP component..."
+    	$BGP_DAEMON start $OPTIONS
+    else
+    	echo "WARNING: BGP component has already been started..."
+    fi
+    ;;
+  stop)
+    # Stop the daemon with dataplane cleanup
+    echo "Stopping BGP component with dataplane cleanup..."
+    if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
+	    $BGP_DAEMON stop $OPTIONS
+    
+	    # Clean dataplane when daemon has been stopped
+		while pgrep -fl $BGP_DAEMON > /dev/null; do
+			sleep 1;
+	    done
+	
+	   	echo "Cleaning dataplane..."
+	   	$BGP_DATAPLANE_CLEANUP $OPTIONS
+	else
+    	echo "WARNING: BGP component has already been stopped..."
+	fi
+    ;;
+  stop-noclean)
+    # Stop the daemon without dataplane cleanup
+    echo "Stopping BGP component (without dataplane cleanup)..."
+    if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
+	    $BGP_DAEMON stop $OPTIONS
+	else
+    	echo "WARNING: BGP component has already been stopped..."
+	fi
+    ;;
+  restart)
+    if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
+	    echo -n "Restarting BGP component... stopping..."
+    	$BGP_DAEMON stop  $OPTIONS
+    	while pgrep -fl $BGP_DAEMON > /dev/null; do
+			sleep 1
+			echo -n "."
+	    done
+    	echo "...starting"
+    	$BGP_DAEMON start  $OPTIONS
+    else
+        echo "Starting BGP component, because was already stopped..."
+    	$BGP_DAEMON start  $OPTIONS
+    fi
+    ;;
+  status)
+    if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
+    	echo "BGP component is running..."
+    else
+    	echo "BGP component is stopped..."
+    fi
+    ;;
+  *)
+    # Refuse to do other stuff
+    echo "Usage: service bagpipe-bgp {start|stop|restart|stop-noclean|status}"
+    exit 1
+    ;;
+esac
+
+exit 0
