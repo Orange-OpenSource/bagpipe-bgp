@@ -17,6 +17,7 @@
 import os
 
 import sys
+import re
 import urllib2
 import json
 
@@ -26,6 +27,8 @@ from copy import copy
 from bagpipe.bgp.common.run_command import runCommand
 
 import logging
+
+DEFAULT_VPN_INSTANCE_ID="bagpipe-test"
 
 NS2VPN_INTERFACE_PREFIX = "tovpn--"
 VPN2NS_INTERFACE_PREFIX = "to-ns--"
@@ -79,35 +82,39 @@ def createSpecialNetNSPort(options):
     # create veth pair and move one into namespace
     create_veth_pair(vpn2ns_if_name, ns2vpn_if_name, netns_name)
     
-    runCommand(log,"ip netns exec %s ip addr add %s/%d dev %s" % (netns_name, options.ip, 24, ns2vpn_if_name), raiseExceptionOnError=False)
+    runCommand(log,"ip netns exec %s ip addr add %s dev %s" % (netns_name, options.ip, ns2vpn_if_name), raiseExceptionOnError=False)
 
     runCommand(log,"ip netns exec %s ip route add default dev %s via %s" % (netns_name,ns2vpn_if_name ,options.gw_ip), 
                raiseExceptionOnError=False)
 
-    # need
     runCommand(log,"ip netns exec %s ip link set %s mtu 1420" % (netns_name, ns2vpn_if_name), raiseExceptionOnError=False)
 
 
 if __name__=="__main__": 
-    usage = "usage: %prog [--attach|--detach] --port (<port>|netns) --ip <ip> --network-type <type> [options] (see --help)"
+    usage = "usage: %prog [--attach|--detach] --network-type (ipvpn|evpn) --port (<port>|netns) --ip <ip>[/<mask>] [options] (see --help)"
     parser = OptionParser(usage)
 
+    parser.add_option("--attach", dest="operation", action="store_const", const="attach",  help="attach local port")
+    parser.add_option("--detach", dest="operation", action="store_const", const="detach",  help="detach local port")
+    
+    parser.add_option("--network-type", dest="network_type", help="network type (ipvpn or evpn)", choices=["ipvpn","evpn"])
+    parser.add_option("--vpn-instance-id", dest="vpn_instance_id", help="UUID for the network instance (default: %default-(ipvpn|evpn))", default=DEFAULT_VPN_INSTANCE_ID)
+    parser.add_option("--port",  dest="port", help="local port to attach/detach (use special port 'netns' to have a local netns attached/detached)")
+    
     parser.add_option("--rt", dest="routeTargets", help="route target [default: 64512:0]  (can be specified multiple times)", default=[], action="append")
     parser.add_option("--import-rt", dest="importOnlyRouteTargets", help="import-only route target (can be specified multiple times)", default=[], action="append")
     parser.add_option("--export-rt", dest="exportOnlyRouteTargets", help="export-only route target (can be specified multiple times)", default=[], action="append")
-    parser.add_option("--vpn-instance-id", dest="vpn_instance_id", help="UUID for the network instance [default: %default]", default="dc3ef23c-0132-4cf1-b4d0-084c8727e6fd")
-    parser.add_option("--network-type", dest="network_type", help="network type (ipvpn or evpn)", choices=["ipvpn","evpn"])
-    parser.add_option("--attach", dest="operation", action="store_const", const="attach",  help="attach local port")
-    parser.add_option("--detach", dest="operation", action="store_const", const="detach",  help="detach local port")
-    parser.add_option("--port",  dest="port", help="local port to attach/detach (use special port 'netns' to have a local netns attached/detached)")
-    parser.add_option("--ip",  dest="ip", help="IP address")
-    parser.add_option("--gateway-ip",  dest="gw_ip", help="IP address of network gateway (optional, default: %default)", default="10.0.0.1")
+    
+    parser.add_option("--ip",  dest="ip", help="IP address / mask (mask defaults to /24)")
+    parser.add_option("--gateway-ip",  dest="gw_ip", help="IP address of network gateway (optional, default: %default)", default="10.0.0.254")
     parser.add_option("--mac", dest="mac", help="MAC address (required for evpn if port is not 'netns')")
-    parser.add_option("--ovs-hybrid-vif-hack", action="store_true", dest="iohv_hack", default=False)
+    
+    parser.add_option("--ovs-preplug", action="store_true", dest="ovs_preplug", default=False, help="should we prealably plug the port into an OVS bridge")
+    parser.add_option("--ovs-bridge", dest="ovs_bridge", default="br-int", help="if preplug, specifies which OVS bridge to use (default: %default)")
 
     (options, args) = parser.parse_args()
 
-    if ( len(options.routeTargets)==0 and 
+    if ( len(options.routeTargets)==0 and
         not (options.importOnlyRouteTargets or options.exportOnlyRouteTargets)):
         options.routeTargets = ["64512:0"]
     
@@ -125,35 +132,30 @@ if __name__=="__main__":
     if not(options.port):
         parser.error("Need to specify --port <localport>")
     
-    if not(options.ip):
-        parser.error("Need to specify --ip")
-
     if not(options.network_type):
         parser.error("Need to specify --network-type")
         
-    if options.iohv_hack:
-        
-        if not options.network_type == "ipvpn":
-            parser.error("--ovs-hybrid-vif-hack is not yet supported for evpn")
-        if not options.port == "netns":
-            parser.error("--ovs-hybrid-vif-hack requires the use of special port 'netns'")
-        else:
-            print "ovs-hybrid-vif-hack => using 'qvoXXXX' as the interface name..."
-            VPN2NS_INTERFACE_PREFIX="qvo"
+    if not(options.ip):
+        parser.error("Need to specify --ip")
 
+    if not re.match('.*/[1-9][0-9]{0,2}$',options.ip):
+        options.ip = options.ip + "/24"
+    
+    if options.vpn_instance_id == DEFAULT_VPN_INSTANCE_ID:
+        options.vpn_instance_id = "%s-%s" % (options.network_type, options.vpn_instance_id)
+    
     if options.port == "netns" :
         createSpecialNetNSPort(options)
         (options.mac,options.port) = getSpecialNetNSPortMacPort(options.vpn_instance_id)
         
-        if options.iohv_hack:
-            #plug the port on ovs
-            runCommand(log,"ovs-vsctl del-port ovsbr0 %s" %(options.port),raiseExceptionOnError=False)
-            runCommand(log,"ovs-vsctl add-port ovsbr0 %s" %(options.port))
-            pass
-        
         print "Local port: %s (%s)" % (options.port,options.mac)
         runCommand(log,"ip link show %s" % options.port) 
     
+    if (options.ovs_preplug or
+       options.network_type == "ipvpn"):  # currently our only driver for ipvpn requires preplug
+        print "pre-plugging %s into %s" % (options.port,options.ovs_bridge)
+        runCommand(log,"ovs-vsctl del-port %s %s" %(options.ovs_bridge,options.port),raiseExceptionOnError=False)
+        runCommand(log,"ovs-vsctl add-port %s %s" %(options.ovs_bridge,options.port)) 
 
     if not(options.mac):
         if options.network_type == "ipvpn":
@@ -169,7 +171,7 @@ if __name__=="__main__":
                             "vpn_type":    options.network_type,
                             "gateway_ip":  options.gw_ip,
                             "mac_address": options.mac,
-                            "ip_address":  "%s/24" % options.ip 
+                            "ip_address":  options.ip 
                             }
                            )
     

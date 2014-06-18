@@ -22,10 +22,13 @@ api_port=8082
 # - dataplane_driver = mpls_ovs_dataplane.MPLSOVSDataplaneDriver
 dataplane_driver = DummyDataplaneDriver
 
+# OVS bridge to use (defaults to br-int)
+#ovs_bridge=ovsbr0
+
 # MPLS outgoing interface (for MPLSLinuxDataplaneDriver and MPLSOVSDataplaneDriver)
 #
-# (for MPLSLinuxDataplaneDriver, special value *gre* means that the driver will instantiate
-# a special gre interface for MPLS/GRE encapsulation)
+# (for MPLSLinuxDataplaneDriver, the '*gre*' special value means that the driver
+# will instantiate a special gre interface and use an MPLS/GRE encapsulation)
 # mpls_interface=*gre*
 
 mpls_interface=eth0
@@ -35,7 +38,6 @@ gre_src_address=192.168.100.177
 
 # required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000
-
 
 [DATAPLANE_DRIVER_EVPN]
 # EVPN dataplane driver class

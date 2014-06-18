@@ -38,14 +38,15 @@ DEFAULT_OVS_BRIDGE = "br-int"
 
 LINUX_DEV_LEN = 14
 OVSBR_INTERFACE_PREFIX = "tonsarp-"
-PROXYARP_NS_INTERFACE_PREFIX = "ovs"
+
+# name of the veth device in the ARP proxy network namespace,
+# whose remote end is plugged in the OVS bridge 
+PROXYARP2OVS_IF = "ovs"
 
 ARPNETNS_PREFIX = "arpns"
 
-# ##
-# HACK: Using Nova LibvirtHybridOVSBridgeDriver VIF driver
-# VIF attached on a Linux bridge connected to OVS bridge
-# ##
+# Prefix used by the NOVA hybrid VIF driver 
+# for the OVS port corresponding to the VM tap port
 OVS_LINUXBR_INTERFACE_PREFIX = "qvo"
 
 
@@ -56,8 +57,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         
         self.namespaceId = "%s%s" % (ARPNETNS_PREFIX, self._get_namespace_from_network())
         
-        # Initialize OVS port numbers list for local ports plugged in VRF
-        self.pluggedOVSPortNumbers = dict()
+        # Initialize dict where we store info on OVS ports (port numbers and bound IP address)
+        self._ovsPortInfo = dict()
         
         # Find ethX MPLS interface MAC address
         self.mplsIfMacAddress = self._find_dev_mac_address(self.driver.mpls_interface)
@@ -72,7 +73,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         log.info(" VRF %d: Initializing network namespace %s for ARP proxing" % (self.instanceId, self.namespaceId))
         # Get names of veth pair devices between OVS and network namespace
         ovsbr_to_proxyarp_ns = self.driver._get_ovsbr_to_proxyarpns_devname(self.namespaceId)
-        proxyarp_ns_to_ovsbr = self._get_proxyarpns_to_ovsbr_devname()
         
         if not self._namespace_exists():
             log.debug("VRF network namespace doesn't exist, creating...")
@@ -80,7 +80,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
             self._runCommand("ip netns add %s" % self.namespaceId)
             
             # Set up veth pair devices between OVS and ARP network namespace
-            self._create_veth_pair(ovsbr_to_proxyarp_ns, proxyarp_ns_to_ovsbr)
+            self._create_veth_pair(ovsbr_to_proxyarp_ns, PROXYARP2OVS_IF)
             
             # Retrieve broadcast IP address        
             ip = IPNetwork("%s/%s" % (self.gatewayIP, self.mask))
@@ -88,16 +88,16 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         
             # Set up network namespace interface as gateway
             self._runCommand("ip netns exec %s ip addr add %s/%s broadcast %s dev %s" % 
-                             (self.namespaceId, self.gatewayIP, self.mask, broadcastIP, proxyarp_ns_to_ovsbr),
-                             raiseExceptionOnError=False)
+                             (self.namespaceId, self.gatewayIP, self.mask, broadcastIP, PROXYARP2OVS_IF),
+                             raiseExceptionOnError=True)
             
             # Setup IP forwarding 
             self._runCommand("ip netns exec %s sh -c \"echo 1 > /proc/sys/net/ipv4/ip_forward\"" % self.namespaceId)
             self._runCommand("ip netns exec %s sh -c \"echo 1 > /proc/sys/net/ipv4/conf/all/forwarding\"" % self.namespaceId)
     
             # Setup ARP proxying
-            self._runCommand("ip netns exec %s sh -c \"echo 1 > /proc/sys/net/ipv4/conf/%s/proxy_arp\"" % (self.namespaceId, proxyarp_ns_to_ovsbr))
-            self._runCommand("ip netns exec %s sh -c \"echo 1 > /proc/sys/net/ipv4/conf/%s/proxy_arp_pvlan\"" % (self.namespaceId, proxyarp_ns_to_ovsbr))
+            self._runCommand("ip netns exec %s sh -c \"echo 1 > /proc/sys/net/ipv4/conf/%s/proxy_arp\"" % (self.namespaceId, PROXYARP2OVS_IF))
+            self._runCommand("ip netns exec %s sh -c \"echo 1 > /proc/sys/net/ipv4/conf/%s/proxy_arp_pvlan\"" % (self.namespaceId, PROXYARP2OVS_IF))
         else: 
             log.debug("VRF network namespace already exists...")
 
@@ -105,13 +105,13 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         self.ovsToNsPortNumber = self._find_ovs_port_number(ovsbr_to_proxyarp_ns)
         
         # Find gateway ("network namespace to OVS" port) MAC address
-        self.gwMacAddress = self._find_ns_dev_mac_address(self.namespaceId, proxyarp_ns_to_ovsbr)
+        self.gwMacAddress = self._find_ns_dev_mac_address(self.namespaceId, PROXYARP2OVS_IF)
         
 
     def cleanup(self):
-        if self.pluggedOVSPortNumbers:
+        if self._ovsPortInfo:
             log.warning("OVS port numbers list for local ports plugged in VRF is not empty, clearing...")
-            self.pluggedOVSPortNumbers.clear()
+            self._ovsPortInfo.clear()
         
         log.info("Cleaning VRF network namespace %s" % self.namespaceId)
         # Detach network namespace veth pair device from OVS bridge
@@ -121,18 +121,25 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         # FIXME: need to also cleanup the veth interface
         
         
-    def _get_ovs_linuxbr_dev_name(self, localport):
+    def _hack_localport_for_hybrid_vif_driver(self, localport):
         """
+        Return the localport to use.
+        
+        If the localport looks like a Neutron port ('tap<uuid>'), then the real localport
+        to use is 'qvo<uuid>'. Else we keep the localport unchanged.
+        
         This is were we hardcode how the Openstack hybrid VIF driver creates a veth interface
         to connect a tap interface, through a linuxbridge, into OVS.
         """
-        return OVS_LINUXBR_INTERFACE_PREFIX + localport[3:]
+        if re.match('tap[0-9a-f-]{11}',localport):
+            new_localport = OVS_LINUXBR_INTERFACE_PREFIX + localport[3:]
+            log.warning("Nova hybrid vif driver hack: mapping %s into %s" % (localport,new_localport))
+            return new_localport
+        else:
+            return localport
 
     def _get_namespace_from_network(self):
         return self.vpnInstanceId[:LINUX_DEV_LEN]
-
-    def _get_proxyarpns_to_ovsbr_devname(self):
-        return (PROXYARP_NS_INTERFACE_PREFIX)  # + self.namespaceId)[:LINUX_DEV_LEN]
 
     def _namespace_exists(self):
         """ Check if network namespace exist. """
@@ -226,16 +233,11 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
     def _vifPluggedReal(self, macAddress, ipAddress, localPort, label):
         log.debug("_vifPluggedReal: Plugging local port (%(localPort)s, %(ipAddress)s, %(label)d)" % locals())
 
-        # ##
-        # HACK: Using Nova LibvirtHybridOVSBridgeDriver VIF driver
-        # VIF has been attached on a Linux bridge connected to OVS bridge
-        # ##
-
-        self._mtu_fixup(self._get_ovs_linuxbr_dev_name(localPort))
+        self._mtu_fixup(self._hack_localport_for_hybrid_vif_driver(localPort))
 
         # Find OVS port number corresponding to Linux bridge attached interface
-        ovs_linuxbr_port = self._get_ovs_linuxbr_dev_name(localPort)
-        ovs_port_number = self._find_ovs_port_number(ovs_linuxbr_port)
+        localport = self._hack_localport_for_hybrid_vif_driver(localPort)
+        ovs_port_number = self._find_ovs_port_number(localport)
             
         # Map ARP traffic from VIF to ARP proxy and response from ARP proxy to VIF
         self._runCommand("ovs-ofctl add-flow %s 'in_port=%s,arp,actions=output:%s'" % (self.ovs_bridge, ovs_port_number, self.ovsToNsPortNumber))
@@ -249,24 +251,19 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         self._runCommand("ovs-ofctl add-flow %s 'priority=65535,in_port=%s,mpls,mpls_label=%d,actions=pop_mpls:0x0800,mod_dl_src:%s,mod_dl_dst:%s,output:%s'" % (self.ovs_bridge, self.ovsMplsIfPortNumber, label, self.gwMacAddress, macAddress, ovs_port_number))
         
         # Add OVS port number in list for local port plugged in VRF
-        log.debug("Adding OVS port %s with number %s for address %s to ports plugged in VRF list" % (ovs_linuxbr_port, ovs_port_number, ipAddress))
+        log.debug("Adding OVS port %s with number %s for address %s to ports plugged in VRF list" % (localport, ovs_port_number, ipAddress))
         ovs_port_dict = dict()
         ovs_port_dict["port_number"] = ovs_port_number
         ovs_port_dict["ip_address"] = ipAddress
-        self.pluggedOVSPortNumbers[ovs_linuxbr_port] = ovs_port_dict
+        self._ovsPortInfo[localport] = ovs_port_dict
         
     
     def _vifUnpluggedReal(self, macAddress, ipAddress, localPort, label):
         log.debug("_vifUnpluggedReal: Unplugging local port (%(localPort)s, %(ipAddress)s, %(label)d)" % locals())
 
-        # ##
-        # HACK: Using Nova LibvirtHybridOVSBridgeDriver VIF driver
-        # VIF will be detached from the Linux bridge (also removed) connected to OVS bridge
-        # ##
-
         # Find OVS port number corresponding to Linux bridge attached interface
-        ovs_linuxbr_port = self._get_ovs_linuxbr_dev_name(localPort)
-        ovs_port_number = self.pluggedOVSPortNumbers[ovs_linuxbr_port]["port_number"]
+        localport = self._hack_localport_for_hybrid_vif_driver(localPort)
+        ovs_port_number = self._ovsPortInfo[localport]["port_number"]
         
         # FIXME: what about local VMs ??
         # do we properly clean up the resubmit flow in setupDataplaneForRemoteEndpoint?
@@ -286,7 +283,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         self._runCommand("ovs-ofctl del-flows %s 'in_port=%s,arp,arp_tha=%s'" % (self.ovs_bridge, self.ovsToNsPortNumber, macAddress))
 
         # Remove OVS port number from list for local port plugged in VRF 
-        del self.pluggedOVSPortNumbers[ovs_linuxbr_port]
+        del self._ovsPortInfo[localport]
 
 
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
@@ -298,12 +295,13 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
         # Check if prefix locally added
         if self.driver.local_address == str(remotePE):
-            # Map local traffic from other VMs to the VM as MPLS on ethX
-            log.debug("OVS port numbers list for local port plugged in VRF: %s" % self.pluggedOVSPortNumbers)
-            for ovs_linuxbr_info in self.pluggedOVSPortNumbers.values():
-                if ovs_linuxbr_info["ip_address"] != prefix:
+            # For local traffic, we have to use a resubmit action
+            log.debug("OVS port numbers list for local port plugged in VRF: %s" % self._ovsPortInfo)
+            for port_info in self._ovsPortInfo.values():
+                # FIXME: not sufficient in the case where a whole prefix is bound to a VRF (enough when /32 are)
+                if port_info["ip_address"] != prefix:
                     self._runCommand("ovs-ofctl add-flow %s --protocol OpenFlow13 'priority=65535,ip,in_port=%s,nw_dst=%s actions=%spush_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[],resubmit:%s'" 
-                                     % (self.ovs_bridge, ovs_linuxbr_info["port_number"], prefix, dec_ttl_action, label, self.ovsMplsIfPortNumber))
+                                     % (self.ovs_bridge, port_info["port_number"], prefix, dec_ttl_action, label, self.ovsMplsIfPortNumber))
         else:
             try:
                 # Find remote router MAC address
@@ -311,10 +309,10 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 log.debug("MAC address found for remote router %(remotePE)s: %(remotePE_mac_address)s" % locals())
         
                 # Map traffic to remote IP address as MPLS on ethX to remote router MAC address
-                log.debug("OVS port numbers list for local port plugged in VRF: %s" % self.pluggedOVSPortNumbers)
-                for ovs_linuxbr_info in self.pluggedOVSPortNumbers.values():
+                log.debug("OVS port numbers list for local port plugged in VRF: %s" % self._ovsPortInfo)
+                for port_info in self._ovsPortInfo.values():
                     self._runCommand("ovs-ofctl add-flow %s --protocol OpenFlow13 'priority=65535,ip,in_port=%s,nw_dst=%s actions=%spush_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[],mod_dl_src:%s,mod_dl_dst:%s,output:%s'" 
-                                     % (self.ovs_bridge, ovs_linuxbr_info["port_number"], prefix, dec_ttl_action, label, self.mplsIfMacAddress, remotePE_mac_address, self.ovsMplsIfPortNumber))
+                                     % (self.ovs_bridge, port_info["port_number"], prefix, dec_ttl_action, label, self.mplsIfMacAddress, remotePE_mac_address, self.ovsMplsIfPortNumber))
             except exc.RemotePEMACAddressNotFound as e:
                 log.error('An error occured during setupDataplaneForRemoteEndpoint: %s' % e)
 
@@ -325,7 +323,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         # Check if prefix locally removed
         if self.driver.local_address == str(remotePE):
             # Unmap local traffic from other VMs from the VM as MPLS on ethX
-            for ovs_linuxbr_info in self.pluggedOVSPortNumbers.values():
+            for ovs_linuxbr_info in self._ovsPortInfo.values():
                 self._runCommand("ovs-ofctl del-flows %s 'ip,in_port=%s,nw_dst=%s'" % (self.ovs_bridge, ovs_linuxbr_info["port_number"], prefix))
         else:
             try:
@@ -334,7 +332,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 log.debug("MAC address %(remotePE_mac_address)s found for remote router %(remotePE)s" % locals())
         
                 # Unmap traffic to remote IP address as MPLS on ethX from remote router MAC address
-                for ovs_linuxbr_info in self.pluggedOVSPortNumbers.values():
+                for ovs_linuxbr_info in self._ovsPortInfo.values():
                     self._runCommand("ovs-ofctl del-flows %s 'ip,in_port=%s,nw_dst=%s'" % (self.ovs_bridge, ovs_linuxbr_info["port_number"], prefix))
             except exc.RemotePEMACAddressNotFound as e:
                 log.error('An error occured during removeDataplaneForRemoteEndpoint: %s' % e)
@@ -344,26 +342,24 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
 class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     """
-    Dataplane driver using OpenVSwitch MPLS.
+    Dataplane driver using OpenVSwitch 
        
-    OpenVSwtich MPLS implementation to be included as part of OVS 2.2.
+    Based on an OpenVSwtich MPLS implementation to be included in an upcoming
+    release (announced for 2.2).
+    
     In the meantime, the following repo can be used:
        https://github.com/horms/openvswitch/tree/devel/mpls-v2.60
-       
-    We have been using this driver successfully with the code at:
-       https://github.com/horms/openvswitch/tree/devel/mpls-v2.56
    
-    Currently, the code is very adherent to the Openstack neutron hybrid VIF driver.
-    
-    The provided localport is assumed to contain a UUID starting at the fourth character 
-    (e.g. 'tap-<uuid>') and the actual port which the driver will control will be the
+    Currently, the code is tweaked to work with the Openstack Nova hybrid VIF driver:
+    if the provided localport is recognized as an Openstack tap<uuid> port, 
+    the actual port which the driver will bind to the VRF will be the
     corresponding qvo<uuid> port, which is assumed to be already plugged into OVS.
     
     Howto allow the use of the OVS bridge interface also as an IP 
     interface of the Linux kernel IP stack:
-        ovs-ofctl del-flows ovsbr0
-        ovs-ofctl add-flow ovsbr0 in_port=LOCAL,action=output:1
-        ovs-ofctl add-flow ovsbr0 in_port=1,action=output:LOCAL
+        ovs-ofctl del-flows br-int
+        ovs-ofctl add-flow br-int in_port=LOCAL,action=output:1
+        ovs-ofctl add-flow br-int in_port=1,action=output:LOCAL
 
     (on a debian or ubuntu system, this can be done part of the ovs bridge definition 
     in /etc/network/interfaces, as post-up commands)

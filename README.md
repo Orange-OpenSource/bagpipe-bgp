@@ -3,10 +3,9 @@ BaGPipe BGP
 
 BaGPipe BGP is a lightweight implementation of BGP VPNs (IP VPNs and E-VPNs).
 The goal is *not* to fully implement BGP specifications, but only the subset 
-of specifications required to implement IP VPN VRFs and E-VPN EVIs: 
-[RFC4364](http://tools.ietf.org/html/rfc4364) aka RFC2547bis, 
-[draft-ietf-l2vpn-evpn](http://tools.ietf.org/html/draft-ietf-l2vpn-evpn)/[draft-sd-l2vpn-evpn-overlay](http://tools.ietf.org/html/draft-sd-l2vpn-evpn-overlay),
- and [RFC4684](http://tools.ietf.org/html/RFC4684).
+of specifications required to implement IP VPN VRFs and E-VPN EVIs ([RFC4364](http://tools.ietf.org/html/rfc4364) 
+aka RFC2547bis, [draft-ietf-l2vpn-evpn](http://tools.ietf.org/html/draft-ietf-l2vpn-evpn)/[draft-sd-l2vpn-evpn-overlay](http://tools.ietf.org/html/draft-sd-l2vpn-evpn-overlay),
+ and [RFC4684](http://tools.ietf.org/html/RFC4684)).
 
 Typical Use
 -----------
@@ -27,8 +26,8 @@ Installation
 
 Installation can be done with `python setup.py install`.
 
-Running install.sh will take care of this and will *also* install startup scripts
-in `/etc/init.d` and sample config files in /etc/bagpipe-bgp.
+Running `install.sh` will take care of this and will *also* install startup scripts
+in `/etc/init.d` and sample config files in `/etc/bagpipe-bgp`.
 
 
 <a name="bgprr"></a>
@@ -87,24 +86,22 @@ _dummy_ drivers that will **not** actually drive any dataplane state.
 To have traffic really forwarded into IP VPNs or E-VPNs, you need to select 
 real dataplane drivers.
 
-For instance, for IP VPN, you can use the `mpls_ovs_dataplane.MPLSOVSDataplaneDriver`. 
-Details on how to use this plugin that depends on OpenVSwitch MPLS code can 
-be found in the MPLSOVSDataplaneDriver.py file.
+For instance, for IP VPN, you can use the `mpls_ovs_dataplane.MPLSOVSDataplaneDriver`.
 
 **Note well** that there are specific constraints on which dataplane drivers can 
 currently be used for IP VPNs:
 
 * the MPLSLinux32DataplaneDriver is based on an unmaintained MPLS stack for the 
-Linux 3.2 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py))
+Linux 3.2 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L168))
 
 * the MPLSLinuxDataplaneDriver is based on an unmaintained MPLS stack for the Linux 
-3.7 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py))
+3.7 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L501))
 
 * the MPLSOVSDataplaneDriver can be used on most recent Linux kernel, but is based on 
   an OpenVSwitch with suitable MPLS code 
-  (see [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py)); 
-  additionally, this driver currently requires interfaces name to start with 'qvo' and be
-  plugged into OVS prior to calling BaGPipe BGP API to attach the interface (this will change)  
+  (see [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345)) 
+  additionally, this driver currently requires that interfaces be 
+  plugged into OVS prior to calling BaGPipe BGP API to attach them
 
 Usage
 -----
@@ -132,6 +129,8 @@ This tool is not a BGP implementation and simply plugs together two TCP connecti
 
 ### REST API tool for interface attachments ###
 
+The `bagpipe-rest-attach` tool allows to exercise the REST API through the command line to attach and detach interfaces from ip VPN VRFs and E-VPN EVIs.
+
 See `bagpipe-rest-attach --help`.
 
 Example with a VM tap interface:
@@ -155,7 +154,7 @@ have to be static.
 
 
 Another example, in which the bagpipe-rest-attach tool will build for you a network 
-namespace and a properly configured veth interface to plug in the new VRF:
+namespace and a properly configured veth interface to attach to the VRF:
 
 * on server A, plug a netns interface with IP 12.11.11.1 into a new IP VPN VRF named "test", with route-target 64512:78
 
@@ -163,14 +162,12 @@ namespace and a properly configured veth interface to plug in the new VRF:
 
 * on server B, plug a netns interface with IP 12.11.11.2 into a new IP VPN VRF named "test", with route-target 64512:78
 
-        bagpipe-rest-attach --attach --port netns --ip 12.11.11.1 --network-type ipvpn --vpn-instance-id test --rt 64512:78
+        bagpipe-rest-attach --attach --port netns --ip 12.11.11.2 --network-type ipvpn --vpn-instance-id test --rt 64512:78
 
-For this last example, assuming that you have configured bagpipe-bgp to use the `MPLSOVSDataplaneDriver`, you should add the `--ovs-hybrid-vif-hack` option to `bagpipe-rest-attach`.
-If you do so, this you will actually be able to have traffic exchanged between the network namespaces:
+For this last example, assuming that you have configured bagpipe-bgp to use the `MPLSOVSDataplaneDriver`, you will actually
+be able to have traffic exchanged between the network namespaces:
 
     ip netns exec test ping 12.11.11.2
-
-(the plan is to not require the use of this hack in the near future)
 
 ### Looking glass ###
 
@@ -276,6 +273,7 @@ BaGPipe BGP only reuses the low-level Connection and Protocol classes, with addi
 encode and decode NLRI and attribute specific to BGP VPN extensions. 
 
 Non-goals for this BGP implementation:
+
 * full-fledged BGP implementation
 * redistribution of routes between BGP peers (hence, no route reflection, no eBGP)
 * accepting incoming BGP connections
@@ -300,6 +298,8 @@ Caveats
   * the state machine, in particular retry timers are certainly not compliant yet
   * the BaGPipe BGP daemon does not listen for incoming BGP connections 
   * however, basic interop testing has been done
+* currently, the VRF code will only advertise /32 addresses, and does not
+  support aggregation
 
 License
 -------

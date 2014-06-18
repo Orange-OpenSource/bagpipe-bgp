@@ -23,10 +23,10 @@ import logging
 def import_class(import_str):
     """Returns a class from a string including module and class"""
     mod_str, _sep, class_str = import_str.rpartition('.')
-    logging.debug("Importing module %s" % mod_str)
+    logging.debug("Trying to importing module %s" % mod_str)
     try:
         __import__(mod_str)
-        logging.debug("Importing class %s" % (class_str))
+        logging.debug("Trying to get class %s" % (class_str))
         return getattr(sys.modules[mod_str], class_str)
     except AttributeError:
         raise ImportError("No '%s' class in %s" % (class_str, mod_str))

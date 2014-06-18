@@ -69,7 +69,7 @@ class VRF(VPNInstance, LookingGlass):
                                         Prefix(self.afi , ipAddress, 32),
                                         RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC, None, self.bgpManager.getLocalAddress(), self.instanceId),
                                         [LabelStackEntry(label, True)]
-                                        ) 
+                                        )
                       )
         
         nh = Inet(1, socket.inet_pton(socket.AF_INET, self.bgpManager.getLocalAddress()))         
