@@ -85,10 +85,6 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         '''
         Subclasses should call this super method only *after* they are fully initialized
         '''
-        # Check if lists of RT import and RT export have intersection
-        # rtIntersection = self._hasIntersection(self.importRTs, self.exportRTs) 
-        
-        # call driver for initialize
         self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.vpnInstanceId, self.gatewayIP, self.mask, self.instanceLabel)
         
         self.initialized = True
@@ -103,14 +99,13 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         
     
     def cleanup(self):
-        
-        # We are not supposed to call cleanup if we still have ports attached
+        # cleanup is not supposed to be called if we still have ports attached
         assert(self.isEmpty())
         
-        # cleanup BGP
+        # cleanup BGP subscriptions
         for rt in self.importRTs:
             self._unsubscribe(self.afi, self.safi, rt)
-            
+        
         self.dataplane.cleanup()
         
         self.labelAllocator.release(self.instanceLabel)

@@ -55,7 +55,8 @@ def findDataplaneDrivers(dpConfigs, bgpConfig=None):
 
         for tentativeClassName in (driverName,
                                'bagpipe.%s' % driverName,
-                               'bagpipe.vpn.%s.%s' % (vpnType, driverName),
+                               'bagpipe.bgp.%s' % driverName,
+                               'bagpipe.bgp.vpn.%s.%s' % (vpnType, driverName),
                                ):
             try:
                 driverClass = utils.import_class(tentativeClassName)

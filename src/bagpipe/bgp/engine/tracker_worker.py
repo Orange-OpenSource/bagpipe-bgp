@@ -300,13 +300,18 @@ class TrackerWorker(Worker, LookingGlass):
             log.error("Exception in <subclass>._bestRouteRemoved: %s" % e)
             if log.isEnabledFor(logging.WARNING):
                 log.info("%s" % traceback.format_exc())
+                
+    
+    #FIXME: need to document the behavior of these callbacks
         
     def _newBestRoute(self, entry, newRoute):
         raise Exception("not implemented")
 
     def _bestRouteRemoved(self, entry, oldRoute):
         raise Exception("not implemented")
-        
+    
+    
+    
     def _dumpState(self):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("--- trackedEntry2routes ---")

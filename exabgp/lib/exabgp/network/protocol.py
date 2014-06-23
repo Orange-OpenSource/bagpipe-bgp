@@ -20,6 +20,7 @@ from exabgp.utils                import hexa
 from exabgp.structure.address    import AFI,SAFI
 from exabgp.structure.ip         import BGPPrefix,Inet,to_IP
 from exabgp.structure.vpn        import VPNLabelledPrefix
+from exabgp.structure.evpn       import EVPNNLRI
 from exabgp.structure.rtc        import RouteTargetConstraint
 from exabgp.structure.asn        import ASN,AS_TRANS
 from exabgp.network.connection   import Connection
@@ -691,6 +692,8 @@ class Protocol (object):
 					route = ReceivedRoute(VPNLabelledPrefix.unpack(afi,safi,data),'withdraw')
 				elif (afi == AFI.ipv4 and safi == SAFI.rtc):
 					route = ReceivedRoute(RouteTargetConstraint.unpack(afi,safi,data),'withdraw')
+				elif (afi == AFI.l2vpn and safi == SAFI.evpn):
+					route = ReceivedRoute(EVPNNLRI.unpack(data) ,'withdraw')
 				else:
 					raise Exception("Unsupported AFI/SAFI combination !!")
 					return self._AttributesFactory(next_attributes)
@@ -752,7 +755,9 @@ class Protocol (object):
 				elif (afi == AFI.ipv4 and safi == SAFI.mpls_vpn):
 					route = ReceivedRoute(VPNLabelledPrefix.unpack(afi,safi,data) ,'announce')
 				elif (afi == AFI.ipv4 and safi == SAFI.rtc):
-					route = ReceivedRoute(RouteTargetConstraint.unpack(afi,safi,data) ,'announce') 
+					route = ReceivedRoute(RouteTargetConstraint.unpack(afi,safi,data) ,'announce')
+				elif (afi == AFI.l2vpn and safi == SAFI.evpn):
+					route = ReceivedRoute(EVPNNLRI.unpack(data) ,'announce')
 				else:
 					raise Exception("Unsupported AFI/SAFI combination !!")
 					return self._AttributesFactory(next_attributes)

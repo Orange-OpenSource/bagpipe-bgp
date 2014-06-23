@@ -225,6 +225,10 @@ class RouteTableManager(Thread, LookingGlass):
         # update match2worker
         self._match2workers(match, createIfNone=True).add(worker)
         
+        # update worker2matches
+        if worker not in self._worker2matches:
+            self._worker2matches[ worker ] = set()
+        
         # re-synthesize events
         for routeEntry in self._match2routeEntries(match):
             log.debug("Found a routeEntry for this match: %s" % routeEntry)
@@ -246,10 +250,6 @@ class RouteTableManager(Thread, LookingGlass):
                 log.info("%s => not dispatching re-synthesized event for %s" % (reason, routeEntry))
         
         # update worker2matches
-        
-        if worker not in self._worker2matches:
-            self._worker2matches[ worker ] = set()
-        
         self._worker2matches[ worker ].add(match)
 
         # self._dumpState()
