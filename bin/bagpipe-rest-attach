@@ -63,7 +63,7 @@ def getSpecialNetNSPortMacPort(namespace):
     (output,returnCode) = runCommand(log,"ip netns exec %s ip -o link show %s | perl -pe 's|.* link/ether ([^ ]+) .*|$1|'" % (namespace,ns2vpn_if_name))
     if "does not exist" in output[0]:
         raise Exception("special netns interface does not exist: %s"% output)  
-    mac =  output[0]   
+    mac =  output[0]
     
     return (mac,port)
 
@@ -140,12 +140,13 @@ if __name__=="__main__":
 
     if not re.match('.*/[1-9][0-9]{0,2}$',options.ip):
         options.ip = options.ip + "/24"
-    
+
     if options.vpn_instance_id == DEFAULT_VPN_INSTANCE_ID:
         options.vpn_instance_id = "%s-%s" % (options.network_type, options.vpn_instance_id)
     
-    if options.port == "netns" :
-        createSpecialNetNSPort(options)
+    if options.port == "netns":
+        if options.operation == "attach":
+            createSpecialNetNSPort(options)
         (options.mac,options.port) = getSpecialNetNSPortMacPort(options.vpn_instance_id)
         
         print "Local port: %s (%s)" % (options.port,options.mac)

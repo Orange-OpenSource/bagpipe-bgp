@@ -78,9 +78,6 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         
         self.initialized = False
     
-    def _hasIntersection(self, a, b):
-        return False if not list(set(a) & set(b)) else True
-    
     def initialize(self):
         '''
         Subclasses should call this super method only *after* they are fully initialized
@@ -96,7 +93,6 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         
         for rt in self.importRTs:
             self._subscribe(self.afi, self.safi, rt)
-        
     
     def cleanup(self):
         # cleanup is not supposed to be called if we still have ports attached

@@ -68,6 +68,7 @@ It needs to be customized, at least for the following:
 * local_address: the local address to use for BGP sessions and traffic encapsulation
 * peers: the list of BGP peers, it depends on 
 the BGP setup that you have chosen (see above [BGP Route Reflection](#bgprr))  
+* dataplane configuration, if you really want packets to get through (see [Dataplane configuration](#dpconfig))
 
 Example with two servers and relying on bagpipe fake route reflector:
 
@@ -86,7 +87,8 @@ _dummy_ drivers that will **not** actually drive any dataplane state.
 To have traffic really forwarded into IP VPNs or E-VPNs, you need to select 
 real dataplane drivers.
 
-For instance, for IP VPN, you can use the `mpls_ovs_dataplane.MPLSOVSDataplaneDriver`.
+For instance, you can use the `mpls_ovs_dataplane.MPLSOVSDataplaneDriver` for IP VPN, 
+and the `linux_vxlan.LinuxVXLANDataplaneDriver` for E-VPN.
 
 **Note well** that there are specific constraints on which dataplane drivers can 
 currently be used for IP VPNs:
@@ -98,10 +100,14 @@ Linux 3.2 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls
 3.7 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L501))
 
 * the MPLSOVSDataplaneDriver can be used on most recent Linux kernel, but is based on 
-  an OpenVSwitch with suitable MPLS code 
-  (see [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345)) 
-  additionally, this driver currently requires that interfaces be 
+  an OpenVSwitch with suitable MPLS code ; this driver requires that the OVS bridge 
+  be associated with an IP address and that E-VPN EVI interfaces be 
   plugged into OVS prior to calling BaGPipe BGP API to attach them
+  (details in [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345))
+
+For E-VPN, the `linux_vxlan.LinuxVXLANDataplaneDriver` is usable without any particular 
+additional configuration, and simply requires a Linux kernel >=3.10 with VXLAN compiled-in 
+or provided as a module ([linux_vxlan.py](src/bagpipe/bgp/vpn/evpn/linux_vxlan.py#L175)).
 
 Usage
 -----
@@ -133,7 +139,7 @@ The `bagpipe-rest-attach` tool allows to exercise the REST API through the comma
 
 See `bagpipe-rest-attach --help`.
 
-Example with a VM tap interface:
+#### IP VPN example with a VM tap interface ####
 
 * on server A, plug tap interface tap42, MAC de:ad:00:00:be:ef, IP 11.11.11.1 into an IP VPN VRF with route-target 64512:77:
 
@@ -152,8 +158,9 @@ VMs will need to have proper IP configuration. When BaGPipe BGP is use
 standalone, no DHCP service is provided, and the IP configuration will 
 have to be static. 
 
+#### Another IP VPN example... ####
 
-Another example, in which the bagpipe-rest-attach tool will build for you a network 
+...in which the bagpipe-rest-attach tool will build for you a network 
 namespace and a properly configured veth interface to attach to the VRF:
 
 * on server A, plug a netns interface with IP 12.11.11.1 into a new IP VPN VRF named "test", with route-target 64512:78
@@ -164,10 +171,33 @@ namespace and a properly configured veth interface to attach to the VRF:
 
         bagpipe-rest-attach --attach --port netns --ip 12.11.11.2 --network-type ipvpn --vpn-instance-id test --rt 64512:78
 
-For this last example, assuming that you have configured bagpipe-bgp to use the `MPLSOVSDataplaneDriver`, you will actually
+For this last example, assuming that you have configured bagpipe-bgp to use the `MPLSOVSDataplaneDriver` for IP VPN, you will actually
 be able to have traffic exchanged between the network namespaces:
 
     ip netns exec test ping 12.11.11.2
+    PING 10.0.0.2 (10.0.0.2) 56(84) bytes of data.
+    64 bytes from 10.0.0.2: icmp_req=6 ttl=64 time=1.08 ms
+    64 bytes from 10.0.0.2: icmp_req=7 ttl=64 time=0.652 ms
+
+
+#### An E-VPN example ####
+
+* on server A, plug a netns interface with IP 12.11.11.1 into a new E-VPN named "test2", with route-target 64512:79
+
+        bagpipe-rest-attach --attach --port netns --ip 12.11.11.1 --network-type evpn --vpn-instance-id test2 --rt 64512:79
+
+* on server B, plug a netns interface with IP 12.11.11.2 into a new E-VPN named "test2", with route-target 64512:79
+
+        bagpipe-rest-attach --attach --port netns --ip 12.11.11.2 --network-type evpn --vpn-instance-id test2 --rt 64512:79
+
+For this last example, assuming that you have configured bagpipe-bgp to use the `linux_vxlan.LinuxVXLANDataplaneDriver` for E-VPN, you will actually
+be able to have traffic exchanged between the network namespaces:
+
+    ip netns exec test2 ping 12.11.11.2
+    PING 10.0.0.2 (10.0.0.2) 56(84) bytes of data.
+    64 bytes from 10.0.0.2: icmp_req=1 ttl=64 time=1.71 ms
+    64 bytes from 10.0.0.2: icmp_req=2 ttl=64 time=1.06 ms
+
 
 ### Looking glass ###
 

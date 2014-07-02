@@ -31,18 +31,17 @@ def import_class(import_str):
     except AttributeError:
         raise ImportError("No '%s' class in %s" % (class_str, mod_str))
     except ValueError as e:
-        logging.warning("Exception occured during import: %s", e)
+        logging.warning("Exception occurred during import: %s", e)
         raise ImportError('Class %s cannot be found (%s)' % 
                           (class_str,
                            traceback.format_exception(*sys.exc_info())))
     except Exception as e:
-        logging.warning("Exception while importing class %s: %s" % (import_str, e))
+        logging.warning("Exception while trying to import class %s: %s" % (import_str, e))
         raise
 
 def import_object(import_str, *args, **kwargs):
     """Import a class and return an instance of it."""
     return import_class(import_str)(*args, **kwargs)
-
 
 # Method for synchronization
 def synchronized(method):

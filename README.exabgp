@@ -2,7 +2,7 @@ The ExaBGP code base from which we started was a few commits after ExaBGP
 2.0.8 (commit 2394cc251eb0).
 
 The license for these modifications is the licence of the ExaBGP project 
-(exabgp/COPYRIGHT).
+(src/exabgp/COPYRIGHT).
 
 BaGPipe only adds and modifies internal structures related to BGP encodings 
 (NLRIs and attributes), and reuses the base BGP protocol implementation 
@@ -11,7 +11,7 @@ through the Connection and Protocol classes. The rest of ExaBGP is not used.
 An exact diff of the code that was modified or added can be produced with:
 
    hg clone -r 2394cc251eb0 https://code.google.com/p/exabgp/ exabgp.orig
-   diff -ruN -x '.hg*' exabgp.orig exabgp
+   diff -ruN -x '.hg*' exabgp.orig/lib/exabgp src/exabgp
 
 Diffstats, as of 2014-04-01:
  message/notification.py                   |    2 

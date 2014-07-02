@@ -344,16 +344,23 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     """
     Dataplane driver using OpenVSwitch 
        
-    Based on an OpenVSwtich MPLS implementation to be included in an upcoming
-    release (announced for 2.2).
+    Based on an OpenVSwtich MPLS implementation to be included in OVS 2.2.
     
-    In the meantime, the following repo can be used:
-       https://github.com/horms/openvswitch/tree/devel/mpls-v2.60
+    In the meantime, the master openvswitch git repository can be used:
+	https://github.com/openvswitch/ovs.git
    
     Currently, the code is tweaked to work with the Openstack Nova hybrid VIF driver:
     if the provided localport is recognized as an Openstack tap<uuid> port, 
     the actual port which the driver will bind to the VRF will be the
-    corresponding qvo<uuid> port, which is assumed to be already plugged into OVS.
+    corresponding qvo<uuid> port, which is assumed to be already plugged into the OVS
+    bridge.
+    
+    This driver currently requires that the OVS bridge be associated to the address
+    used as the local_address in bgp.conf, to allow the linux IP stack to use the same
+    physical interface as the one on which MPLS packets are forwarded. This requires
+    to configure the OVS bridge so that it passes packets from the physical interface
+    to the linux IP stack if they are not MPLS, and packets from the linux IP stack to 
+    the physical device.
     
     Howto allow the use of the OVS bridge interface also as an IP 
     interface of the Linux kernel IP stack:

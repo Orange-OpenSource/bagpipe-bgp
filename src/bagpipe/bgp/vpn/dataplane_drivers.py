@@ -105,9 +105,9 @@ class VPNInstanceDataplane(LookingGlass):
     def vifUnplugged(self, macAddress, ipAddress, localPort, label):
         log.info("VPNInstance %(instanceId)d: vifUnplugged(%(macAddress)s,%(ipAddress)s,%(localPort)s,%(label)d)" % dict(locals(),**self.__dict__))
         
-        del self.dataplanePortsData[localPort]
-        
         self._vifUnpluggedReal(macAddress, ipAddress, localPort, label)
+        
+        del self.dataplanePortsData[localPort]
 
     def cleanup(self):
         log.info("function not implemented: cleanup instance %d" % self.instanceId )

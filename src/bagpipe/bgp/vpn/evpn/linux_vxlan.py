@@ -396,6 +396,8 @@ class LinuxVXLANHybridDataplaneDriver(DataplaneDriver):
     for the OVS bridge to have a wrong MTU, itself causing VXLAN packets fragmentation.)
     """
     
+    #FIXME: lots of duplicate code to duplicate from the LinuxVXLANDataplaneDriver
+    
     dataplaneClass = LinuxVXLANEVIHybridDataplane
     requiredKernel = "3.10.0"
     encapsulation = Encapsulation.VXLAN

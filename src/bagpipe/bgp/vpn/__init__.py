@@ -119,6 +119,8 @@ class VPNManager(object, LookingGlass):
         # Retrieve VPN worker or create new one if does not exist
         try:
             vpnInstance = self.vpnWorkers[vpnInstanceId]
+            if (vpnInstance._type != instanceType):
+                raise Exception("Trying to plug port on an existing instance of a different type (existing: %s, asked: %s)"% (vpnInstance._type,instanceType))
         except KeyError:
             instanceId = self.getInstanceId()
             log.info("Create and start new VPN instance %d for identifier %s" % (instanceId, vpnInstanceId))
@@ -138,6 +140,9 @@ class VPNManager(object, LookingGlass):
                                         self.bgpManager, self.labelAllocator, dataplaneDriver,
                                         vpnInstanceId, instanceId, importRTs, exportRTs, gatewayIP, mask
                                         )
+            
+            vpnInstance._type = instanceType
+            
             vpnInstance.start()
         
         # Check if new route target import/export must be updated in VRF
