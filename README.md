@@ -175,9 +175,9 @@ For this last example, assuming that you have configured bagpipe-bgp to use the 
 be able to have traffic exchanged between the network namespaces:
 
     ip netns exec test ping 12.11.11.2
-    PING 10.0.0.2 (10.0.0.2) 56(84) bytes of data.
-    64 bytes from 10.0.0.2: icmp_req=6 ttl=64 time=1.08 ms
-    64 bytes from 10.0.0.2: icmp_req=7 ttl=64 time=0.652 ms
+    PING 12.11.11.2 (12.11.11.2) 56(84) bytes of data.
+    64 bytes from 12.11.11.2: icmp_req=6 ttl=64 time=1.08 ms
+    64 bytes from 12.11.11.2: icmp_req=7 ttl=64 time=0.652 ms
 
 
 #### An E-VPN example ####
@@ -194,9 +194,9 @@ For this last example, assuming that you have configured bagpipe-bgp to use the 
 be able to have traffic exchanged between the network namespaces:
 
     ip netns exec test2 ping 12.11.11.2
-    PING 10.0.0.2 (10.0.0.2) 56(84) bytes of data.
-    64 bytes from 10.0.0.2: icmp_req=1 ttl=64 time=1.71 ms
-    64 bytes from 10.0.0.2: icmp_req=2 ttl=64 time=1.06 ms
+    PING 12.11.11.2 (12.11.11.2) 56(84) bytes of data.
+    64 bytes from 12.11.11.2: icmp_req=1 ttl=64 time=1.71 ms
+    64 bytes from 12.11.11.2: icmp_req=2 ttl=64 time=1.06 ms
 
 
 ### Looking glass ###
