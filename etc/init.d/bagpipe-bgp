@@ -33,58 +33,58 @@ case "$1" in
   start)
     # Start the daemon
     if [ "$(pgrep -fl $BGP_DAEMON)" == "" ]; then
-	    echo "Starting BGP component..."
-    	$BGP_DAEMON start $OPTIONS
+        echo "Starting BGP component..."
+        $BGP_DAEMON start $OPTIONS
     else
-    	echo "WARNING: BGP component has already been started..."
+        echo "WARNING: BGP component has already been started..."
     fi
     ;;
   stop)
     # Stop the daemon with dataplane cleanup
     echo "Stopping BGP component with dataplane cleanup..."
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
-	    $BGP_DAEMON stop $OPTIONS
+        $BGP_DAEMON stop $OPTIONS
     
-	    # Clean dataplane when daemon has been stopped
-		while pgrep -fl $BGP_DAEMON > /dev/null; do
-			sleep 1;
-	    done
-	
-	   	echo "Cleaning dataplane..."
-	   	$BGP_DATAPLANE_CLEANUP $OPTIONS
-	else
-    	echo "WARNING: BGP component has already been stopped..."
-	fi
+        # Clean dataplane when daemon has been stopped
+        while pgrep -fl $BGP_DAEMON > /dev/null; do
+            sleep 1;
+        done
+        
+        echo "Cleaning dataplane..."
+        $BGP_DATAPLANE_CLEANUP $OPTIONS
+    else
+        echo "WARNING: BGP component was already stopped..."
+    fi
     ;;
   stop-noclean)
     # Stop the daemon without dataplane cleanup
     echo "Stopping BGP component (without dataplane cleanup)..."
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
-	    $BGP_DAEMON stop $OPTIONS
-	else
-    	echo "WARNING: BGP component has already been stopped..."
-	fi
+        $BGP_DAEMON stop $OPTIONS
+    else
+        echo "WARNING: BGP component was already stopped..."
+    fi
     ;;
   restart)
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
-	    echo -n "Restarting BGP component... stopping..."
-    	$BGP_DAEMON stop  $OPTIONS
-    	while pgrep -fl $BGP_DAEMON > /dev/null; do
-			sleep 1
-			echo -n "."
-	    done
-    	echo "...starting"
-    	$BGP_DAEMON start  $OPTIONS
+        echo -n "Restarting BGP component... stopping..."
+        $BGP_DAEMON stop  $OPTIONS
+        while pgrep -fl $BGP_DAEMON > /dev/null; do
+            sleep 1
+            echo -n "."
+        done
+        echo "...starting"
+        $BGP_DAEMON start  $OPTIONS
     else
-        echo "Starting BGP component, because was already stopped..."
-    	$BGP_DAEMON start  $OPTIONS
+        echo "Starting BGP component (was already stopped)"
+        $BGP_DAEMON start  $OPTIONS
     fi
     ;;
   status)
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
-    	echo "BGP component is running..."
+        echo "BGP component is running."
     else
-    	echo "BGP component is stopped..."
+        echo "BGP component is stopped."
     fi
     ;;
   *)
