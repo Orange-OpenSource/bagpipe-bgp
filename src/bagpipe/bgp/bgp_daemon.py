@@ -37,7 +37,7 @@ from bagpipe.bgp.rest_api import RESTAPI
 from bagpipe.bgp.vpn import VPNManager
 
 
-def findDataplaneDrivers(dpConfigs, bgpConfig=None):
+def findDataplaneDrivers(dpConfigs):
     drivers = dict()
     for vpnType in dpConfigs.iterkeys():
         dpConfig = dpConfigs[vpnType]
@@ -51,7 +51,6 @@ def findDataplaneDrivers(dpConfigs, bgpConfig=None):
         # FIXME: this is a hack, dataplane drivers should have another way to access any item in the BGP dataplaneConfig
         if bgpConfig:
             dpConfig['local_address'] = bgpConfig['local_address']
-        
 
         for tentativeClassName in (driverName,
                                'bagpipe.%s' % driverName,
@@ -234,7 +233,7 @@ def cleanup_main():
     logging.info("Cleaning BGP component dataplanes...")
     config = _loadConfig(options.configFile)
     
-    drivers = findDataplaneDrivers(config["dataplaneConfig"])
+    drivers = findDataplaneDrivers(config["dataplaneConfig"],config["bgpConfig"])
     for (vpnType, dataplaneDriver) in drivers.iteritems():
         logging.info("Cleaning BGP component dataplane for %s..." % vpnType)
         dataplaneDriver.resetState()

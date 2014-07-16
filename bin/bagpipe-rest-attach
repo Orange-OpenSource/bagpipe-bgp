@@ -24,14 +24,16 @@ import json
 from optparse import OptionParser
 from copy import copy
 
+from netaddr.ip import IPNetwork
+
 from bagpipe.bgp.common.run_command import runCommand
 
 import logging
 
 DEFAULT_VPN_INSTANCE_ID="bagpipe-test"
 
-NS2VPN_INTERFACE_PREFIX = "tovpn--"
-VPN2NS_INTERFACE_PREFIX = "to-ns--"
+NS2VPN_INTERFACE_PREFIX = "tovpn-"
+VPN2NS_INTERFACE_PREFIX = "tons-"
 
 LINUX_DEV_LEN = 15
 
@@ -106,7 +108,7 @@ if __name__=="__main__":
     parser.add_option("--export-rt", dest="exportOnlyRouteTargets", help="export-only route target (can be specified multiple times)", default=[], action="append")
     
     parser.add_option("--ip",  dest="ip", help="IP address / mask (mask defaults to /24)")
-    parser.add_option("--gateway-ip",  dest="gw_ip", help="IP address of network gateway (optional, default: %default)", default="10.0.0.254")
+    parser.add_option("--gateway-ip",  dest="gw_ip", help="IP address of network gateway (optional, defaults to last IP in range)")
     parser.add_option("--mac", dest="mac", help="MAC address (required for evpn if port is not 'netns')")
     
     parser.add_option("--ovs-preplug", action="store_true", dest="ovs_preplug", default=False, help="should we prealably plug the port into an OVS bridge")
@@ -140,6 +142,11 @@ if __name__=="__main__":
 
     if not re.match('.*/[1-9][0-9]{0,2}$',options.ip):
         options.ip = options.ip + "/24"
+
+    if not(options.gw_ip):
+        net = IPNetwork(options.ip)
+        print "using %s as gateway address" % str(net[-2])
+        options.gw_ip = str(net[-2])
 
     if options.vpn_instance_id == DEFAULT_VPN_INSTANCE_ID:
         options.vpn_instance_id = "%s-%s" % (options.network_type, options.vpn_instance_id)
