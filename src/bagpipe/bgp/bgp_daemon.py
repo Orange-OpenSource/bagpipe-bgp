@@ -37,7 +37,7 @@ from bagpipe.bgp.rest_api import RESTAPI
 from bagpipe.bgp.vpn import VPNManager
 
 
-def findDataplaneDrivers(dpConfigs):
+def findDataplaneDrivers(dpConfigs,bgpConfig):
     drivers = dict()
     for vpnType in dpConfigs.iterkeys():
         dpConfig = dpConfigs[vpnType]
