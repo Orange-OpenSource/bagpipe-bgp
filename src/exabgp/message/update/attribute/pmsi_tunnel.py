@@ -140,6 +140,10 @@ class PMSITunnelIngressReplication(PMSITunnel):
     nickname = "IngressReplication"
 
     def __init__(self,ip,label=NO_LABEL,flags=0):
+        try:
+            socket.inet_pton( socket.AF_INET, ip )
+        except:
+            raise Exception("Malformed IP address")
         self.ip = ip
 
         PMSITunnel.__init__(self, self.subtype, label, flags)

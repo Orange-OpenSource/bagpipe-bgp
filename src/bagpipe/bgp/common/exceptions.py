@@ -32,18 +32,7 @@ class MalformedIPAddress(Exception):
     
 class OVSBridgeNotFound(Exception):
     def __init__(self, bridge):
-        self.message = "OVS bridge {%(bridge)s} doesn't exist, specify ovs_bridge in bgp.conf, check that bridge is created, e.g. can be created on Debian using Linux network configuration file {/etc/network/interfaces} as follow:\n\n\
-                        allow-ovs ovsbr0\n\
-                        iface ovsbr0 inet static\n\
-                        ovs_type OVSBridge\n\
-                        ovs_ports ethX\n\
-                        address <host IP>\n\
-                        netmask 255.255.255.0\n\
-                        post-up ip route add <network IP>/24 nexthop via <gateway IP> dev ovsbr0\n\n\
-                        allow-ovsbr0 ethX\n\
-                        iface ethX inet manual\n\
-                        ovs_bridge ovsbr0\n\
-                        ovs_type OVSPort\n\n" % locals()
+        self.message = "OVS bridge '%s' doesn't exist" % bridge
      
     def __str__(self):
         return str(self.message)

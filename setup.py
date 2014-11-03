@@ -9,6 +9,7 @@ init_path = '/etc/init.d'
 DataFiles = [
     (config_path, ['config/bgp.conf.template',
                    'config/log.conf.template',
+                   'config/log.conf.console-template',
                    'config/log.conf.debug-template']),
     (init_path, ['etc/init.d/bagpipe-bgp','etc/init.d/bagpipe-fakerr']),
     ('%s/bin' % sys.prefix, ['bin/bagpipe-fakerr']), # kludge: I don't know how to point to the 
@@ -17,7 +18,7 @@ DataFiles = [
 
 setuptools.setup(
     name='bagpipe-bgp',
-    version='1.41',
+    version='1.60',
     url="https://github.com/Orange-OpenSource/bagpipe-bgp",
     author='Orange Labs',
     maintainer="Thomas Morin",
@@ -42,6 +43,7 @@ setuptools.setup(
         "lockfile >= 0.8",
         "netaddr >= 0.7.7"
 	# python-testtools ?
+    # distutils
     ],
     packages=setuptools.find_packages(where='src'),
     package_dir={'':'src'},

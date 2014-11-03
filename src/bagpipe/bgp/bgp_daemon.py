@@ -20,6 +20,10 @@ import os.path
 
 from logging import Logger
 import logging.config
+
+#import logging_tree
+
+import traceback
  
 from daemon import runner
 import signal
@@ -37,7 +41,7 @@ from bagpipe.bgp.rest_api import RESTAPI
 from bagpipe.bgp.vpn import VPNManager
 
 
-def findDataplaneDrivers(dpConfigs,bgpConfig):
+def findDataplaneDrivers(dpConfigs,bgpConfig,isCleaningUp=False):
     drivers = dict()
     for vpnType in dpConfigs.iterkeys():
         dpConfig = dpConfigs[vpnType]
@@ -48,33 +52,46 @@ def findDataplaneDrivers(dpConfigs,bgpConfig):
         driverName = dpConfig["dataplane_driver"]
         logging.debug("Creating dataplane driver for %s, with %s" % (vpnType,driverName))
         
-        # FIXME: this is a hack, dataplane drivers should have another way to access any item in the BGP dataplaneConfig
-        if bgpConfig:
-            dpConfig['local_address'] = bgpConfig['local_address']
-
+        # FIXME: this is a hack, dataplane drivers should have a better way to
+        # access any item in the BGP dataplaneConfig
+        if 'dataplane_local_address' not in dpConfig:
+            dpConfig['dataplane_local_address'] = bgpConfig['local_address']
+        
         for tentativeClassName in (driverName,
                                'bagpipe.%s' % driverName,
                                'bagpipe.bgp.%s' % driverName,
                                'bagpipe.bgp.vpn.%s.%s' % (vpnType, driverName),
                                ):
             try:
+                if '.' not in tentativeClassName:
+                    logging.debug("Not trying to import '%s'" % tentativeClassName)
+                    continue
+                
                 driverClass = utils.import_class(tentativeClassName)
                 try:
-                    logging.info("Found driver, initiating...")
-                    driver = driverClass(dpConfig)
+                    logging.info("Found driver for %s, initiating..." % vpnType)
+                    # skip the init step if called for cleanup
+                    driver = driverClass(dpConfig,not isCleaningUp)
                     drivers[vpnType] = driver
                     logging.info("Successfully initiated dataplane driver for %s with %s" % (vpnType, tentativeClassName))
+                except ImportError as e:
+                    logging.debug("Could not initiate dataplane driver for %s with %s: %s" % (vpnType, tentativeClassName, e))
                 except Exception as e:
-                    logging.info("Could not initiate dataplane driver for %s with %s: %s" % (vpnType, tentativeClassName, e))
+                    logging.error("Found class, but error while instantiating dataplane driver for %s with %s: %s" % (vpnType, tentativeClassName, e))
+                    logging.error(traceback.format_exc())
+                    break
                 break
+            except SyntaxError as e:
+                    logging.error("Found class, but syntax error while instantiating dataplane driver for %s with %s: %s" % (vpnType, tentativeClassName, e))
+                    break
             except Exception as e:
-                logging.info("Could not initiate dataplane driver for %s with %s (%s)" % (vpnType, tentativeClassName, e))
+                logging.debug("Could not initiate dataplane driver for %s with %s (%s)" % (vpnType, tentativeClassName, e))
     return drivers
 
 
 class BgpDaemon(LookingGlass):
     
-    def __init__(self, lgLogHandler, **kwargs):
+    def __init__(self, catchAllLGLogHandler, **kwargs):
         self.stdin_path = '/dev/null'
         self.stdout_path = '/dev/null'
         self.stderr_path = '/dev/null'
@@ -90,7 +107,7 @@ class BgpDaemon(LookingGlass):
         logging.info("BGP API configuration : %s", kwargs["apiConfig"])
         self.apiConfig = kwargs["apiConfig"]
         
-        self.lgLogHandler = lgLogHandler
+        self.catchAllLGLogHandler = catchAllLGLogHandler
 
     def run(self):
         logging.info("Starting BGP component...")
@@ -112,7 +129,7 @@ class BgpDaemon(LookingGlass):
 
         # BGP component REST API
         logging.debug("Creating REST API")
-        bgpapi = RESTAPI(self.apiConfig, self, self.vpnManager, self.lgLogHandler)
+        bgpapi = RESTAPI(self.apiConfig, self, self.vpnManager, self.catchAllLGLogHandler)
         bgpapi.run()
     
     def stop(self,signum,frame):
@@ -178,23 +195,31 @@ def daemon_main():
         print "no logging configuration file at %s" % options.logFile
         logging.warning("no logging configuration file at %s" % options.logFile)
     else:
-        logging.config.fileConfig(options.logFile)
+        logging.config.fileConfig(options.logFile, disable_existing_loggers=False)
         logging.root.name = "[BgpDaemon]"
     
-    lgLogHandler = LookingGlassLogHandler()
+    catchAllLogHandler = LookingGlassLogHandler()
     
+    # we inject this catch all log handler in all configured loggers
     for (loggerName, logger) in Logger.manager.loggerDict.iteritems():
         if isinstance(logger, Logger):
-            logging.debug("Adding looking glass log handler to logger: %s" % loggerName)
-            logger.addHandler(lgLogHandler)
-        else:
-            logging.info("could not add LookingGlass log handler in %s logger" % loggerName)
+            if (not logger.propagate and logger.parent !=None):
+                logging.debug("Adding looking glass log handler to logger: %s" % loggerName)
+                logger.addHandler(catchAllLogHandler)
+#             else:
+#                 logging.debug("Not adding looking glass log handler to logger '%s', because would propagate to parent" % loggerName)
+#         else:
+#             logging.info("could not add LookingGlass log handler in %s logger" % loggerName)
+#     logging.debug("Adding looking glass log handler to root logger")
+    logging.root.addHandler(catchAllLogHandler)
+
+    #logging_tree.printout()
 
     logging.info("Starting")
 
     config = _loadConfig(options.configFile)
 
-    bgpDaemon = BgpDaemon(lgLogHandler, **config)
+    bgpDaemon = BgpDaemon(catchAllLogHandler, **config)
     
     try:
         if options.daemon:
@@ -227,13 +252,13 @@ def cleanup_main():
         print "no logging configuration file at %s" % options.logFile
         logging.basicConfig()
     else:
-        logging.config.fileConfig(options.logFile)
+        logging.config.fileConfig(options.logFile, disable_existing_loggers=False)
         logging.root.name = "[BgpDataplaneCleaner]"
     
     logging.info("Cleaning BGP component dataplanes...")
     config = _loadConfig(options.configFile)
     
-    drivers = findDataplaneDrivers(config["dataplaneConfig"],config["bgpConfig"])
+    drivers = findDataplaneDrivers(config["dataplaneConfig"],config["bgpConfig"],isCleaningUp=True)
     for (vpnType, dataplaneDriver) in drivers.iteritems():
         logging.info("Cleaning BGP component dataplane for %s..." % vpnType)
         dataplaneDriver.resetState()

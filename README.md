@@ -99,15 +99,17 @@ Linux 3.2 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls
 * the MPLSLinuxDataplaneDriver is based on an unmaintained MPLS stack for the Linux 
 3.7 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L501))
 
-* the MPLSOVSDataplaneDriver can be used on most recent Linux kernel, but is based on 
-  an OpenVSwitch with suitable MPLS code ; this driver requires that the OVS bridge 
-  be associated with an IP address and that E-VPN EVI interfaces be 
-  plugged into OVS prior to calling BaGPipe BGP API to attach them
-  (details in [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345))
+* the MPLSOVSDataplaneDriver can be used on most recent Linux kernel, but 
+  requires an OpenVSwitch with suitable MPLS code (current OVS git trunk); 
+  this driver can do MPLS-over-GRE or bare MPLS (but see [Caveats](#caveats));
+  but for bare MPLS this driver requires that the OVS bridge be associated with 
+  an IP address and that IPVPN VRF interfaces be plugged into OVS prior to 
+  calling BaGPipe BGP API to attach them (details in
+   [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345))
 
-For E-VPN, the `linux_vxlan.LinuxVXLANDataplaneDriver` is usable without any particular 
-additional configuration, and simply requires a Linux kernel >=3.10 with VXLAN compiled-in 
-or provided as a module ([linux_vxlan.py](src/bagpipe/bgp/vpn/evpn/linux_vxlan.py#L175)).
+For E-VPN, the `linux_vxlan.LinuxVXLANDataplaneDriver` is usable without any 
+particular additional configuration, and simply requires a Linux kernel >=3.10
+with VXLAN compiled-in or provided as a module ([linux_vxlan.py](src/bagpipe/bgp/vpn/evpn/linux_vxlan.py#L175)).
 
 Usage
 -----
@@ -330,6 +332,8 @@ Caveats
   * however, basic interop testing has been done
 * currently, the VRF code will only advertise /32 addresses, and does not
   support aggregation
+* MPLS-over-GRE is supported for IP VPNs, but is not yet standard
+  (OpenVSwitch currently does MPLS/Eth/GRE and not than MPLS/GRE) 
 
 License
 -------

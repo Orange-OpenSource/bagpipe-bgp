@@ -138,14 +138,14 @@ class VPNLabelledPrefix(object):
     def __repr__(self):
         return self.__str__() 
 
-    def pack (self):
+    def pack(self):
         bitlen = (len(self)-len(self.prefix))*8 + self.prefix.mask
         
         stack = ''.join( map(lambda x:x.pack(), self.labelStack ) )
-                
+        
         return chr(bitlen) + stack + self.rd.pack() + self.prefix.pack()[1:]
         
-    def __len__ (self):
+    def __len__(self):
         # returns the length in bits!
         return    len(self.labelStack) * len(self.labelStack[0]) + len(self.rd) + len(self.prefix)
         

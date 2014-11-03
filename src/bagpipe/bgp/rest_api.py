@@ -22,6 +22,7 @@ import time
 
 import traceback
 
+import re
 import json
 
 from bottle import request, response, abort, Bottle
@@ -38,12 +39,12 @@ class RESTAPI(object,LookingGlass):
     # Random generated sequence number 
     BGP_SEQ_NUM = uuid.uuid4().int
     
-    def __init__(self, config, daemon, vpnManager, lgLogHandler):
+    def __init__(self, config, daemon, vpnManager, catchAllLGLogHandler):
         self.config = config
         self.daemon = daemon
         
         self.vpnManager = vpnManager
-        self.LGLogHandler = lgLogHandler
+        self.catchAllLGLogHandler = catchAllLGLogHandler
         
         self.bottle = Bottle()
         
@@ -61,61 +62,115 @@ class RESTAPI(object,LookingGlass):
         
         LookingGlassReferences.setRoot(LOOKING_GLASS_BASE)
         LookingGlassReferences.setReferencePath("BGP_WORKERS",["bgp","workers"])
+        LookingGlassReferences.setReferencePath("VPN_INSTANCES",["vpns","instances"])
 
 
     def ping(self):
         log.debug('Ping received, returning sequence number: %d', self.BGP_SEQ_NUM)
         return "%d" % self.BGP_SEQ_NUM
     
+    def _check_attach_parameters(self,params,attach):
+        paramList = ('vpn_instance_id','ip_address','local_port')
+        if attach:
+            paramList += ('import_rt','export_rt','gateway_ip')
+        
+        for paramName in paramList:
+            if not paramName in params:
+                abort(400, 'Mandatory parameter "%s" is missing ' % paramName)
+
+        # if local_port is not a dict, then assume it designates a linux interface
+        if isinstance(params['local_port'],str) or isinstance(params['local_port'],unicode):
+            params['local_port'] = { 'linuxif': params['local_port'] }
+        
+        # if import_rt or export_rt are strings, convert them into lists
+        for param in ('import_rt','export_rt'):
+            if isinstance(params[param],str) or isinstance(params[param],unicode):
+                try:
+                    params[param] = re.split(',+ *', params[param])
+                except:
+                    abort(400,"Unable to parse string into a list of RTs: '%s'" % params[param]) 
+
+        if not ('linuxif' in params['local_port'] or
+                'evpn' in params['local_port']):
+            abort(400, 'Mandatory key is missing in local_port parameter (linuxif, or evpn)')
+        return params
+    
     def attach_localport(self):
-        localport_details = {}
+        """
+        vpn_instance_id: external VPN instance identifier (all ports with same vpn_instance_id will be
+                         plugged in the same VPN instance
+        vpn_type: type of the VPN instance ('ipvpn' or 'evpn')
+        import_rt: list of import Route Targets (or comma-separated string)
+        export_rt: list of export Route Targets (or comma-separated string)
+        gateway_ip: IP address of gateway for this VPN instance
+        mac_address: MAC address of endpoint to connect to the VPN instance
+        ip_address: IP/mask address of endpoint to connect to the VPN instance (FIXME)
+        linuxbr: Name of a linux bridge to which the linuxif is already plugged-in (optional)
+        local_port: local port to plug to the VPN instance
+            should be a dict containing any of the following key,value pairs
+            {
+                'linuxif': 'tap456abc', # name of a linux interface, if OVS information is provided, it
+                                        # does not have to be an existing interface
+                'ovs': {                     # optional
+                        'plugged': True,          # whether or not interface is already plugged into the OVS bridge
+                        'port_name': 'qvo456abc', # name of a linux interface to be plugged into the OVS bridge (optional and ignored if port_number is provided)
+                        'port_number': '7',       # OVS port number (optional if 'port_name' provided)
+                        'vlan': '42',             # the VLAN id for VM traffic (optional)
+                        
+                        'to_vm_port_number'       # optional specification of a distinct port to send traffic to the VM
+                        and 'to_vm_port_name'     # only applies if a vlan is specified   
+                       },
+                'evpn': {  # for an ipvpn attachement...
+                     'id': 'xyz'  # specifies the vpn_instance_id of an evpn
+                                  # that will be attached to the ipvpn
+                     'ovs_port_name': 'qvb456abc'   # optional, if provided, and if ovs/port_name is also 
+                                                    # provided, then the interface name will be assumed as already
+                                                    # plugged into the evpn
+                    }
+            }
+            if local_port is not a list, it is assumed to be a name of a linux interface (string)
+        """
 
         try:
-            localport_details = request.json
+            attach_params = request.json
         except Exception:
             log.error('attach_localport: No local port details received')
             abort(400, 'No local port details received')
         
-        for paramName in ('vpn_instance_id','import_rt','export_rt','ip_address','gateway_ip','local_port'):
-            if not localport_details.has_key(paramName):
-                log.error('attach_localport: Mandatory parameter "%s" is missing' % paramName)
-                abort(400, 'Mandatory parameter "%s" is missing ' % paramName)
+        attach_params = self._check_attach_parameters(attach_params,True)
 
         try:
-            log.debug('Local port attach received: %s', localport_details)
-            self.vpnManager.plugVifToVPN(localport_details['vpn_instance_id'],
-                                         localport_details['vpn_type'],
-                                         localport_details['import_rt'],
-                                         localport_details['export_rt'],
-                                         localport_details['mac_address'],
-                                         localport_details['ip_address'],
-                                         localport_details['gateway_ip'],
-                                         localport_details['local_port'])
+            log.debug('Local port attach received: %s', attach_params)
+            self.vpnManager.plugVifToVPN(attach_params['vpn_instance_id'],
+                                         attach_params['vpn_type'],
+                                         attach_params['import_rt'],
+                                         attach_params['export_rt'],
+                                         attach_params['mac_address'],
+                                         attach_params['ip_address'],
+                                         attach_params['gateway_ip'],
+                                         attach_params['local_port'],
+                                         attach_params.get('linuxbr'))
         except Exception as e:
             log.error('attach_localport: An error occurred during local port plug to VPN: %s' % e)
             log.info(traceback.format_exc())
             abort(400, 'An error occurred during local port plug to VPN')
 
     def detach_localport(self):
-        localport_details = {}
 
         try:
-            localport_details = request.json
+            detach_params = request.json
         except Exception:
             log.error('detach_localport: No local port details received')
             abort(400, 'No local port details received')
         
-        for paramName in ('vpn_instance_id','ip_address','local_port'):
-            if not localport_details.has_key(paramName):
-                log.error('detach_localport: Mandatory parameter "%s" is missing' % paramName)
-                abort(400, 'Mandatory parameter "%s" is missing ' % paramName)
-
+        detach_params = self._check_attach_parameters(detach_params,False)
+        
         try:
-            log.debug('Local port detach received: %s', localport_details)
-            self.vpnManager.unplugVifFromVPN(localport_details['vpn_instance_id'],
-                                             localport_details['mac_address'],
-                                             localport_details['ip_address'],
-                                             localport_details['local_port'])
+            log.debug('Local port detach received: %s', detach_params)
+            self.vpnManager.unplugVifFromVPN(detach_params['vpn_instance_id'],
+                                             detach_params['mac_address'],
+                                             detach_params['ip_address'],
+                                             detach_params['local_port'])
         except Exception as e:
             log.error('detach_localport: An error occurred during local port unplug from VPN: %s' % e)
             log.info(traceback.format_exc())
@@ -138,7 +193,7 @@ class RESTAPI(object,LookingGlass):
         try:
             lgInfo = self.getLookingGlassInfo(pathPrefix,urlPathElements)
         
-            log.debug("lgInfo: %s" % repr(lgInfo))
+            log.debug("lgInfo: %s..." % repr(lgInfo)[:40])
         
             if lgInfo is None:
                 raise NoSuchLookingGlassObject(pathPrefix,urlPathElements[0])
@@ -170,9 +225,16 @@ class RESTAPI(object,LookingGlass):
                 "local_routes_count":    self.vpnManager.bgpManager.routeTableManager.getLocalRoutesCount(),
                 "received_routes_count": self.vpnManager.bgpManager.routeTableManager.getReceivedRoutesCount(),
                 "vpn_instances_count":   self.vpnManager.getVPNWorkersCount(),
-                "warnings_and_errors":   len(self.LGLogHandler.getLogs()),
+                "warnings_and_errors":   len(self.catchAllLGLogHandler),
                 "start_time":            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.startTime))
                 }
+
+    def getLogs(self, pathPrefix):
+        return [ { 'level': record.levelname,
+                   'time': self.catchAllLGLogHandler.formatter.formatTime(record),
+                   'name': record.name,
+                   'message': record.msg }
+             for record in self.catchAllLGLogHandler.getRecords() ]
 
     ####################################################
     
@@ -185,7 +247,8 @@ class RESTAPI(object,LookingGlass):
     def run(self):
         #self.bottle.run(host=self.config["api_host"],  #FIXME: make only the LG available from remote hosts other than 127.0.0.1
         self.bottle.run(host="0.0.0.0",
-                     port=self.config["api_port"], 
+                     port=self.config["api_port"],
+                     quiet=True,
                      debug=True)
 
 

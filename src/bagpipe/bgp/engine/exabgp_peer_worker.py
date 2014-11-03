@@ -16,8 +16,6 @@
 # limitations under the License.
 
 
-import logging
-
 import traceback
 
 import select
@@ -27,7 +25,7 @@ from time import sleep
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker, KeepAliveReceived, SendKeepAlive, FSM, InitiateConnectionException, OpenWaitTimeout
 from bagpipe.bgp.engine import RouteEvent
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common.looking_glass import LookingGlass
 
 from exabgp.network.connection import Connection
 from exabgp.network.protocol import Protocol, Failure
@@ -43,8 +41,6 @@ from exabgp.message.keepalive    import KeepAlive
 from exabgp.message.notification   import Notification
 from exabgp.message.update.route import Route
 from exabgp.message.update.attribute.id import AttributeID
-
-log = logging.getLogger(__name__)
 
 class FakePeer(object):
     '''Dummy class to be able to to plug into exabgp code'''
@@ -77,19 +73,12 @@ class MyBGPProtocol(Protocol):
             o.capabilities[Capabilities.MULTIPROTOCOL_EXTENSIONS].append(afi_safi)
         
         if config['enable_rtc']:
-            log.info("RTC: capability announced")
             o.capabilities[Capabilities.MULTIPROTOCOL_EXTENSIONS].append((AFI(AFI.ipv4), SAFI(SAFI.rtc)))
-        else:
-            log.info("RTC disabled, capability *not* announced")
     
         if not self.connection.write(o.message()):
             raise Exception("Error while sending open")
-            log.error("Could not send open!")
         
         return o
-
-
-
 
 class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     
@@ -161,7 +150,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 
                 if isinstance(message, Open): break
                 else:
-                    log.error("Received unexpected message: %s" % message)
+                    self.log.error("Received unexpected message: %s" % message)
                     # FIXME
         
         if self.shouldStop:
@@ -338,13 +327,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             self.connection.close()
         BGPPeerWorker.stop(self)
     
-    
     ##############  Looking Glass ###############
-    
-    def getLGMap(self):
-        return {
-                "logs": (LGMap.SUBTREE, self.getLogs)
-                }
     
     def getLookingGlassLocalInfo(self, pathPrefix):
         return {

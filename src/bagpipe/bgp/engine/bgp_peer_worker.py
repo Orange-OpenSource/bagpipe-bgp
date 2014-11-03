@@ -16,20 +16,20 @@
 # limitations under the License.
 
 
-import logging
+#import logging
 
 from threading import Thread, Event, Timer
 
+import time
 from time import sleep
 
-import traceback 
+import logging
+import traceback
 
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine import RouteEvent
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LookingGlassLogHandler
-
-log = logging.getLogger(__name__)
+from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
 
 Init = "InitEvent"
 ReInit = "ReInit"
@@ -57,6 +57,7 @@ class FSM(object):
         self._prevState = None
         self.allStates = [FSM.Idle, FSM.Connect, FSM.OpenSent,
                           FSM.OpenConfirm, FSM.Active, FSM.Established]
+        self.lastTransitionTime = time.time()
     
     @property
     def state(self):
@@ -71,13 +72,15 @@ class FSM(object):
         if state in self.allStates:
             self._prevState = self._state
             self._state = state
-            self.worker.log.info("%s BGP FSM transitioned from '%s' to '%s' state" % (self.worker, self._prevState, self._state))
+            self.lastTransitionTime = time.time()
+            self.worker.log.info(
+                "%s BGP FSM transitioned from '%s' to '%s' state" %
+                (self.worker, self._prevState, self._state))
         else:
             raise Exception("no such state (%s)" % repr(state))
     
     def __repr__(self):
         return self._state
-
 
 class InitiateConnectionException(Exception):
     pass
@@ -85,9 +88,7 @@ class InitiateConnectionException(Exception):
 class OpenWaitTimeout(Exception):
     pass
 
-
-
-class BGPPeerWorker(Worker, Thread, LookingGlass):
+class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
     '''
     Partially abstract class for a Worker implementing the BGP protocol.
     '''
@@ -98,6 +99,7 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
         self.setDaemon(True)
         self.name = "BGP-%s" % peerAddress
         Worker.__init__(self, bgpManager, self.name)
+        
         self.bgpManager = bgpManager
         self.peerAddress = peerAddress
         
@@ -110,13 +112,9 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
         self.sendKATimer = None
         self.KAReceptionTimer = None
         
+        LookingGlassLocalLogger.__init__(self, self.peerAddress.replace(".", "-"))
+        
         self.fsm = FSM(self)
-        
-        self.LGLogHandler = LookingGlassLogHandler()
-        
-        self.log = logging.getLogger(__name__ + '.%s' % self.peerAddress.replace(".", "-"))
-        self.log.propagate = True
-        self.log.addHandler(self.LGLogHandler)
         
         self.log.debug("Init %s" % self.name)
         self.enqueue(Init)
@@ -134,7 +132,6 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
         assert(holdtime > 30)
         self.katPeriod = int(holdtime / 3.0)
         self.katExpiryTime = self.katPeriod * 3 
-
 
     # called by _eventQueueProcessorLoop
     def _onEvent(self, event):
@@ -160,11 +157,9 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
             
         else: self.log.warning("event not processed: %s" % event)
             
-    
     def _stopped(self):
         self.fsm.state = FSM.Idle
         
-    
     def _initiate(self):
         self.log.info("Initiating")
         self._initiateConnectionAndThreads()
@@ -263,7 +258,6 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
         - 2: there was an error 
         '''
         raise Exception("Abstract class, method not implemented")
-        
 
     ##### Sending keep-alive's #####
     
@@ -295,7 +289,7 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
         self.fsm.state = FSM.Idle
         self.enqueue(ReInit)
     
-    # ##
+    # ## Abstract methods
     
     def _keepAliveMessageData(self):
         raise Exception("Abstract class, method not implemented")
@@ -303,13 +297,16 @@ class BGPPeerWorker(Worker, Thread, LookingGlass):
     def _send(self, data):
         raise Exception("Abstract class, method not implemented")
     
-    # ##
+    ### Looking glass hooks ###
     
     def getLookingGlassLocalInfo(self, pathPrefix):
         return {
                 "protocol": {
                              "state": self.fsm.state,
                              "previous_state": "(%s)" % self.fsm.previousState,
-                             "hold_time": self.katExpiryTime
+                             "hold_time": self.katExpiryTime,
+                             "last_transition_time":
+                                time.strftime('%Y-%m-%d %H:%M:%S',
+                                    time.localtime(self.fsm.lastTransitionTime))
                              }
              }

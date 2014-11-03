@@ -40,6 +40,8 @@ def _getLookingGlassLocalInfoRecurse(obj, cls, pathPrefix):
 
     result = cls.getLookingGlassLocalInfo(obj, pathPrefix)
     
+    assert(isinstance(result,dict))
+    
     for base in cls.__bases__:
         if issubclass(base, LookingGlass):
             result.update(_getLookingGlassLocalInfoRecurse(obj, base, pathPrefix))
@@ -58,6 +60,8 @@ def _getLGMapRecurse(obj, cls):
     for base in cls.__bases__:
         if issubclass(base, LookingGlass):
             result.update(_getLGMapRecurse(obj, base))
+        else:
+            log.debug("not recursing into %s" % base)
     
     return result
 
@@ -230,17 +234,6 @@ class LookingGlass:
         log.warning("Looking glass did not found a looking-glass object for this path...")
         
         return None
-    
-    def getLogs(self, pathPrefix):
-        if self.LGLogHandler is not None:
-            return [ { 'level': record.levelname,
-                       'time': self.LGLogHandler.formatter.formatTime(record),
-                       'thread': record.threadName,
-                       'message': record.msg }
-                 for record in self.LGLogHandler.getLogs() ]
-        else:
-            log.warning("No looking glass log handler, but getLogs called: ???")
-    
 
     @staticmethod
     def getLGPrefixedPath(pathPrefix, pathItems):
@@ -249,22 +242,6 @@ class LookingGlass:
         quotedPathItems.insert(0, pathPrefix)
         return fmt % tuple(quotedPathItems)
 
-
-class LookingGlassLogHandler(logging.Handler):
-        def __init__(self, level=logging.WARNING, maxSize=100):
-            logging.Handler.__init__(self, level)
-            self.logs = []
-            self.maxSize = maxSize
-            self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
-        def emit(self, record):
-            record.msg.replace('"', "'")
-            if (len(self.logs) == 0 or self.logs[0] != record):
-                self.logs.insert(0, record)
-                del self.logs[self.maxSize:]
-        
-        def getLogs(self):
-            return self.logs
 
 class NoSuchLookingGlassObject(Exception):
     
@@ -296,3 +273,57 @@ class LookingGlassReferences(object):
         index = pathPrefix.find(LookingGlassReferences.root)
         absoluteBaseURL = pathPrefix[:index + len(LookingGlassReferences.root)]
         return LookingGlass.getLGPrefixedPath(absoluteBaseURL, LookingGlassReferences.references[reference] + path)
+
+class LookingGlassLogHandler(logging.Handler):
+    """
+    This log handler simply stores the last <maxSize> messages of importance
+    above <level>. These messages can be retrieved with .getRecords().
+    """
+    def __init__(self, level=logging.WARNING, maxSize=100):
+        logging.Handler.__init__(self, level)
+        self.records = []
+        self.maxSize = maxSize
+        self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        
+    def emit(self, record):
+        record.msg.replace('"', "'")
+        self.records.insert(0, record)
+        del self.records[self.maxSize:]
+    
+    def __len__(self):
+        return len(self.records)
+    
+    def getRecords(self):
+        return self.records
+
+class LookingGlassLocalLogger(LookingGlass):
+    """
+    For objects subclassing this class, self.log will be a logger derived from
+    <name> based on the existing logging configuration, but with an additional 
+    logger using LookingGlassLogHandler.
+    
+    This additional logger is used to make the last <n> records (above WARNING)
+    available through the look
+    """
+    
+    def __init__(self,appendToName=""):
+        try:
+            self.lgLogHandler
+        except AttributeError:
+            self.lgLogHandler = LookingGlassLogHandler()
+            name = self.__module__ #+ "." + self.__class__.__name__
+            if appendToName:
+                name += "." + appendToName
+            self.log = logging.getLogger(name)
+            self.log.addHandler(self.lgLogHandler)
+
+    def getLGMap(self):
+        return {
+                "logs": (LGMap.SUBTREE, self.getLogs)
+                }
+
+    def getLogs(self, pathPrefix):
+        return [ { 'level': record.levelname,
+                   'time': self.lgLogHandler.formatter.formatTime(record),
+                   'message': record.msg }
+             for record in self.lgLogHandler.getRecords() ]

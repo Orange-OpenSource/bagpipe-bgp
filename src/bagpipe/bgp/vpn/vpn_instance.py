@@ -15,8 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import logging
+import socket
 
 from copy import copy
 
@@ -24,7 +23,7 @@ from threading import Thread
 from threading import Lock
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
 
 from bagpipe.bgp.engine.tracker_worker import TrackerWorker
 
@@ -32,20 +31,19 @@ from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
 from exabgp.structure.address import AFI, SAFI
 
-from exabgp.message.update.attribute.communities import ECommunities
+from exabgp.message.update.attribute.communities import ECommunities, Encapsulation
 from exabgp.message.update.attribute.id import AttributeID
 
-log = logging.getLogger(__name__)
+from exabgp.message.update.attribute.nexthop import NextHop
+from exabgp.structure.ip import Inet
 
-class VPNInstance(TrackerWorker, Thread, LookingGlass):
+class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     
     afi = None
     safi = None
 
-    def __init__(self, bgpManager, labelAllocator, dataplaneDriver, vpnInstanceId, instanceId, importRTs, exportRTs, gatewayIP, mask):
-                
-        log.info("VPNInstance init( %(instanceId)d, %(vpnInstanceId)s, %(importRTs)s, %(exportRTs)s %(gatewayIP)s/%(mask)d)" % locals())
-
+    def __init__(self, bgpManager, labelAllocator, dataplaneDriver, externalInstanceId, instanceId, importRTs, exportRTs, gatewayIP, mask):
+        
         self.instanceType = self.__class__.__name__
         self.instanceId = instanceId
 
@@ -54,11 +52,15 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
 
         TrackerWorker.__init__(self, bgpManager, "%s %d" % (self.instanceType, self.instanceId))
         
+        LookingGlassLocalLogger.__init__(self, "%s-%d" % (self.instanceType, self.instanceId))
+        
+        self.log.info("VPNInstance init( %(instanceId)d, %(externalInstanceId)s, %(importRTs)s, %(exportRTs)s %(gatewayIP)s/%(mask)d)" % locals())
+        
         self.lock = Lock()
         
         self.importRTs = importRTs
         self.exportRTs = exportRTs
-        self.vpnInstanceId = vpnInstanceId
+        self.externalInstanceId = externalInstanceId
         self.gatewayIP = gatewayIP
         self.mask = mask
         
@@ -74,15 +76,13 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         
         self.localPortData = dict()
         
-        self.route2dataplaneInfo = dict()
-        
         self.initialized = False
     
-    def initialize(self):
+    def initialize(self, *args):
         '''
         Subclasses should call this super method only *after* they are fully initialized
         '''
-        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.vpnInstanceId, self.gatewayIP, self.mask, self.instanceLabel)
+        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.externalInstanceId, self.gatewayIP, self.mask, self.instanceLabel, *args)
         
         self.initialized = True
         
@@ -116,8 +116,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         added_import_rt = set(newImportRTs) - set(self.importRTs)
         removed_import_rt = set(self.importRTs) - set(newImportRTs)
 
-        log.debug("%s %d - Added Import RT: %s" % (self.instanceType, self.instanceId, added_import_rt))
-        log.debug("%s %d - Removed Import RT: %s" % (self.instanceType, self.instanceId, removed_import_rt))
+        self.log.debug("%s %d - Added Import RT: %s" % (self.instanceType, self.instanceId, added_import_rt))
+        self.log.debug("%s %d - Removed Import RT: %s" % (self.instanceType, self.instanceId, removed_import_rt))
 
         # Register to BGP with these route targets
         for rt in added_import_rt:
@@ -134,68 +134,46 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         if  set(newExportRTs) != set(self.exportRTs):
             self.exportRTs = newExportRTs
             for routeEntry in self.getWorkerRouteEntries():
-                log.info("Re-advertising route %s with updated RTs (%s)" % (routeEntry.nlri, newExportRTs))
+                self.log.info("Re-advertising route %s with updated RTs (%s)" % (routeEntry.nlri, newExportRTs))
                 
                 updatedAttributes = copy(routeEntry.attributes)
                 del updatedAttributes[ AttributeID.EXTENDED_COMMUNITY ]
                 updatedAttributes.add(self._genExtendedCommunities())
                 
                 updatedRouteEntry = self._newRouteEntry(routeEntry.afi, routeEntry.safi, self.exportRTs, routeEntry.nlri, updatedAttributes)
-                log.debug("   updated route: %s" % (updatedRouteEntry))
+                self.log.debug("   updated route: %s" % (updatedRouteEntry))
                 
                 self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, updatedRouteEntry))
-
-        
+                
     def _parseIPAddressPrefix(self, ipAddressPrefix):
         ipAddress = ""
         mask = 0
         try:
             (ipAddress, mask) = ipAddressPrefix.split('/')
         except ValueError as e:
-            log.error("Cannot split %s into address/mask (%s)" % (ipAddressPrefix, e))
+            self.log.error("Cannot split %s into address/mask (%s)" % (ipAddressPrefix, e))
             raise Exception("Cannot split %s into address/mask (%s)")
         
         return (ipAddress, mask)
 
-    # TODO: should be merged with self.vifPlugged
-    def _isVifPlugged(self, macAddress, ipAddress, localPort):
-        portData = dict()
-        label = 0
-        if localPort not in self.localPortData:
-            log.debug("Plugging port (%s)", ipAddress)
-            if not self.initialized: self.initialize()
-            
-            label = self.labelAllocator.getNewLabel("Incoming traffic for %s %d, interface %s" % (self.instanceType, self.instanceId, localPort))
-            portData['label'] = label
-            
-            # Call driver to setup the dataplane for incoming traffic
-            self.dataplane.vifPlugged(macAddress, ipAddress, localPort, label)
-        else:
-            log.debug("Port already plugged, updating routes (%s)", ipAddress)
-            portData = self.localPortData[localPort]
-            label = portData['label']
-            
-        return (portData, label)
-
     def _genExtendedCommunities(self):
         ecommunities = ECommunities(copy(self.exportRTs))
-        for ecom in self.genAdditionalExtendedCommunities():
-            ecommunities.add(ecom)
+        for encap in self.dataplaneDriver.supportedEncaps():
+            if not isinstance(encap,Encapsulation):
+                raise Exception("dataplaneDriver.supportedEncaps() should return a list of Encapsulation objects")
+            
+            if encap != Encapsulation(Encapsulation.DEFAULT):
+                ecommunities.add(encap)
+        #FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
-
-    def genAdditionalExtendedCommunities(self):
-        """
-        returns a list of extended communities to add to a route additionnaly to the Route Targets
-        """
-        return []
 
     def generateVifBGPRoute(self, macAdress, ipAddress, label):
         raise Exception("Not implemented.")
 
     @utils.synchronized
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort):
-        # macAddress, ipAddressPrefix, localPort
-        log.info("vifPlugged %s %d macAddress: %s ipAddressPrefix: %s localPort:%s" % (self.instanceType, self.instanceId, macAddress, ipAddressPrefix, localPort))
+        self.log.info("vifPlugged %s %d macAddress: %s ipAddressPrefix: %s localPort:%s"
+                  % (self.instanceType, self.instanceId, macAddress, ipAddressPrefix, localPort))
 
         # Parse address/mask
         (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
@@ -205,10 +183,24 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         # - Else, plug port on dataplane
         #
         try:
-            (portData, label) = self._isVifPlugged(macAddress, ipAddress, localPort)
+            portData = dict()
+
+            if localPort['linuxif'] not in self.localPortData:
+                self.log.debug("Plugging port (%s)", ipAddress)
+                
+                portData['label'] = self.labelAllocator.getNewLabel("Incoming traffic for %s %d, interface %s" % (self.instanceType, self.instanceId, localPort['linuxif']))
+
+                # Call driver to setup the dataplane for incoming traffic
+                self.dataplane.vifPlugged(macAddress, ipAddress, localPort, portData['label'])
+            else:
+                self.log.debug("Port already plugged, will advertize new route (%s)", ipAddress)
+                portData = self.localPortData[localPort['linuxif']]
             
-            log.info("Generating BGP route for VIF")
-            routeEntry = self.generateVifBGPRoute(macAddress, ipAddress, label)
+            self.log.info("Generating BGP route for VIF")
+            routeEntry = self.generateVifBGPRoute(macAddress, ipAddress, portData['label'])
+            
+            nh = Inet(1, socket.inet_pton(socket.AF_INET, self.dataplane.driver.getLocalAddress()))
+            routeEntry.attributes.add(NextHop(nh))
             
             assert(isinstance(routeEntry, RouteEntry))
             
@@ -216,40 +208,44 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
             
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
             
+            portData["endpoint_info"]={'mac':macAddress,'ip':ipAddressPrefix}
+            portData["port_info"]=localPort
             # Store route for this prefix to be able to:
             # - Update on another plug
             # - Or withdraw on unplug
             portData['routeEntry'] = routeEntry
-            self.localPortData[localPort] = portData
+            self.localPortData[localPort['linuxif']] = portData
             
+            #FIXME: the code below is called after *all* plugs, not
+            # only after the first one. Harmless but can be improved...
             self._postFirstPlug()
             
         except Exception as e:
-            log.error("Error in vifPlugged: %s" % e)
-            if localPort in self.localPortData: 
-                del self.localPortData[localPort]
+            self.log.error("Error in vifPlugged: %s" % e)
+            if localPort['linuxif'] in self.localPortData: 
+                del self.localPortData[localPort['linuxif']]
             raise
 
     @utils.synchronized
     def vifUnplugged(self, macAddress, ipAddressPrefix, localPort):
         # macAddress, ipAddressPrefix, localPort
-        log.info("vifUnplugged %s %d macAddress: %s ipAddressPrefix: %s localPort:%s" % (self.instanceType, self.instanceId, macAddress, ipAddressPrefix, localPort))
+        self.log.info("vifUnplugged %s %d macAddress: %s ipAddressPrefix: %s localPort:%s" % (self.instanceType, self.instanceId, macAddress, ipAddressPrefix, localPort))
 
         # Parse address/mask
         (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
         
         # Find route, label and data plane informations
         try:
-            portData = self.localPortData[localPort]
+            portData = self.localPortData[localPort['linuxif']]
         except KeyError:
-            log.warning("vifUnplugged called for localPort %s, but port was not plugged yet" % localPort)
+            self.log.warning("vifUnplugged called for localPort %s, but port was not plugged yet" % localPort['linuxif'])
             raise Exception("this port is not plugged yet, cannot unplug")
         
         try:
             routeEntry = portData['routeEntry']
             label = portData['label']
         except KeyError as e :
-            log.error("vifPlugged called for localPort %s, but port data is incomplete (%s)" % (localPort, e))
+            self.log.error("vifPlugged called for localPort %s, but port data is incomplete (%s)" % (localPort['linuxif'], e))
             raise Exception("bgp component bug, check its logs")
         
         # Withdraw BGP route
@@ -262,14 +258,36 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         self.labelAllocator.release(label)
         
         # Forget data for this port
-        del self.localPortData[localPort]
+        del self.localPortData[localPort['linuxif']]
+
+    def _checkEncaps(self,route):
+        '''
+        returns a list of encaps supported by both the dataplane driver and the
+        route advertizer (based on BGP Encapsulation community)
+        
+        raise an Exception, if there is no common encap
+        '''
+        try:
+            advEncaps = filter(lambda ecom:isinstance(ecom, Encapsulation),
+                        route.attributes[AttributeID.EXTENDED_COMMUNITY].communities
+                        )
+            self.log.debug("Advertized Encaps: %s" % advEncaps)
+        except Exception as e:
+            self.log.debug("Exception on adv encaps: %s" % e)
+            advEncaps = [ Encapsulation(Encapsulation.DEFAULT) ]
+        
+        goodEncaps = set(advEncaps) & set(self.dataplaneDriver.supportedEncaps())
+        
+        if not goodEncaps:
+            self.log.warning("No encap supported by dataplane driver for route %s, dataplane supports %s)" % (route,advEncaps,self.dataplaneDriver.supportedEncaps()) )
+        
+        return goodEncaps
 
     #### Looking Glass ####
 
     def getLGMap(self):
         return {
                 "dataplane":     (LGMap.DELEGATE, self.dataplane),
-                # TODO: add localportdata as a SUBTREE
                 "route_targets": (LGMap.SUBITEM, self.getRTs),
                 "gateway_ip":    (LGMap.SUBITEM, self.getGatewayIP),  # use future LGMap.ATTRIBUTE
                 "subnet_mask":   (LGMap.SUBITEM, self.getMask),  # use future LGMap.ATTRIBUTE
@@ -281,9 +299,11 @@ class VPNInstance(TrackerWorker, Thread, LookingGlass):
         r = {}
         for (port, data) in self.localPortData.iteritems():
             r[port] = {
-                     'route': data['routeEntry'].getLookingGlassInfo(pathPrefix),
-                     'label': data['label']
-            }
+                 'route': data['routeEntry'].getLookingGlassInfo(pathPrefix),
+                 'label': data['label'],
+                 'port_info': data['port_info'],
+                 'endpoint_info': data['endpoint_info']
+                 }
         return r
     
     def getRTs(self):

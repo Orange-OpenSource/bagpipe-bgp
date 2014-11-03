@@ -51,6 +51,7 @@ class VRF(VPNInstance, LookingGlass):
     # - calling the driver to setup/update/remove routes in the dataplane
     # - cleanup: calling the driver, unregistering for BGP routes
     
+    type = "ipvpn"
     afi = AFI(AFI.ipv4)
     safi = SAFI(SAFI.mpls_vpn)
     
@@ -60,7 +61,7 @@ class VRF(VPNInstance, LookingGlass):
         
         VPNInstance.__init__(self, *args)
         
-        self.initialize()  # TODO: ???
+        self.initialize()
         
     def generateVifBGPRoute(self, macAdress, ipAddress, label):
         # Generate BGP route and advertise it...
@@ -71,9 +72,6 @@ class VRF(VPNInstance, LookingGlass):
                                         [LabelStackEntry(label, True)]
                                         )
                       )
-        
-        nh = Inet(1, socket.inet_pton(socket.AF_INET, self.bgpManager.getLocalAddress()))         
-        route.attributes.add(NextHop(nh))
         
         return self._newRouteEntry(self.afi, self.safi, self.exportRTs, route.nlri, route.attributes)
 
@@ -94,24 +92,17 @@ class VRF(VPNInstance, LookingGlass):
         log.info("newBestRoute for %s: %s" % (prefix, newRoute))
         log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes[prefix])))
         
-        nh = newRoute.attributes.get(NextHop.ID)
-        remotePE = nh.next_hop
-        label = newRoute.nlri.labelStack[0].labelValue
+        encaps = self._checkEncaps(newRoute)
+        if not encaps:
+            return
         
-        dataplaneInfo = self.dataplane.setupDataplaneForRemoteEndpoint(prefix, remotePE, label, newRoute.nlri)
-        self.route2dataplaneInfo[newRoute] = dataplaneInfo
+        self.dataplane.setupDataplaneForRemoteEndpoint(prefix, newRoute.attributes.get(NextHop.ID).next_hop,
+                                                        newRoute.nlri.labelStack[0].labelValue, newRoute.nlri, encaps)
 
     @utils.synchronized
     def _bestRouteRemoved(self, prefix, oldRoute):
         log.info("bestRouteRemoved for %s: %s" % (prefix, oldRoute))
         log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes[prefix])))
         
-        nh = oldRoute.attributes.get(NextHop.ID)
-        remotePE = nh.next_hop
-        label = oldRoute.nlri.labelStack[0].labelValue
-        dataplaneInfo = self.route2dataplaneInfo[ oldRoute ]
-        
-        self.dataplane.removeDataplaneForRemoteEndpoint(prefix, remotePE, label, dataplaneInfo, oldRoute.nlri)
-
-
-
+        self.dataplane.removeDataplaneForRemoteEndpoint(prefix, oldRoute.attributes.get(NextHop.ID).next_hop,
+                                                        oldRoute.nlri.labelStack[0].labelValue, oldRoute.nlri)

@@ -25,9 +25,10 @@ from bagpipe.bgp.engine import RouteEvent
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver as _DummyDataplaneDriver
+from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane as _VPNInstanceDataplane
+from bagpipe.bgp.vpn.dataplane_drivers import DummyVPNInstanceDataplane as _DummyVPNInstanceDataplane
 
-from bagpipe.bgp.common.looking_glass import LookingGlass
-
+from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap, LookingGlassReferences
 
 from exabgp.structure.vpn import RouteDistinguisher
 from exabgp.structure.evpn import EVPNNLRI, EVPNMACAdvertisement, EVPNMulticast, EthernetSegmentIdentifier, EthernetTag, MAC
@@ -43,14 +44,50 @@ from exabgp.message.update.attribute.id import AttributeID
 log = logging.getLogger(__name__)
 
 
+class VPNInstanceDataplane(_VPNInstanceDataplane):
+
+    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
+        self.log.warning("function not implemented: addDataplaneForBroadcastEndpoint()" )
+        
+    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
+        self.log.warning("function not implemented: removeDataplaneForBroadcastEndpoint()" )
+
+    def setGatewayPort(self,linuxif):
+        raise Exception("not implemented")
+    
+    def gatewayPortDown(self,linuxif):
+        raise Exception("not implemented")
+
+    def hasGatewayPort(self):
+        raise Exception("not implemented")
+    
 ############ Dummy, do-nothing dataplane driver
+
+class DummyVPNInstanceDataplane(_DummyVPNInstanceDataplane,_VPNInstanceDataplane):
+
+    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri, encaps):
+        self.log.info("addDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % locals())
+    
+    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
+        self.log.info("removeDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % locals())
+    
+    def setGatewayPort(self,linuxif):
+        self.log.info("Plugging gateway port: %s" % linuxif)
+
+    def gatewayPortDown(self,linuxif):
+        self.log.info("Unplugging gateway port: %s" % linuxif)
+        
+    def hasGatewayPort(self):
+        self.log.info("Has gateway port: ???")
+        return False
 
 class DummyDataplaneDriver(_DummyDataplaneDriver):
     
-    encapsulation = Encapsulation.DEFAULT
+    dataplaneClass = DummyVPNInstanceDataplane
 
     def __init__(self, *args):
         _DummyDataplaneDriver.__init__(self, *args)
+
 
 ########## EVI
 
@@ -60,6 +97,7 @@ class EVI(VPNInstance, LookingGlass):
     Based on specifications draft-ietf-l2vpn-evpn and draft-sd-l2vpn-evpn-overlay.
     '''
     
+    type = "evpn"
     afi = AFI(AFI.l2vpn)
     safi = SAFI(SAFI.evpn)
     
@@ -68,22 +106,18 @@ class EVI(VPNInstance, LookingGlass):
     # (it only makes sense to add this if ENABLE_BROADCAST_SUPPORT is False)
     ENABLE_BROADCAST_SUPPORT_HACKY = False
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         
         log.debug("Init EVI")
         
         VPNInstance.__init__(self, *args)
         
-        self.initialize()  # TODO: automatically done on first plug call, not needed here (?)
+        self.gwPort = None
         
-    def genAdditionalExtendedCommunities(self):
-        ecoms = []
-        if self.dataplaneDriver.encapsulation:
-            ecoms.append(Encapsulation(self.dataplaneDriver.encapsulation))
-        return ecoms
+        self.initialize(kwargs.get('linuxbr') if 'linuxbr' in kwargs else ())
         
     @utils.synchronized
-    def initialize(self):
+    def initialize(self, *args):
         
         if EVI.ENABLE_BROADCAST_SUPPORT:
             # Advertise route to receive multi-destination traffic
@@ -92,7 +126,7 @@ class EVI(VPNInstance, LookingGlass):
             etag = None
             label = LabelStackEntry(self.instanceLabel)
         
-            if (self.dataplaneDriver.encapsulation == Encapsulation.VXLAN):
+            if (Encapsulation(Encapsulation.VXLAN) in self.dataplaneDriver.supportedEncaps()):
                 etag = EthernetTag(self.instanceLabel)
                 label = None
             
@@ -103,18 +137,17 @@ class EVI(VPNInstance, LookingGlass):
                                                                self.bgpManager.getLocalAddress(),
                                                                self.instanceId),
                                             etag,
-                                            self.bgpManager.getLocalAddress()
+                                            self.bgpManager.getLocalAddress() 
                                             )
                               )
             
             route.attributes.add(self._genExtendedCommunities())
 
-            
             # add PMSI Tunnel Attribute route
-            pmsi_tunnel_attribute = PMSITunnelIngressReplication(self.bgpManager.getLocalAddress(), label)
+            pmsi_tunnel_attribute = PMSITunnelIngressReplication(self.dataplaneDriver.getLocalAddress(), label)
             route.attributes.add(pmsi_tunnel_attribute)
             
-            nh = Inet(1, socket.inet_pton(socket.AF_INET, self.bgpManager.getLocalAddress()))
+            nh = Inet(1, socket.inet_pton(socket.AF_INET, self.dataplaneDriver.getLocalAddress()))
             route.attributes.add(NextHop(nh))
             
             self.multicastRouteEntry = self._newRouteEntry(self.afi,
@@ -125,7 +158,7 @@ class EVI(VPNInstance, LookingGlass):
             
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, self.multicastRouteEntry))
         
-        VPNInstance.initialize(self)
+        VPNInstance.initialize(self, *args)
         
     def cleanup(self):
         # Withdraw route for multi-destination traffic
@@ -140,7 +173,7 @@ class EVI(VPNInstance, LookingGlass):
         lse = LabelStackEntry(label, True)
         etag = None
         
-        if (self.dataplaneDriver.encapsulation == Encapsulation.VXLAN):
+        if (Encapsulation(Encapsulation.VXLAN) in self.dataplaneDriver.supportedEncaps()):
             lse = None
             etag = EthernetTag(self.instanceLabel)
         
@@ -148,7 +181,7 @@ class EVI(VPNInstance, LookingGlass):
                       EVPNMACAdvertisement(
                                            RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC,
                                                               None,
-                                                              self.bgpManager.getLocalAddress(),
+                                                              self.dataplaneDriver.getLocalAddress(),
                                                               self.instanceId),
                                            EthernetSegmentIdentifier(),
                                            etag,
@@ -158,20 +191,20 @@ class EVI(VPNInstance, LookingGlass):
                                            )
                       )
         
-        nh = Inet(1, socket.inet_pton(socket.AF_INET, self.bgpManager.getLocalAddress()))
-        route.attributes.add(NextHop(nh))
-        
         return self._newRouteEntry(self.afi, self.safi, self.exportRTs, route.nlri, route.attributes)
 
-    def _checkEncap(self, route):
-        encaps = filter(lambda ecom:isinstance(ecom, Encapsulation),
-                        route.attributes[AttributeID.EXTENDED_COMMUNITY].communities
-                        )
+    def setGatewayPort(self,linuxif,ipvpn):
+        self.log.info("Calling dataplane driver to plug gateway port %s" % linuxif)
+        self.dataplane.setGatewayPort(linuxif)
+        self.gwPort = (linuxif,ipvpn)
         
-        encap = encaps[0].tunnel_type
-        if (self.dataplaneDriver.encapsulation and
-            self.dataplaneDriver.encapsulation not in encap):
-            raise Exception("received route not advertising the encap required by our dataplane")
+    def gatewayPortDown(self,linuxif):
+        self.log.info("Calling dataplane driver to unplug gateway port %s" % linuxif)
+        self.dataplane.gatewayPortDown(linuxif)
+        self.gwPort = None
+    
+    def hasGatewayPort(self):
+        return (self.gwPort is not None)
     
     ##################### TrackerWorker callbacks for BGP route updates #############################################
     
@@ -196,17 +229,18 @@ class EVI(VPNInstance, LookingGlass):
        
         (entryClass, info) = entry
 
+        encaps = self._checkEncaps(newRoute)
+        if not encaps:
+            return
+
         if entryClass == EVPNMACAdvertisement:
             prefix = info
-            
-            # self._checkEncap(newRoute)
-            
+
             nh = newRoute.attributes.get(NextHop.ID)
             remotePE = nh.next_hop
             label = newRoute.nlri.label.labelValue
             
-            dataplaneInfo = self.dataplane.setupDataplaneForRemoteEndpoint(prefix, remotePE, label, newRoute.nlri)
-            self.route2dataplaneInfo[newRoute] = dataplaneInfo
+            self.dataplane.setupDataplaneForRemoteEndpoint(prefix, remotePE, label, newRoute.nlri, encaps)
             
             # This is a hack to support the case where our BGP RR does not support E-VPN Inclusive multicast route and/or the PMSI Tunnel attribute
             if EVI.ENABLE_BROADCAST_SUPPORT_HACKY:
@@ -214,9 +248,7 @@ class EVI(VPNInstance, LookingGlass):
         
         elif entryClass == EVPNMulticast:
             remote_endpoint = info
-            
-            # self._checkEncap(newRoute)
-            
+
             # check that the route is actually carrying an PMSITunnel of type ingress replication
             pmsi_tunnel = newRoute.attributes.get(PMSITunnel.ID)
             if not isinstance(pmsi_tunnel, PMSITunnelIngressReplication):
@@ -226,8 +258,7 @@ class EVI(VPNInstance, LookingGlass):
                 label = pmsi_tunnel.label.labelValue
                 
                 log.info("Setting up dataplane for new ingress replication destination (%s)" % remote_endpoint)
-                dataplaneInfo = self.dataplane.addDataplaneForBroadcastEndpoint(remote_endpoint, label, newRoute.nlri)
-                self.route2dataplaneInfo[newRoute] = dataplaneInfo
+                self.dataplane.addDataplaneForBroadcastEndpoint(remote_endpoint, label, newRoute.nlri, encaps)
         else:
             log.error("newBestRoute not supposed to be called with such an entry")
         
@@ -239,8 +270,6 @@ class EVI(VPNInstance, LookingGlass):
        
         (entryClass, info) = entry
 
-        dataplaneInfo = self.route2dataplaneInfo[ oldRoute ]
-
         if entryClass == EVPNMACAdvertisement:
             prefix = info
             
@@ -248,8 +277,7 @@ class EVI(VPNInstance, LookingGlass):
             remotePE = nh.next_hop
             label = oldRoute.nlri.label.labelValue
             
-            
-            self.dataplane.removeDataplaneForRemoteEndpoint(prefix, remotePE, label, dataplaneInfo, oldRoute.nlri)
+            self.dataplane.removeDataplaneForRemoteEndpoint(prefix, remotePE, label, oldRoute.nlri)
             
             # This is a hack to support the case where our BGP RR does not support E-VPN Inclusive multicast route and/or the PMSI Tunnel attribute
             if EVI.ENABLE_BROADCAST_SUPPORT_HACKY:
@@ -270,5 +298,17 @@ class EVI(VPNInstance, LookingGlass):
         else:
             log.error("newBestRoute not supposed to be called with such an entry")
 
+    
+    #### Looking Glass ####
 
 
+    def getLookingGlassLocalInfo(self, pathPrefix):
+
+        if not self.gwPort:
+            return { "gwPort": None }
+        else:
+            (linuxif,ipvpn) = self.gwPort
+            return { "gwPort": {
+                    "interface": repr(linuxif),
+                    "ipvpn": LookingGlassReferences.getAbsolutePath("VPN_INSTANCES", pathPrefix, [ipvpn.externalInstanceId]),
+                   }}

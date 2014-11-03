@@ -27,14 +27,15 @@ dataplane_driver = DummyDataplaneDriver
 
 # MPLS outgoing interface (for MPLSLinuxDataplaneDriver and MPLSOVSDataplaneDriver)
 #
-# (for MPLSLinuxDataplaneDriver, the '*gre*' special value means that the driver
-# will instantiate a special gre interface and use an MPLS/GRE encapsulation)
+# (not specifying an mpls_interface or using the '*gre*' special value 
+# means that the driver will instantiate a tunnel interface and use an 
+# MPLS/GRE encapsulation)
 # mpls_interface=*gre*
+mpls_interface=*gre*
 
-mpls_interface=eth0
-
-# GRE source IP address (for MPLSLinux32DataplaneDriver and MPLSLinuxDataplaneDriver)
-gre_src_address=192.168.100.177
+# IP address that others will us to send us packets
+#   does not need to be specified if different than the BGP local_address
+# dataplane_local_address=1.2.3.4
 
 # required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000

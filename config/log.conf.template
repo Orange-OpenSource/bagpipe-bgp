@@ -1,5 +1,5 @@
 [loggers]
-keys=root,bgp,engine,api,vpn,ipvpn,evpn,vpn_manager,mpls_linux_dataplane
+keys=root,bgp,engine,common,api,vpn,ipvpn,evpn,vpn_manager,mpls_ovs_dataplane,looking_glass
 
 [handlers]
 keys=rotatingFile
@@ -8,7 +8,7 @@ keys=rotatingFile
 keys=standard
 
 [logger_root]
-level=NOTSET
+level=WARNING
 propagate=0
 qualname=(root)
 handlers=rotatingFile
@@ -20,7 +20,6 @@ propagate=0
 qualname=bagpipe.bgp
 handlers=rotatingFile
 parent=(root)
-
 
 [logger_engine]
 level=WARNING
@@ -71,12 +70,19 @@ qualname=bagpipe.bgp.vpn.vpn_manager
 handlers=rotatingFile
 parent=vpn
 
-[logger_mpls_linux_dataplane]
+[logger_mpls_ovs_dataplane]
 level=WARNING
 propagate=0
-qualname=bagpipe.bgp.vpn.ipvpn.mpls_linux_dataplane
+qualname=bagpipe.bgp.vpn.ipvpn.mpls_ovs_dataplane
 handlers=rotatingFile
 parent=ipvpn
+
+[logger_looking_glass]
+level=WARNING
+propagate=0
+qualname=bagpipe.bgp.common.looking_glass
+handlers=rotatingFile
+parent=root
 
 [handler_rotatingFile]
 class=handlers.RotatingFileHandler

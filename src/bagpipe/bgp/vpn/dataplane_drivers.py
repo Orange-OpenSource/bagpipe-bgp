@@ -16,119 +16,142 @@
 # limitations under the License.
 
 
-import logging
+import socket
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
 
-log = logging.getLogger(__name__)
+from bagpipe.bgp.common.run_command import runCommand
 
-class DataplaneDriver(object,LookingGlass):
+from exabgp.message.update.attribute.communities import Encapsulation
+
+class DataplaneDriver(object,LookingGlassLocalLogger):
+    
+    encaps = [Encapsulation(Encapsulation.DEFAULT)]
     
     def __init__(self,config,init=True):
         '''config is a dict'''
+        LookingGlassLocalLogger.__init__(self)
+        
         self.config = config
         
-        self.myDataplanes = []
+        self.local_address = None
+        try:
+            self.local_address = self.config["dataplane_local_address"]
+            socket.inet_pton(socket.AF_INET, self.local_address)
+            self.log.info("Will use %s as local_address" % self.local_address)
+        except KeyError:
+            self.log.info("Will use local BGP address as dataplane_local_address")
+            self.local_address = None
+        except socket.error:
+            raise Exception("malformed local_address: '%s'" % self.local_address)
         
         if init:  # skipped if instantiated with init=False, to be used for cleanup script
             self._initReal(config)
+        
+        # Flag to trigger cleanup all dataplane states on first call to vifPlugged
+        self.firstInit = True
 
     def resetState(self):
-        log.info("function not implemented: resetState")
+        self.log.info("function not implemented: resetState")
        
-    def initializeDataplaneInstance(self, instanceId, vpnInstanceId, gatewayIP, mask, instanceLabel):
+    def _initReal(self, config):
+        '''
+        This is called after resetState (which, e.g. cleans up the stuff
+        possibly left-out by a previous failed run).
+        
+        All init things that should not be cleaned up go here.
+        '''
+        pass
+    
+    def initializeDataplaneInstance(self, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel, *args):
         '''
         returns a VPNInstanceDataplane subclass
+        after calling resetState on the dataplane driver, if this is the first 
+        call to initializeDataplaneInstance
         '''
-        log.info("initialize VPNInstance %(instanceId)s, %(vpnInstanceId)s, %(gatewayIP)s, %(mask)s" % locals())
-        
-        if self.dataplaneClass:
-            vpnInstanceDataplane = self.dataplaneClass( self, instanceId, vpnInstanceId, gatewayIP, mask, instanceLabel)
-            self.myDataplanes.append(vpnInstanceDataplane)
-        
-            self._initializeInstanceReal(vpnInstanceDataplane)
-        
-            vpnInstanceDataplane.initialize()
-            
-            return vpnInstanceDataplane
+        self.log.info("initialize VPNInstance %(instanceId)s, %(externalInstanceId)s, %(gatewayIP)s, %(mask)s" % locals())
+
+        if self.firstInit:
+            self.log.info("First VPN instance init, resetting dataplane state")
+            try:
+                self.resetState()
+            except Exception as e:
+                self.log.error("Exception while resetting state: %s" % e)
+            self.firstInit = False
         else:
-            raise Exception("Cannot initialize dataplane instance, Dataplane driver has no dataplaneClass")
+            self.log.debug("(not resetting dataplane state)")
+
+        vpnInstanceDataplane = self.dataplaneClass( self, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel, *args)
+        vpnInstanceDataplane.initialize()
+        
+        return vpnInstanceDataplane
     
     def cleanup(self):
-        # Call cleanup on all dataplane instances
-        for vpnInstanceDataplane in self.myDataplanes:
-            vpnInstanceDataplane.cleanup()
-            
-        self.myDataplanes = None
-        
         self._cleanupReal()
         
+    def getLocalAddress(self):
+        return self.local_address
+    
+    def supportedEncaps(self):
+        return self.__class__.encaps
+    
+    def _runCommand(self, command, *args, **kwargs):
+        return runCommand(self.log, command, *args, **kwargs)
+    
     def getLGMap(self):
+        encaps=[]
+        for encap in self.supportedEncaps():
+            encaps.append(repr(encap))
         return {
-                "name": (LGMap.VALUE, self.__class__.__name__)
+                "name": (LGMap.VALUE, self.__class__.__name__),
+                'local_address': (LGMap.VALUE, self.local_address),
+                "supported_encaps": (LGMap.VALUE,encaps),
+                "config": (LGMap.VALUE,self.config)
                 }
 
-
-class VPNInstanceDataplane(LookingGlass): 
+class VPNInstanceDataplane(LookingGlassLocalLogger): 
  
-    def __init__(self, dataplaneDriver, instanceId, vpnInstanceId, gatewayIP, mask, instanceLabel=None):
+    def __init__(self, dataplaneDriver, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel=None, bridge_name=None):
         '''
         WARNING: 
         The .resetState method of the dataplane driver will be called after instantiating the VPNInstanceDataplane
         object (if this is the first instantiation after startup).
         Hence, no dataplane setup should be done in __init__.
         '''
-        log.info("VPNInstanceDataplane init( %(dataplaneDriverName)s, %(instanceId)d, %(vpnInstanceId)s, %(gatewayIP)s/%(mask)d)" % dict(locals(),**{"dataplaneDriverName":dataplaneDriver.__class__.__name__}))
+        LookingGlassLocalLogger.__init__(self,repr(instanceId))
+        self.log.info("VPNInstanceDataplane init( %(externalInstanceId)s, %(gatewayIP)s/%(mask)d)" % locals())
         self.driver = dataplaneDriver
         self.config = dataplaneDriver.config
         self.instanceId = instanceId
-        self.vpnInstanceId = vpnInstanceId
+        self.externalInstanceId = externalInstanceId
         self.gatewayIP = gatewayIP
-        self.instanceLabel = instanceLabel
         self.mask = mask
-        self.dataplanePortsData = dict()
+        self.instanceLabel = instanceLabel
+        self.bridge_name = bridge_name
  
     def initialize(self):
         '''
         This method is not called before calling .resetState on the dataplane driver.
         '''
-        log.info("function not implemented: initialize instance %d" % self.instanceId )
- 
-    def vifPlugged(self, macAddress, ipAddress, localPort, label):
-        log.info("VPNInstance %(instanceId)d: vifPlugged(%(macAddress)s,%(ipAddress)s,%(localPort)s,%(label)d)" % dict(locals(),**self.__dict__))
-    
-        # FIXME: need to fail if port was already plugged    
-        self.dataplanePortsData[localPort] = dict()
-        
-        self._vifPluggedReal(macAddress, ipAddress, localPort, label)    
-    
-    def vifUnplugged(self, macAddress, ipAddress, localPort, label):
-        log.info("VPNInstance %(instanceId)d: vifUnplugged(%(macAddress)s,%(ipAddress)s,%(localPort)s,%(label)d)" % dict(locals(),**self.__dict__))
-        
-        self._vifUnpluggedReal(macAddress, ipAddress, localPort, label)
-        
-        del self.dataplanePortsData[localPort]
+        self.log.info("function not implemented: initialize instance %d" % self.instanceId )
 
     def cleanup(self):
-        log.info("function not implemented: cleanup instance %d" % self.instanceId )
-        
-    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
-        log.warning("function not implemented: setupDataplaneForRemoteEndpoint()" )
+        self.log.info("function not implemented: cleanup instance %d" % self.instanceId )
 
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, dataplaneInfo, nlri):
-        '''
-        dataplaneInfo is the object that was returned by setupDataplaneForRemoteEndpoint for the same prefix/remotePE/label
-        '''
-        log.warning("function not implemented: removeDataplaneForRemoteEndpoint()" )
- 
-    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
-        log.warning("function not implemented: addDataplaneForBroadcastEndpoint()" )
+    def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
+        self.log.warning("function not implemented: vifPlugged()")
         
-    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
-        log.warning("function not implemented: removeDataplaneForBroadcastEndpoint()" )
+    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort):
+        self.log.warning("function not implemented: vifUnplugged()")
         
+    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri, encaps):
+        self.log.warning("function not implemented: setupDataplaneForRemoteEndpoint()")
+
+    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
+        self.log.warning("function not implemented: removeDataplaneForRemoteEndpoint()")
+         
     def _runCommand(self,*args,**kwargs):
-        return self.driver._runCommand(*args,**kwargs)
+        return runCommand(self.log,*args,**kwargs)
     
     #### Looking glass info ####
 
@@ -137,37 +160,29 @@ class VPNInstanceDataplane(LookingGlass):
                 "driver": (LGMap.DELEGATE,self.driver),
                 }
 
-
 class DummyVPNInstanceDataplane(VPNInstanceDataplane):
 
     def __init__(self,*args):
         VPNInstanceDataplane.__init__(self,*args)
-        log.info("----- Init dataplane for VPNInstance %s %d" % (self.__class__.__name__,self.instanceId))
+        self.log.info("----- Init dataplane for VPNInstance %s %d" % (self.__class__.__name__,self.instanceId))
 
     def initialize(self): 
-        log.info("----- VPNInstanceinitialize()")
+        self.log.info("----- VPNInstanceinitialize()")
 
-    def _vifPluggedReal(self, macAddress, ipAddress, localPort, label):
-        log.info("----- VPNInstance %(instanceName)s %(instanceId)d: _vifPluggedReal(%(macAddress)s,%(ipAddress)s,%(localPort)s,%(label)d)" % dict(dict(locals(),**self.__dict__), **{"instanceName":self.__class__.__name__}))
-    
-    def _vifUnpluggedReal(self, macAddress, ipAddress, localPort, label):
-        log.info("----- VPNInstance %(instanceName)s %(instanceId)d: _vifUnpluggedReal(%(macAddress)s,%(ipAddress)s,%(mask)s,%(localPort)s,%(label)d)" % dict(dict(locals(),**self.__dict__), **{"instanceName":self.__class__.__name__}))
+    def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
+        self.log.info("vifPlugged: %s, %s, %s" % (macAddress,ipAddressPrefix,localPort))
 
-    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
-        log.info("----- VPNInstance %(instanceName)s %(instanceId)d: setupDataplaneForRemoteEndpoint: %(prefix)s --> %(remotePE)s label %(label)d !" % dict(dict(locals(),**self.__dict__), **{"instanceName":self.__class__.__name__}))
+    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, label):
+        self.log.info("vifUnplugged: %s, %s, %s" % (macAddress,ipAddressPrefix,localPort))
         
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, dataplaneInfo, nlri):
-        log.info("----- VPNInstance %(instanceName)s %(instanceId)d: removeDataplaneForRemoteEndpoint: %(prefix)s (was at %(remotePE)s label %(label)d)" % dict(dict(locals(),**self.__dict__), **{"instanceName":self.__class__.__name__}))
-
-    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
-        log.info("----- VPNInstance %(instanceName)s %(instanceId)d: addDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % dict(dict(locals(),**self.__dict__), **{"instanceName":self.__class__.__name__}))
-         
-    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
-        log.info("----- VPNInstance %(instanceName)s %(instanceId)d: removeDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % dict(dict(locals(),**self.__dict__), **{"instanceName":self.__class__.__name__}))
-
+    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri, encaps):
+        self.log.info("----- VPNInstance %(instanceId)d: setupDataplaneForRemoteEndpoint: %(prefix)s --> %(remotePE)s label %(label)d encaps %(encaps)s!" % locals())
+        
+    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
+        self.log.info("----- VPNInstance %(instanceId)d: removeDataplaneForRemoteEndpoint: %(prefix)s (was at %(remotePE)s label %(label)d)" % locals())
+ 
     def cleanup(self):
-        log.info("----- VPNInstance %s %d: cleaning up!" % (self.__class__.__name__, self.instanceId))
-
+        self.log.info("----- VPNInstance %s %d: cleaning up!" % (self.__class__.__name__, self.instanceId))
 
 class DummyDataplaneDriver(DataplaneDriver):
     
@@ -177,11 +192,7 @@ class DummyDataplaneDriver(DataplaneDriver):
         DataplaneDriver.__init__(self,*args)
 
     def _initReal(self,config):
-        log.info("--- initReal()")
+        self.log.info("--- initReal()")
         
     def _cleanupReal(self):
-        log.info("--- cleanupReal()")
-
-    def _initializeInstanceReal(self,vpnInstanceDataplane):
-        pass
-
+        self.log.info("--- cleanupReal()")

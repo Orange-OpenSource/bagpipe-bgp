@@ -271,21 +271,30 @@ class Encapsulation(ECommunity):
 	ECommunity_SUBTYPE = 0x0c
 
 	DEFAULT=0
+	# https://www.iana.org/assignments/bgp-parameters/bgp-parameters.xhtml#tunnel-types
 	L2TPv3=1
 	GRE=2
-	VXLAN=3  # as in draft-sd-l2vpn-evpn-overlay-02, but value collides with reserved values in RFC5566
-	NVGRE=4  # ditto
 	IPIP=7
+	VXLAN=8
+	NVGRE=9
+	MPLS=10
+	VXLAN_GPE=12
+	MPLS_UDP=13
+	
 	encapType2String={
 					L2TPv3: "L2TPv3",
 					GRE:    "GRE",
 					VXLAN:  "VXLAN",
 					NVGRE:  "NVGRE",
 					IPIP:   "IP-in-IP",
+					MPLS:	"MPLS",
+					MPLS_UDP: "MPLS-in-UDP",
+					VXLAN_GPE: "VXLAN-GPE",
 					DEFAULT:"Default"
 				}
 
 	def __init__(self,tunnel_type):
+		assert(isinstance(tunnel_type,int))
 		self.tunnel_type = tunnel_type
 		self.community = self.pack()
 
@@ -299,12 +308,9 @@ class Encapsulation(ECommunity):
 		return hash(self.community)
 
 	def __cmp__(self,other):
-		if ( isinstance(other,Encapsulation) and
-			self.tunnel_type == other.tunnel_type):
-			return 0
-		else:
-			return -1
-
+		if isinstance(other,Encapsulation):
+			return cmp(self.tunnel_type,other.tunnel_type)
+		
 	def pack(self):
 		return pack("!BBHHH",
 				Encapsulation.ECommunity_TYPE,
