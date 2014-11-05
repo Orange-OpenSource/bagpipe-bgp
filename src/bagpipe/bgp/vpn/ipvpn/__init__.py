@@ -90,7 +90,7 @@ class VRF(VPNInstance, LookingGlass):
     @utils.synchronized
     def _newBestRoute(self, prefix, newRoute):
         log.info("newBestRoute for %s: %s" % (prefix, newRoute))
-        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes[prefix])))
+        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes.get(prefix))))
         
         encaps = self._checkEncaps(newRoute)
         if not encaps:
@@ -102,7 +102,7 @@ class VRF(VPNInstance, LookingGlass):
     @utils.synchronized
     def _bestRouteRemoved(self, prefix, oldRoute):
         log.info("bestRouteRemoved for %s: %s" % (prefix, oldRoute))
-        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes[prefix])))
+        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes.get(prefix))))
         
         self.dataplane.removeDataplaneForRemoteEndpoint(prefix, oldRoute.attributes.get(NextHop.ID).next_hop,
                                                         oldRoute.nlri.labelStack[0].labelValue, oldRoute.nlri)
