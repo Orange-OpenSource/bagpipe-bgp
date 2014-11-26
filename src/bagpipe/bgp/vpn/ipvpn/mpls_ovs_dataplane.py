@@ -61,7 +61,7 @@ OVS_DUMP_FLOW_FILTER="| grep -v NXST_FLOW | perl -pe '"               \
 
 class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
     
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         VPNInstanceDataplane.__init__(self, *args)
         
         self.namespaceId = "%s%s" % (ARPNETNS_PREFIX, self._get_namespace_from_network())
@@ -77,9 +77,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         
         self.ovs_bridge = self.driver.ovs_bridge
         
-        self._initialize() 
-    
-    def _initialize(self):
         self.log.info("VRF %d: Initializing network namespace %s for ARP proxing" % (self.instanceId, self.namespaceId))
         # Get names of veth pair devices between OVS and network namespace
         ovsbr_to_proxyarp_ns = self.driver._get_ovsbr_to_proxyarpns_devname(self.namespaceId)
@@ -495,7 +492,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
         self.log.info("Initializing MPLSOVSVRFDataplane")
         
         try:
-            (o,_) = self._runCommand("cat /sys/module/openvswitch/version")
+            (o,_) = self._runCommand("ovs-ofctl -V | head -1 | awk '{print $4}'")
             self.ovsRelease=o[0]
         except:
             self.log.warning("No OVS kernel module loaded")

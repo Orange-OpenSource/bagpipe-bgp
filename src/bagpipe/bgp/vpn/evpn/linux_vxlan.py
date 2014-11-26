@@ -34,17 +34,16 @@ LINUX_DEV_LEN = 14
 
 class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     
-    def __init__(self,*args):
-        VPNInstanceDataplane.__init__(self,*args)
+    def __init__(self, *args, **kwargs):
+        VPNInstanceDataplane.__init__(self, *args)
         
-        if not self.bridge_name:
+        if 'linuxbr' in kwargs:
+            self.bridge_name = kwargs.get('linuxbr')
+        else:
             self.bridge_name = (BRIDGE_NAME_PREFIX + self.externalInstanceId)[:LINUX_DEV_LEN]
         
         self.vxlan_if_name = (VXLAN_INTERFACE_PREFIX + self.externalInstanceId)[:LINUX_DEV_LEN]
         
-        self._initialize()
-    
-    def _initialize(self):
         self.log.info("EVI %d: Initializing bridge %s" % (self.instanceId, self.bridge_name))
         if not self._interface_exists(self.bridge_name):
             self.log.debug("Starting bridge %s" % self.bridge_name)
@@ -58,11 +57,15 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
             self.log.debug("Bridge %s created" % self.bridge_name)
             
         self._create_and_plug_vxlan_if()
-            
+        
         self.log.debug("VXLAN interface %s plugged on bridge %s" % (self.vxlan_if_name, self.bridge_name))
+        
+        self._cleaningUp = False
 
     def cleanup(self):
         self.log.info("Cleaning EVI bridge and VXLAN interface %s" % self.bridge_name)
+        
+        self._cleaningUp = True
         
         self._cleanup_vxlan_if()
         
@@ -140,6 +143,10 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri, encaps):
         self.log.info("setupDataplaneForRemoteEndpoint(%s, %s, %d, %s)" % (prefix, remotePE, label, nlri))
         
+        if self._cleaningUp:
+            self.log.debug("setupDataplaneForRemoteEndpoint: instance cleaning up, do nothing") 
+            return
+        
         mac = prefix
         ip = nlri.ip
         vni = nlri.etag
@@ -155,6 +162,10 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
         self.log.info("removeDataplaneForRemoteEndpoint(%s, %s, %d, %s)" % (prefix, remotePE, label, nlri))
         
+        if self._cleaningUp:
+            self.log.debug("setupDataplaneForRemoteEndpoint: instance cleaning up, do nothing") 
+            return
+        
         mac = prefix
         ip = nlri.ip
         vni = nlri.etag
@@ -169,20 +180,29 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri, encaps):
         self.log.info("EVI %(instanceId)d: addDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % dict(locals(),**self.__dict__))
         
+        if self._cleaningUp:
+            self.log.debug("setupDataplaneForRemoteEndpoint: instance cleaning up, do nothing") 
+            return
+        
         vni = nlri.etag
         
-        self._runCommand("bridge fdb append %s dev %s dst %s vni %s" % ("ff:ff:ff:ff:ff:ff",self.vxlan_if_name,remotePE, vni))
+        # 00:00:00:00:00 usable as default since kernel commit 58e4c767046a35f11a55af6ce946054ddf4a8580 (2013-06-25)
+        self._runCommand("bridge fdb append %s dev %s dst %s vni %s" % ("00:00:00:00:00:00",self.vxlan_if_name,remotePE, vni))
         
         self._fdbDump() 
          
     def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
         self.log.info("EVI %(instanceId)d: removeDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % dict(locals(),**self.__dict__))
     
+        if self._cleaningUp:
+            self.log.debug("setupDataplaneForRemoteEndpoint: instance cleaning up, do nothing") 
+            return
+    
         vni = nlri.etag
         
         self._fdbDump()
         
-        self._runCommand("bridge fdb delete %s dev %s dst %s vni %s" % ("ff:ff:ff:ff:ff:ff",self.vxlan_if_name,remotePE, vni))
+        self._runCommand("bridge fdb delete %s dev %s dst %s vni %s" % ("00:00:00:00:00:00",self.vxlan_if_name,remotePE, vni))
         
         self._fdbDump()
 
@@ -207,7 +227,7 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     """
     
     dataplaneClass = LinuxVXLANEVIDataplane
-    requiredKernel = "3.10.0"
+    requiredKernel = "3.11.0"
     encaps = [Encapsulation(Encapsulation.VXLAN)]
     
     def __init__(self, config, init=True):
@@ -285,9 +305,6 @@ class LinuxVXLANEVIHybridDataplane(LinuxVXLANEVIDataplane):
         self.bridge_name = ""
         self.vxlan_if_name = None
         VPNInstanceDataplane.__init__(self,*args)
-    
-    def initialize(self): 
-        self.log.info("Initialize: nothing to do, everything is done in plug")
 
     def cleanup(self):
         self.log.info("Cleanup: nothing to do, everything is done in unplug")

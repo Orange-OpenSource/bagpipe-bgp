@@ -38,16 +38,12 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
     Dataplane driver using MPLS code at github.com/i-maravic/MPLS-Linux.git, mpls-new branch (based on Linux 3.7rc4)
     '''
     
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         VPNInstanceDataplane.__init__(self, *args)
         
         self.namespaceId = self._get_namespace_from_network()
         
-        self._initialize()
-        
-    def _initialize(self): 
         self.log.info("VRF %d: Initializing network namespace %s" % (self.instanceId, self.namespaceId))
-        
         if self._namespace_exists():
             self.log.debug("VRF network namespace already exists, flushing MPLS routes...")
             # Flush all MPLS routes in network namespace

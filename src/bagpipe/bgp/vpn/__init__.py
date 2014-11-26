@@ -130,13 +130,14 @@ class VPNManager(object, LookingGlass):
             (evpn_if,ipvpn_if
              ,evpnInstance,managed) = self. _evpn_ipvpn_ifs[ipvpnInstance]
 
-            if not (localPort['evpn']['id'] == evpnInstance.instanceId):
+            if not (localPort['evpn']['id'] == evpnInstance.externalInstanceId):
                 raise Exception('Trying to plug into an IPVPN a new E-VPN while'
                                 ' one is already plugged in')
             else:
                 # do nothing
                 log.warning('Trying to plug an E-VPN into an IPVPN, but it was'
                             'already done')
+                localPort['linuxif']=ipvpn_if
                 return
         
         #  detect if this evpn is already plugged into an IPVPN

@@ -61,6 +61,9 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
         self.trackedEntry2routes = dict()  # dict: entry -> list of routes
         self.trackedEntry2bestRoutes = dict()  # dict: entry -> set of bestRoutes
         
+    def getBestRoutesForTrackedEntry(self, entry):
+        return self.trackedEntry2bestRoutes.get(entry, set())
+        
     def _onEvent(self, routeEvent):
         self.log.debug("Received route event: %s" % routeEvent)
         

@@ -42,7 +42,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     afi = None
     safi = None
 
-    def __init__(self, bgpManager, labelAllocator, dataplaneDriver, externalInstanceId, instanceId, importRTs, exportRTs, gatewayIP, mask):
+    def __init__(self, bgpManager, labelAllocator, dataplaneDriver, externalInstanceId, instanceId, importRTs, exportRTs, gatewayIP, mask, **kwargs):
         
         self.instanceType = self.__class__.__name__
         self.instanceId = instanceId
@@ -76,15 +76,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         
         self.localPortData = dict()
         
-        self.initialized = False
-    
-    def initialize(self, *args):
-        '''
-        Subclasses should call this super method only *after* they are fully initialized
-        '''
-        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.externalInstanceId, self.gatewayIP, self.mask, self.instanceLabel, *args)
-        
-        self.initialized = True
+        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.externalInstanceId, self.gatewayIP, self.mask, self.instanceLabel, **kwargs)
         
     def _postFirstPlug(self):
         # we defer subscription to any route until we have had a first plug

@@ -110,14 +110,9 @@ class EVI(VPNInstance, LookingGlass):
         
         log.debug("Init EVI")
         
-        VPNInstance.__init__(self, *args)
+        VPNInstance.__init__(self, *args, **kwargs)
         
         self.gwPort = None
-        
-        self.initialize(kwargs.get('linuxbr') if 'linuxbr' in kwargs else ())
-        
-    @utils.synchronized
-    def initialize(self, *args):
         
         if EVI.ENABLE_BROADCAST_SUPPORT:
             # Advertise route to receive multi-destination traffic
@@ -157,8 +152,6 @@ class EVI(VPNInstance, LookingGlass):
                                                           route.attributes)
             
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, self.multicastRouteEntry))
-        
-        VPNInstance.initialize(self, *args)
         
     def cleanup(self):
         # Withdraw route for multi-destination traffic
@@ -225,7 +218,7 @@ class EVI(VPNInstance, LookingGlass):
     @utils.synchronized
     def _newBestRoute(self, entry, newRoute):
         log.info("newBestRoute for %s: %s" % (str(entry), newRoute))
-        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes[entry])))
+        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.getBestRoutesForTrackedEntry(entry))))
        
         (entryClass, info) = entry
 
@@ -257,7 +250,7 @@ class EVI(VPNInstance, LookingGlass):
                 remote_endpoint = pmsi_tunnel.ip
                 label = pmsi_tunnel.label.labelValue
                 
-                log.info("Setting up dataplane for new ingress replication destination (%s)" % remote_endpoint)
+                log.info("Setting up dataplane for new ingress replication destination %s" % remote_endpoint)
                 self.dataplane.addDataplaneForBroadcastEndpoint(remote_endpoint, label, newRoute.nlri, encaps)
         else:
             log.error("newBestRoute not supposed to be called with such an entry")
@@ -266,7 +259,7 @@ class EVI(VPNInstance, LookingGlass):
     @utils.synchronized
     def _bestRouteRemoved(self, entry, oldRoute):
         log.info("bestRouteRemoved for %s: %s" % (str(entry), oldRoute))
-        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.trackedEntry2bestRoutes[entry])))
+        log.info("all best routes:\n  %s" % "\n  ".join(map(repr, self.getBestRoutesForTrackedEntry(entry))))
        
         (entryClass, info) = entry
 
@@ -293,7 +286,7 @@ class EVI(VPNInstance, LookingGlass):
             else:
                 remote_endpoint = pmsi_tunnel.ip
                 label = pmsi_tunnel.label.labelValue
-                log.info("Setting up dataplane for new ingress replication destination (%s)" % remote_endpoint)
+                log.info("Cleaning up dataplane for ingress replication destination %s" % remote_endpoint)
                 self.dataplane.removeDataplaneForBroadcastEndpoint(remote_endpoint, label, oldRoute.nlri)
         else:
             log.error("newBestRoute not supposed to be called with such an entry")

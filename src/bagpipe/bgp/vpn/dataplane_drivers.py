@@ -63,7 +63,7 @@ class DataplaneDriver(object,LookingGlassLocalLogger):
         '''
         pass
     
-    def initializeDataplaneInstance(self, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel, *args):
+    def initializeDataplaneInstance(self, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel, **kwargs):
         '''
         returns a VPNInstanceDataplane subclass
         after calling resetState on the dataplane driver, if this is the first 
@@ -81,10 +81,7 @@ class DataplaneDriver(object,LookingGlassLocalLogger):
         else:
             self.log.debug("(not resetting dataplane state)")
 
-        vpnInstanceDataplane = self.dataplaneClass( self, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel, *args)
-        vpnInstanceDataplane.initialize()
-        
-        return vpnInstanceDataplane
+        return self.dataplaneClass( self, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel, **kwargs)
     
     def cleanup(self):
         self._cleanupReal()
@@ -111,13 +108,7 @@ class DataplaneDriver(object,LookingGlassLocalLogger):
 
 class VPNInstanceDataplane(LookingGlassLocalLogger): 
  
-    def __init__(self, dataplaneDriver, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel=None, bridge_name=None):
-        '''
-        WARNING: 
-        The .resetState method of the dataplane driver will be called after instantiating the VPNInstanceDataplane
-        object (if this is the first instantiation after startup).
-        Hence, no dataplane setup should be done in __init__.
-        '''
+    def __init__(self, dataplaneDriver, instanceId, externalInstanceId, gatewayIP, mask, instanceLabel=None):
         LookingGlassLocalLogger.__init__(self,repr(instanceId))
         self.log.info("VPNInstanceDataplane init( %(externalInstanceId)s, %(gatewayIP)s/%(mask)d)" % locals())
         self.driver = dataplaneDriver
@@ -127,13 +118,6 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
         self.gatewayIP = gatewayIP
         self.mask = mask
         self.instanceLabel = instanceLabel
-        self.bridge_name = bridge_name
- 
-    def initialize(self):
-        '''
-        This method is not called before calling .resetState on the dataplane driver.
-        '''
-        self.log.info("function not implemented: initialize instance %d" % self.instanceId )
 
     def cleanup(self):
         self.log.info("function not implemented: cleanup instance %d" % self.instanceId )
@@ -165,9 +149,6 @@ class DummyVPNInstanceDataplane(VPNInstanceDataplane):
     def __init__(self,*args):
         VPNInstanceDataplane.__init__(self,*args)
         self.log.info("----- Init dataplane for VPNInstance %s %d" % (self.__class__.__name__,self.instanceId))
-
-    def initialize(self): 
-        self.log.info("----- VPNInstanceinitialize()")
 
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
         self.log.info("vifPlugged: %s, %s, %s" % (macAddress,ipAddressPrefix,localPort))
