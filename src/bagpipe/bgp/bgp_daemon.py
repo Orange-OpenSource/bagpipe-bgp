@@ -133,13 +133,13 @@ class BgpDaemon(LookingGlass):
         bgpapi.run()
     
     def stop(self,signum,frame):
-        logging.info("Received SIGTERM, stopping...")
+        logging.info("Received signal %(signum)r, stopping..."% vars())
         self.vpnManager.stop()
         self.bgpManager.stop()
         # would need to stop main thread ?
         logging.info("All threads now stopped...")
         exception = SystemExit(
-            "Terminating on signal %(signum)r"
+            "Terminated on signal %(signum)r"
                 % vars())
         raise exception
     
@@ -230,6 +230,7 @@ def daemon_main():
             daemon_runner.do_action()
         else:
             signal.signal(signal.SIGTERM, lambda signum,frame: bgpDaemon.stop(signum,frame))
+            signal.signal(signal.SIGINT, lambda signum,frame: bgpDaemon.stop(signum,frame))
             bgpDaemon.run()
     except Exception as e:
         logging.exception("Error while starting BGP daemon: %s" % e)

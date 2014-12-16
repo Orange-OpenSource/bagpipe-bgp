@@ -128,7 +128,7 @@ class VPNManager(object, LookingGlass):
         
         if ipvpnInstance in self._evpn_ipvpn_ifs:
             (evpn_if,ipvpn_if
-             ,evpnInstance,managed) = self. _evpn_ipvpn_ifs[ipvpnInstance]
+             ,evpnInstance,managed) = self._evpn_ipvpn_ifs[ipvpnInstance]
 
             if not (localPort['evpn']['id'] == evpnInstance.externalInstanceId):
                 raise Exception('Trying to plug into an IPVPN a new E-VPN while'
@@ -187,35 +187,29 @@ class VPNManager(object, LookingGlass):
         
         self._evpn_ipvpn_ifs[ipvpnInstance]=(evpn_if,ipvpn_if,evpnInstance,managed)
 
-    def _pre_detach_evpn2ipvpn(self,localPort,ipvpn):
-        """ Symmetric to _attach_evpn2ipvpn
+    def _detach_evpn2ipvpn(self, ipvpn):
         """
-        assert('evpn' in localPort)
+        Symmetric to _attach_evpn2ipvpn
+        """
+        (evpn_if, ipvpn_if, evpnInstance, managed) = self._evpn_ipvpn_ifs[ipvpn]
         
-        (evpn_if,ipvpn_if,evpnInstance,_) = self._evpn_ipvpn_ifs[ipvpn]
-        
-        if not 'id' in localPort['evpn']:
-            raise Exception("Missing parameter 'id' :an external EVPN instance id must be specified for an EVPN attachment")
-        
-        if not (localPort['evpn']['id'] == evpnInstance.externalInstanceId):
-            raise Exception('Mismatch between evpn specified at detach (%s) and evpn that was specified at attach (%s)'%
-                            (localPort['evpn']['id'], evpnInstance.externalInstanceId))
-        
-        #TODO: check that this evpn instance is still up and running 
-        evpnInstance.gatewayPortDown(evpn_if)
-        
-        localPort['linuxif']=ipvpn_if
+        if not ipvpn.hasEnpoint(ipvpn_if):
+            #TODO: check that this evpn instance is still up and running 
+            evpnInstance.gatewayPortDown(evpn_if)
+            
+            # cleanup veth pair
+            if managed:
+                runCommand(log, "ip link delete %s" % evpn_if)
+                
+            del self._evpn_ipvpn_ifs[ipvpn]
     
-    def _post_detach_evpn2ipvpn(self,localPort,ipvpn):
-        (evpn_if,ipvpn_if,_,managed) = self._evpn_ipvpn_ifs[ipvpn]
+    def _cleanup_evpn2ipvpn(self,ipvpn):
+        (_,ipvpn_if,_,managed) = self._evpn_ipvpn_ifs[ipvpn]
         
         # cleanup veth pair
         if managed:
-            runCommand(log, "ip link delete %s" % evpn_if)
-            # the following is not needed since the two ifs are twins  
-            #runCommand(log, "ip link delete %s" % ipvpn_if, acceptableReturnCodes=[0,1])
-            
-        del self._evpn_ipvpn_ifs[ipvpn]
+            runCommand(log, "ovs-vsctl del-port %s" % ipvpn_if)
+            runCommand(log, "ip link delete %s" % ipvpn_if)
 
     def plugVifToVPN(self, externalInstanceId, instanceType, importRTs, exportRTs, macAddress, ipAddress, gatewayIP, localPort, linuxbr):
         
@@ -297,14 +291,11 @@ class VPNManager(object, LookingGlass):
             log.error("Try to unplug VIF from non existing VPN instance worker %s" % externalInstanceId)
             raise exc.VPNNotFound(externalInstanceId)
         
-        if vpnInstance.type == "ipvpn" and 'evpn' in localPort:
-            self._pre_detach_evpn2ipvpn(localPort,vpnInstance)
-
         # Unplug VIF from VPN instance
-        vpnInstance.vifUnplugged(macAddress, ipAddressPrefix, localPort)
+        vpnInstance.vifUnplugged(macAddress, ipAddressPrefix)
 
         if vpnInstance.type == "ipvpn" and 'evpn' in localPort:
-            self._post_detach_evpn2ipvpn(localPort,vpnInstance)
+            self._detach_evpn2ipvpn(vpnInstance)
                 
         if vpnInstance.isEmpty():
             vpnInstance.cleanup()
@@ -314,6 +305,9 @@ class VPNManager(object, LookingGlass):
     def stop(self):
         for worker in self.vpnWorkers.itervalues():
             worker.stop()
+            # Cleanup veth pair
+            if worker.type == "ipvpn" and self._evpn_ipvpn_ifs.get(worker):
+                self._cleanup_evpn2ipvpn(worker)
         for worker in self.vpnWorkers.itervalues():
             worker.join()
 

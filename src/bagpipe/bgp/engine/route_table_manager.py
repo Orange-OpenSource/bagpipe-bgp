@@ -367,6 +367,11 @@ class RouteTableManager(Thread, LookingGlass):
        
         # Propagate events to interested workers...
         if routeEvent.type == RouteEvent.ADVERTISE:
+            
+            if replacedRouteEntry == routeEvent.routeEntry:
+                log.warning("The route advertized is the same as the one previously advertized by the source, ignoring")
+                return
+            
             # propagate event to interested worker
             # + include the info on the route are replaced by this route, if any
             routeEvent._setReplacedRoute(replacedRouteEntry)
@@ -375,7 +380,7 @@ class RouteTableManager(Thread, LookingGlass):
         else:  # WITHDRAW
             workersAlreadyNotified = None
         
-        # Synthetize and dispatch a withdraw event for the route entry that was withdrawn or replaced,
+        # Synthesize and dispatch a withdraw event for the route entry that was withdrawn or replaced,
         # except, in the case of a replaced route, to workers that had the ADVERTISE event
         if replacedRouteEntry is not None:
             log.debug("Synthesizing a withdraw event for replaced route %s" % replacedRouteEntry)

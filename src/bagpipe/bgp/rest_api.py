@@ -109,8 +109,10 @@ class RESTAPI(object,LookingGlass):
         local_port: local port to plug to the VPN instance
             should be a dict containing any of the following key,value pairs
             {
-                'linuxif': 'tap456abc', # name of a linux interface, if OVS information is provided, it
+                'linuxif': 'tap456abc', # name of a linux interface
+                                        # - if OVS information is provided it
                                         # does not have to be an existing interface
+                                        # - if 'evpn' plug is used, not needed/not used 
                 'ovs': {                     # optional
                         'plugged': True,          # whether or not interface is already plugged into the OVS bridge
                         'port_name': 'qvo456abc', # name of a linux interface to be plugged into the OVS bridge (optional and ignored if port_number is provided)

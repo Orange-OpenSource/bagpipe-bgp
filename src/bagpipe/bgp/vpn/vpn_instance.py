@@ -76,12 +76,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         
         self.localPortData = dict()
         
-        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.externalInstanceId, self.gatewayIP, self.mask, self.instanceLabel, **kwargs)
+        # One local port -> List of endpoints (MAC and IP addresses tuple)
+        self.localPort2Endpoints = dict()
+        # One MAC address -> One local port
+        self.macAddress2LocalPortData = dict()
+        # One IP address ->  One MAC address
+        self.ipAddress2MacAddress = dict()
         
-    def _postFirstPlug(self):
-        # we defer subscription to any route until we have had a first plug
-        # (this is absolutely necessary for the LinuxVXLANHybridDataplaneDriver which cannot handle any route
-        # before a port has been plugged)
+        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(self.instanceId, self.externalInstanceId, self.gatewayIP, self.mask, self.instanceLabel, **kwargs)
         
         for rt in self.importRTs:
             self._subscribe(self.afi, self.safi, rt)
@@ -102,8 +104,11 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         self.stop()
         
     def isEmpty(self):
-        return False if self.localPortData else True
-        
+        return False if self.localPort2Endpoints else True
+
+    def hasEnpoint(self, linuxif):
+        return True if self.localPort2Endpoints.get(linuxif) else False
+    
     def updateRouteTargets(self, newImportRTs, newExportRTs):
         added_import_rt = set(newImportRTs) - set(self.importRTs)
         removed_import_rt = set(self.importRTs) - set(newImportRTs)
@@ -159,98 +164,160 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         #FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
 
-    def generateVifBGPRoute(self, macAdress, ipAddress, label):
+    def generateVifBGPRoute(self, macAddress, ipAddress, label):
         raise Exception("Not implemented.")
+
+    def synthesizeVifBGPRoute(self, macAddress, ipAddress, label):
+        routeEntry = self.generateVifBGPRoute(macAddress, ipAddress, label)
+        assert(isinstance(routeEntry, RouteEntry))
+        
+        nh = Inet(1, socket.inet_pton(socket.AF_INET,
+                                      self.dataplane.driver.getLocalAddress()))
+        routeEntry.attributes.add(NextHop(nh))
+        routeEntry.attributes.add(self._genExtendedCommunities())
+        
+        return routeEntry
+        
 
     @utils.synchronized
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort):
-        self.log.info("vifPlugged %s %d macAddress: %s ipAddressPrefix: %s localPort:%s"
-                  % (self.instanceType, self.instanceId, macAddress, ipAddressPrefix, localPort))
-
-        # Parse address/mask
-        (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
+        self.log.info("vifPlugged %s %d macAddress: %s ipAddressPrefix: %s "
+                      "localPort:%s" %
+                      (self.instanceType, self.instanceId, macAddress,
+                       ipAddressPrefix, localPort))
 
         # Check if this port has already been plugged
-        # - If True, only update route   #FIXME: not needed anymore => updateRouteTargets takes care of that
-        # - Else, plug port on dataplane
-        #
-        try:
-            portData = dict()
+        # - Verify port informations consistency
+        if macAddress in self.macAddress2LocalPortData:
+            self.log.debug("MAC address already plugged, checking port "
+                           "consistency")
+            portData = self.macAddress2LocalPortData[macAddress]
+            
+            if (portData.get("port_info") != localPort):
+                raise Exception("No consistent informations for port %s" %
+                                localPort['linuxif'])
 
-            if localPort['linuxif'] not in self.localPortData:
-                self.log.debug("Plugging port (%s)", ipAddress)
-                
-                portData['label'] = self.labelAllocator.getNewLabel("Incoming traffic for %s %d, interface %s" % (self.instanceType, self.instanceId, localPort['linuxif']))
-
-                # Call driver to setup the dataplane for incoming traffic
-                self.dataplane.vifPlugged(macAddress, ipAddress, localPort, portData['label'])
+        # - Verify (MAC address, IP address) tuple consistency
+        if ipAddressPrefix in self.ipAddress2MacAddress:
+            if self.ipAddress2MacAddress.get(ipAddressPrefix) != macAddress:
+                raise Exception("No consistent endpoint (%s, %s) informations" %
+                                (macAddress, ipAddressPrefix))
             else:
-                self.log.debug("Port already plugged, will advertize new route (%s)", ipAddress)
-                portData = self.localPortData[localPort['linuxif']]
+                return
+
+        # Else, plug port on dataplane
+        try:
+            # Parse address/mask
+            (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
+
+            self.log.debug("Plugging port (%s)", ipAddress)
             
-            self.log.info("Generating BGP route for VIF")
-            routeEntry = self.generateVifBGPRoute(macAddress, ipAddress, portData['label'])
+            portData = dict()    
+            portData['label'] = self.labelAllocator.getNewLabel(
+                "Incoming traffic for %s %d, interface %s" %
+                (self.instanceType, self.instanceId, localPort['linuxif'])
+            )
+            portData["port_info"] = localPort
+
+            # Call driver to setup the dataplane for incoming traffic
+            self.dataplane.vifPlugged(macAddress, ipAddress, localPort, portData['label'])
             
-            nh = Inet(1, socket.inet_pton(socket.AF_INET, self.dataplane.driver.getLocalAddress()))
-            routeEntry.attributes.add(NextHop(nh))
-            
-            assert(isinstance(routeEntry, RouteEntry))
-            
-            routeEntry.attributes.add(self._genExtendedCommunities())
+            self.log.info("Synthesizing and advertising BGP route for VIF %s "
+                          "endpoint (%s, %s)" %
+                          (localPort['linuxif'], macAddress, ipAddressPrefix))
+            routeEntry = self.synthesizeVifBGPRoute(macAddress,
+                                                    ipAddress,
+                                                    portData['label'])
             
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
-            
-            portData["endpoint_info"]={'mac':macAddress,'ip':ipAddressPrefix}
-            portData["port_info"]=localPort
-            # Store route for this prefix to be able to:
-            # - Update on another plug
-            # - Or withdraw on unplug
-            portData['routeEntry'] = routeEntry
-            self.localPortData[localPort['linuxif']] = portData
-            
-            #FIXME: the code below is called after *all* plugs, not
-            # only after the first one. Harmless but can be improved...
-            self._postFirstPlug()
+
+            if localPort['linuxif'] not in self.localPort2Endpoints:
+                self.localPort2Endpoints[localPort['linuxif']] = list()
+
+            self.localPort2Endpoints[localPort['linuxif']].append(
+                {'mac': macAddress, 'ip': ipAddressPrefix}
+            )
+            self.macAddress2LocalPortData[macAddress] = portData
+            self.ipAddress2MacAddress[ipAddressPrefix] = macAddress
             
         except Exception as e:
             self.log.error("Error in vifPlugged: %s" % e)
-            if localPort['linuxif'] in self.localPortData: 
-                del self.localPortData[localPort['linuxif']]
+            if localPort['linuxif'] in self.localPort2Endpoints:
+                if len(self.localPort2Endpoints[localPort['linuxif']]) > 1:
+                    self.localPort2Endpoints[localPort['linuxif']].remove(
+                        {'mac': macAddress, 'ip': ipAddressPrefix}
+                    )
+                else:
+                    del self.localPort2Endpoints[localPort['linuxif']]
+            if macAddress in self.macAddress2LocalPortData:
+                del self.macAddress2LocalPortData[macAddress]
+            if ipAddressPrefix in self.ipAddress2MacAddress:
+                del self.ipAddress2MacAddress[ipAddressPrefix]
+            
             raise
 
     @utils.synchronized
-    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort):
-        # macAddress, ipAddressPrefix, localPort
-        self.log.info("vifUnplugged %s %d macAddress: %s ipAddressPrefix: %s localPort:%s" % (self.instanceType, self.instanceId, macAddress, ipAddressPrefix, localPort))
+    def vifUnplugged(self, macAddress, ipAddressPrefix):
+        self.log.info("vifUnplugged %s %d macAddress: %s ipAddressPrefix: %s" %
+                      (self.instanceType, self.instanceId, macAddress,
+                       ipAddressPrefix))
 
-        # Parse address/mask
-        (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
+        # Verify port and endpoint (MAC address, IP address) tuple consistency
+        portData = self.macAddress2LocalPortData.get(macAddress)
+        if (not portData or
+            self.ipAddress2MacAddress.get(ipAddressPrefix) != macAddress):
+            self.log.error("vifUnplugged called for endpoint (%s, %s), but no "
+                           "consistent informations or was not plugged yet" %
+                           (macAddress, ipAddressPrefix))
+            raise Exception("No consistent endpoint (%s, %s) informations or "
+                            "was not plugged yet, cannot unplug" %
+                            (macAddress, ipAddressPrefix))
+
+        # Finding label and local port informations
+        label = portData.get('label')
+        localPort = portData.get('port_info')
+        if (not label or not localPort):
+            self.log.error("vifUnplugged called for endpoint (%s, %s), but "
+                           "port data (%s, %s) is incomplete" %
+                           (macAddress, ipAddressPrefix, label, localPort))
+            raise Exception("No consistent informations for port, BGP "
+                            "component bug")
+
+        if localPort['linuxif'] in self.localPort2Endpoints:
+            # Parse address/mask
+            (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
         
-        # Find route, label and data plane informations
-        try:
-            portData = self.localPortData[localPort['linuxif']]
-        except KeyError:
-            self.log.warning("vifUnplugged called for localPort %s, but port was not plugged yet" % localPort['linuxif'])
-            raise Exception("this port is not plugged yet, cannot unplug")
-        
-        try:
-            routeEntry = portData['routeEntry']
-            label = portData['label']
-        except KeyError as e :
-            self.log.error("vifPlugged called for localPort %s, but port data is incomplete (%s)" % (localPort['linuxif'], e))
-            raise Exception("bgp component bug, check its logs")
-        
-        # Withdraw BGP route
-        self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
-        
-        # Unplug port from data plane
-        self.dataplane.vifUnplugged(macAddress, ipAddress, localPort, label)
-        
-        # Free label to the allocator
-        self.labelAllocator.release(label)
-        
-        # Forget data for this port
-        del self.localPortData[localPort['linuxif']]
+            lastEndpoint = False if len(self.localPort2Endpoints[localPort['linuxif']]) > 1 else True
+
+            self.log.info("Synthesizing and withdrawing BGP route for VIF %s "
+                          "endpoint (%s, %s)" %
+                          (localPort['linuxif'], macAddress,
+                           ipAddressPrefix))
+            routeEntry = self.synthesizeVifBGPRoute(macAddress,
+                                                    ipAddress,
+                                                    label)
+            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+            
+            # Unplug endpoint from data plane
+            self.dataplane.vifUnplugged(macAddress, ipAddress, localPort, label, lastEndpoint)
+            
+            # Free label to the allocator
+            self.labelAllocator.release(label)
+    
+            # Forget data for this port if last endpoint
+            if lastEndpoint:
+                del self.localPort2Endpoints[localPort['linuxif']]
+            else:
+                self.localPort2Endpoints[localPort['linuxif']].remove(
+                    {'mac': macAddress, 'ip': ipAddressPrefix}
+                )
+            
+            del self.macAddress2LocalPortData[macAddress]
+            del self.ipAddress2MacAddress[ipAddressPrefix]
+        else:
+            self.log.error("vifUnplugged called for endpoint {%s, %s}, but port data is incomplete" %
+                           (macAddress, ipAddressPrefix))
+            raise Exception("BGP component bug, check its logs")            
 
     def _checkEncaps(self,route):
         '''
@@ -289,12 +356,17 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     
     def getLGLocalPortData(self, pathPrefix):
         r = {}
-        for (port, data) in self.localPortData.iteritems():
+        for (port, endpoints) in self.localPort2Endpoints.iteritems():
+            eps = []
+            for endpoint in endpoints:
+                eps.append({
+                            'label': self.macAddress2LocalPortData[endpoint['mac']]['label'],
+                            'macAddress': endpoint['mac'],
+                            'ipAddress': endpoint['ip']
+                           })
+
             r[port] = {
-                 'route': data['routeEntry'].getLookingGlassInfo(pathPrefix),
-                 'label': data['label'],
-                 'port_info': data['port_info'],
-                 'endpoint_info': data['endpoint_info']
+                 'endpoints': eps
                  }
         return r
     

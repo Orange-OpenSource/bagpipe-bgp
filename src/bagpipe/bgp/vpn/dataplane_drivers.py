@@ -125,7 +125,7 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
         self.log.warning("function not implemented: vifPlugged()")
         
-    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort):
+    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, lastEnpoint=True):
         self.log.warning("function not implemented: vifUnplugged()")
         
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri, encaps):
@@ -153,7 +153,7 @@ class DummyVPNInstanceDataplane(VPNInstanceDataplane):
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
         self.log.info("vifPlugged: %s, %s, %s" % (macAddress,ipAddressPrefix,localPort))
 
-    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, label):
+    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, label, lastEnpoint=True):
         self.log.info("vifUnplugged: %s, %s, %s" % (macAddress,ipAddressPrefix,localPort))
         
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri, encaps):

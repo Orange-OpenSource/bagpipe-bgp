@@ -127,6 +127,8 @@ class RouteEvent(object):
                   WITHDRAW: "Withdraw" }
 
     def __init__(self, eventType, routeEntry, source=None):
+        assert(eventType in RouteEvent.type2name.keys())
+        assert(isinstance(routeEntry, RouteEntry))
         self.type = eventType
         self.routeEntry = routeEntry
         if source is not None:
@@ -138,10 +140,11 @@ class RouteEvent(object):
     def _setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a RouteEntry '''
         assert(isinstance(replacedRoute, RouteEntry) or (replacedRoute is None))
+        assert(replacedRoute != self.routeEntry)
         self.replacedRoute = replacedRoute
 
     def __repr__(self):
-        return "[RouteEvent%s: %s %s %s]" % ("(replaces %s route)" % "one" if self.replacedRoute is not None else "no",
+        return "[RouteEvent%s: %s %s %s]" % ("(replaces %s route)" % ("one" if self.replacedRoute is not None else "no"),
                                             RouteEvent.type2name[self.type],
                                             self.routeEntry,
                                             self.source)

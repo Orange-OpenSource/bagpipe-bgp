@@ -176,7 +176,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
             self._runCommand("ip netns exec %s ip route show" % self.namespaceId)
         
     
-    def vifUnplugged(self, macAddress, ipAddress, localPort, label):
+    def vifUnplugged(self, macAddress, ipAddress, localPort, label, lastEnpoint=True):
         self.log.debug("vifUnplugged(%s, %s, %d)" % (ipAddress, localPort, label))
 
         # Remove ip route to disable traffic redirection to namespace depending on MPLS label

@@ -147,7 +147,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                     bestRoutes.add(newRoute)
                     self._newBestRoute_interceptException(entry, filteredNewRoute)
                     callNewBestRoute4All = False
-                if routeComparison == 0:  # newRoute is as good as the current ones 
+                elif routeComparison == 0:  # newRoute is as good as the current ones 
                     self.log.debug("Adding newRoute to bestRoutes...")
                     
                     if callNewBestRoute4All:
@@ -176,13 +176,6 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                     
                     if callNewBestRoute4All:
                         self._callNewBestRouteForAll(entry,bestRoutes)
-                
-                # if the newRoute was a better one, call _bestRouteRemoved ;
-                # we do it *after* calling _newBestRoute, do avoid breaking the old state before creating the new one
-                #if routeComparison > 0:
-                #    for route in bestRoutesToRemove:
-                #        self.log.debug("Calling bestRouteRemoved for %s" % route)
-                #        self._bestRouteRemoved_interceptException(entry, FilteredRouteEntry(route))
                 
             except (KeyError, StopIteration) as e:
                 self.log.debug("We did not had any route for this entry (%s)" % e)

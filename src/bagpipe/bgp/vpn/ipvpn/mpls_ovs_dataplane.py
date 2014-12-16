@@ -226,13 +226,25 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         else:
             self._runCommand("ip link set %s mtu %s" % (interface, mtu))
 
-    def _get_ovs_portNumber_from(self,localPort):
+    def _get_ovs_port_specifics(self, localPort):
         """
-        Returns a tuple of OVS port numbers:
-        - First port number is the port for traffic from the VM.
-        - Second port number is the port for traffic to the VM.
+        Returns a tuple of:
+        - OVS port numbers:
+            - First port number is the port for traffic from the VM.
+            - Second port number is the port for traffic to the VM.
+        - OVS actions and rules, based on whether or not a vlan is specified in
+          localPort:
+            - OVS port match rule
+            - OVS push vlan action
+            - OVS strip vlan action
+        - Port unplug action
+        
+        For OVS actions, if no VLAN is specified the localport match only
+        matches the OVS port and actions are empty strings.
         """
+        # Retrieve OVS port numbers and port unplug action
         try:
+            port_unplug_action = None
             if ('ovs' in localPort and localPort['ovs']['plugged']):
                 try:
                     port = localPort['ovs']['port_number']
@@ -253,19 +265,12 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 try:
                     port = self.driver._find_ovs_port_number(portName)
                 except:
-                    self.log.debug("Deleting/Adding port %s to bridge" % portName)
-                    # need a del-port first, because in some cases, the interface
-                    # can appear as still connected to the OVS bridge from
-                    # ovs-vsctl point of view, but not connected
-                    # from ovs-ofctl point of view (...)
-                    
-                    #FIXME: need to track that a del-port has to be done at 
-                    # vifUnplugged time
-                    self._runCommand("ovs-vsctl del-port %s %s" % (self.ovs_bridge,portName),acceptableReturnCodes=[0,1])
                     self._runCommand("ovs-vsctl add-port %s %s" % (self.ovs_bridge,portName))
                     port = self.driver._find_ovs_port_number(portName)
-                    
                 self.log.debug("Corresponding port number: %s" % port)
+
+                # Set port unplug action
+                port_unplug_action = "ovs-vsctl del-port %s %s" % (self.ovs_bridge, portName)
                 
         except KeyError as e:
             self.log.error("Incomplete port specification: %s" % e)
@@ -281,30 +286,28 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 self.log.debug("No specific OVS port number found for traffic to VM")
                 port2vm=port
 
-        return (port,port2vm)
-
-    def _get_portmatch_and_vlan_specific_actions_from(self,localPort):
-        """
-        returns a (localport_match,push_vlan_action,strip_vlan_action) tuple
-        based on whether or not a vlan is specified in localPort
-        
-        if no VLAN is specified the localport match only matches the OVS port
-        and actions are empty strings
-        """
+        # Create OVS actions
         try:
-            return ("in_port=%s,dl_vlan=%d" % (self._get_ovs_portNumber_from(localPort)[0], int(localPort['ovs']['vlan'])),
-                    "push_vlan:0x8100,mod_vlan_vid:%d," % int(localPort['ovs']['vlan']),
-                    "strip_vlan,"
-                    )
+            localport_match,push_vlan_action,strip_vlan_action = (
+                "in_port=%s,dl_vlan=%d" % (port, int(localPort['ovs']['vlan'])),
+                "push_vlan:0x8100,mod_vlan_vid:%d," % int(localPort['ovs']['vlan']),
+                "strip_vlan,"
+            )
         except KeyError:
-            return ("in_port=%s" % self._get_ovs_portNumber_from(localPort)[0],"","")
+            localport_match,push_vlan_action,strip_vlan_action = (
+                "in_port=%s" % port,
+                "",
+                ""
+            )
+
+        return (port, port2vm, localport_match, push_vlan_action,
+                strip_vlan_action, port_unplug_action)
 
     def vifPlugged(self, macAddress, ipAddress, localPort, label):
         self.log.debug("vifPlugged: Plugging local port (%(localPort)s, %(ipAddress)s, %(label)d)" % locals())
         
-        (ovs_port_from_vm,ovs_port_to_vm) = self._get_ovs_portNumber_from(localPort)
-        
-        (localport_match,push_vlan_action,strip_vlan_action) = self._get_portmatch_and_vlan_specific_actions_from(localPort)
+        (ovs_port_from_vm, ovs_port_to_vm, localport_match,
+         push_vlan_action, strip_vlan_action, port_unplug_action) = self._get_ovs_port_specifics(localPort)
         
         try:
             self._mtu_fixup(localPort['ovs']['port_name'])
@@ -339,7 +342,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         self._ovsPortInfo[localPort['linuxif']] = {
              "ip_address": ipAddress,
              "localport_match": localport_match,
-             "vlan_specific": (push_vlan_action,strip_vlan_action)
+             "vlan_specific": (push_vlan_action,strip_vlan_action),
+             "port_unplug_action": port_unplug_action
              }
     
     def _inPort(self):
@@ -348,10 +352,11 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         else:
             return self.driver.ovsMplsIfPortNumber
     
-    def vifUnplugged(self, macAddress, ipAddress, localPort, label):
+    def vifUnplugged(self, macAddress, ipAddress, localPort, label, lastEndpoint=True):
         self.log.debug("vifUnplugged: Unplugging local port (%(localPort)s, %(ipAddress)s, %(label)d)" % locals())
 
         localport_match = self._ovsPortInfo[localPort['linuxif']]['localport_match']
+        port_unplug_action = self._ovsPortInfo[localPort['linuxif']]['port_unplug_action']
         
         # Unmap incoming MPLS traffic going to the VM
         self._ovs_flow_del('in_port=%s,mpls,mpls_label=%d,mpls_bos=1' % (self._inPort(), label),
@@ -367,9 +372,14 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         # Unmap ARP traffic from ARP proxy to localport
         self._ovs_flow_del('in_port=%s,arp,dl_dst=%s' % (self.ovsToNsPortNumber, macAddress),
                          self.driver.ovs_table_vrfs)
+        
+        if lastEndpoint:
+            if port_unplug_action:
+                # Run port unplug action if necessary (OVS port delete)
+                self._runCommand(port_unplug_action, acceptableReturnCodes=[0,1])
 
-        # Remove OVS port number from list for local port plugged in VRF
-        del self._ovsPortInfo[localPort['linuxif']]
+            # Remove OVS port number from list for local port plugged in VRF
+            del self._ovsPortInfo[localPort['linuxif']]
 
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri, encaps):
         self.log.info("setupDataplaneForRemoteEndpoint(%s, %s, %d, %s)" 

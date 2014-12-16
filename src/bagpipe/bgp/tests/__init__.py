@@ -12,7 +12,7 @@ from exabgp.message.update.attribute.communities import RouteTarget
 
 from bagpipe.bgp.engine import RouteEntry, RouteEvent
 
-WAIT_TIME=0.02
+WAIT_TIME=0.05
 
 RT1 = RouteTarget(64512, None, 10)
 RT2 = RouteTarget(64512, None, 20)

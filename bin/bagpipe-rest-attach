@@ -195,8 +195,8 @@ if __name__=="__main__":
                                 'plugged': True,
                                 }
 
-    if options.ovs_vlan:
-        local_port['ovs']['vlan'] = options.ovs_vlan
+            if options.ovs_vlan:
+                local_port['ovs']['vlan'] = options.ovs_vlan
 
     if not(options.mac):
         if options.network_type == "ipvpn":

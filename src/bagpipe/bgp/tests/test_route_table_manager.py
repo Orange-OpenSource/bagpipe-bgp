@@ -391,7 +391,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._wait()
         # check route event propagation
         self.assertEqual(0, mockBGPPeerWorker1.enqueue.call_count, "Route should not be propagated to its source")
-        self.assertEqual(1, mockWorker1.enqueue.call_count, "TO BE ENHANCED : only 1 route should be advertised to Worker1")
+        self.assertEqual(1, mockWorker1.enqueue.call_count, "only 1 route should be advertised to Worker1")
         self._checkRouteEventsEnqueue(mockWorker1.enqueue.call_args_list, [routeEvent1.routeEntry ], [])
 
     def testC7_routeWithdrawNotRegistered(self):

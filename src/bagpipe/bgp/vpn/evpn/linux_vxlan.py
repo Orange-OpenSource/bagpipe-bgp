@@ -15,8 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
 from distutils.version import StrictVersion
 
 from bagpipe.bgp.common.run_command import runCommand
@@ -134,7 +132,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
             self.log.debug("Plugging localPort %s into EVPN bridge %s" % (localPort['linuxif'],self.bridge_name))
             self._runCommand("brctl addif %s %s" % (self.bridge_name,localPort['linuxif']), raiseExceptionOnError=False)
     
-    def vifUnplugged(self, macAddress, ipAddress, localPort, label):
+    def vifUnplugged(self, macAddress, ipAddress, localPort, label, lastEnpoind=True):
         # Unplug localPort only from EVPN bridge (Created by dataplane driver)
         if BRIDGE_NAME_PREFIX in self.bridge_name:
             self.log.debug("Unplugging localPort %s from EVPN bridge %s" % (localPort['linuxif'],self.bridge_name))
@@ -269,160 +267,3 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
 
     def _runCommand(self,command,*args,**kwargs):
         return runCommand(self.log,command,*args,**kwargs)
-
-
-######################################################################################################################
-# VXLAN dataplane for Openstack hybrid vif driver 
-######################################################################################################################
-#
-# This driver is intended for use only with the penstack hybrid vif driver 
-# relying on both a linuxbridge and OVS.
-# 
-# Intial interfaces and bridges built by the hybrid vif driver:
-#
-#                                                                     veth pair
-#  [VM]---(tap interface tap*UUID*)---[linux bridge qbr*UUID*]--(qvb*UUID* |qvo*UUID* )---[OVS]
-#
-# We plug a VXLAN link into the linux bridge:
-#
-#  [VM]---(tap interface tap*UUID*)---[linux bridge qbr*UUID*]--(qvb*UUID* |qvo*UUID* )---[OVS]
-#                                              |
-#                                          (vxlan--*UUID*)
-#
-# (*UUID* is a portion of the neutron port uuid)
-
-LINUXBR_PREFIX = "qbr"
-OVS_TO_LINUXBR_INTERFACE_PREFIX = "qvo"
-
-#  This driver does not support more than one localPort being plugged into it (one linux bridge per-VM).
-#  Thus, we can keep track of whether or not a port is plugged in (self.plugged), and if no port is currently plugged in 
-#  do nothing in removeDataplaneForRemoteEndpoint (and avoid the "bridge fdb delete" command failing)
-
-class LinuxVXLANEVIHybridDataplane(LinuxVXLANEVIDataplane):
-    
-    def __init__(self,*args):
-        self.plugged = False
-        self.bridge_name = ""
-        self.vxlan_if_name = None
-        VPNInstanceDataplane.__init__(self,*args)
-
-    def cleanup(self):
-        self.log.info("Cleanup: nothing to do, everything is done in unplug")
-        
-    def _get_linuxbr_name(self, localport):
-        return (LINUXBR_PREFIX + localport[3:])[:LINUX_DEV_LEN]
-    
-    def _get_vxlan_if_name(self, localport):
-        return (VXLAN_INTERFACE_PREFIX + localport[3:])[:LINUX_DEV_LEN]
-    
-    def _get_ovs2linuxbr_interface_name(self, localport):
-        return (OVS_TO_LINUXBR_INTERFACE_PREFIX + localport[3:])[:LINUX_DEV_LEN]
-    
-    def _mtu_fixup(self,interface):
-        # This is a hack, proper MTUs should actually be configured in the hybrid vif driver
-        try:
-            mtu = self.config["ovsbr_interfaces_mtu"]
-        except KeyError:
-            mtu = 1500
-        self.log.info("Will adjust %s interface with MTU %s (ovsbr_interfaces_mtu parameter in bgp.conf)" % (interface, mtu))
-        self._runCommand("ip link set %s mtu %s" % (interface,mtu))
-    
-    
-    def vifPlugged(self, macAddress, ipAddress, localport, label):
-        self.log.debug("vifPlugged(%s, %s, %d)" % ( ipAddress, localport['linuxif'], label))
-        
-        if self.plugged:
-            self.log.error("Second plug on a LinuxVXLANEVIHybridDataplane VPN which is supposed to be plugged only once.")
-            
-        try:
-            self.bridge_name = localport['linuxbr']
-        except KeyError:
-            self.log.warning("port attach request should specify the linux bridge")
-            self.bridge_name = self._get_linuxbr_name(localport['linuxbr'])
-
-        if not re.match('tap[0-9a-f-]{11}',localport):
-            self.log.warning("This dataplane driver is made to work with the NOVA Hybrid VIF driver; now assuming that %s is plugged into %s" % (localport,self.bridge_name))
-
-        if not self._interface_exists(self.bridge_name):
-            raise Exception("Bridge %s does not exist"% self.bridge_name)
-
-        if self._interface_exists(self._get_ovs2linuxbr_interface_name(localport)):
-            # fixup MTU of the interfaces to the OVS bridge (until this is properly done in Openstack hybrid VIF driver)
-            self._mtu_fixup(self._get_ovs2linuxbr_interface_name(localport))
-        else:
-            self.log.warning("Interface between OVS and Linuxbridge %s does not exist, will not fix MTU"% self.bridge_name)
-
-        # Create VXLAN interface
-        self.vxlan_if_name = self._get_vxlan_if_name(localport)
-
-        self._create_and_plug_vxlan_if()
-        
-        self.plugged = True
-    
-    def vifUnplugged(self, macAddress, ipAddress, localport, label):
-        self.log.debug("vifUnplugged(%s, %s, %d)" % ( ipAddress, localport['linuxif'], label))
-
-        LinuxVXLANEVIDataplane._cleanup_vxlan_if(self)
-
-        self.vxlan_if_name = None
-        self.bridge_name = ""
-        self.plugged = False
-    
-    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
-        self.log.info("setupDataplaneForRemoteEndpoint(%s, %s, %d, %s)" % (prefix, remotePE, label, nlri))
-        
-        assert(self.plugged)
-        
-        LinuxVXLANEVIDataplane.setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri)
-    
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
-        self.log.info("removeDataplaneForRemoteEndpoint(%s, %s, %d, %s)" % (prefix, remotePE, label, nlri))
-        
-        if not self.plugged:
-            self.log.info("removeDataplaneForRemoteEndpoint useless to apply, since we are not plugged yet")
-            return
-        
-        LinuxVXLANEVIDataplane.removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri)
-    
-    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
-        self.log.info("EVI %(instanceId)d: addDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % dict(locals(),**self.__dict__))
-        
-        assert(self.plugged)
-        
-        LinuxVXLANEVIDataplane.addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri)
-    
-    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
-        self.log.info("EVI %(instanceId)d: removeDataplaneForBroadcastEndpoint: %(remotePE)s, label %(label)d !" % dict(locals(),**self.__dict__))
-    
-        if not self.plugged:
-            self.log.info("removeDataplaneForBroadcastEndpoint useless to apply, since we are not plugged yet")
-            return
-    
-        LinuxVXLANEVIDataplane.removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri)
-
-
-
-
-class LinuxVXLANHybridDataplaneDriver(LinuxVXLANDataplaneDriver):
-    """
-    Special dataplane driver inheriting from the LinuxVXLANDataplaneDriver, modified
-    to work with the Nova hybrid VIF driver, where the VM tap interface is already
-    plugged into a per-VM linux bridge.
-    
-    In that case, our driver won't touch the bridge, and the VXLAN encap interface
-    is not created at EVI initialization time, but only at port plug time.  
-    
-    (There is also a hack to workaround an ancient issue when the MTU of OVS to linuxbridge
-    interface was not configured with a proper MTU, causing the linux kernel IP interface 
-    for the OVS bridge to have a wrong MTU, itself causing VXLAN packets fragmentation.)
-    """
-    
-    dataplaneClass = LinuxVXLANEVIHybridDataplane
-    
-    def resetState(self):
-        self.log.debug("Resetting %s dataplane" % self.__class__.__name__)
-        
-        # delete all VXLAN interfaces
-        for interface in self._runCommand("ip link show | awk '{print $2}' | tr -d ':' | grep '%s'" % VXLAN_INTERFACE_PREFIX, raiseExceptionOnError=False, acceptableReturnCodes=[0,1])[0]:
-            self._runCommand("ip link set %s down" % interface)
-            self._runCommand("ip link delete %s" % interface)
