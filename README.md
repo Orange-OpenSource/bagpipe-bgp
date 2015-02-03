@@ -1,11 +1,17 @@
 BaGPipe BGP
 ===========
 
-BaGPipe BGP is a lightweight implementation of BGP VPNs (IP VPNs and E-VPNs).
+BaGPipe BGP is a lightweight implementation of BGP VPNs (IP VPNs and E-VPNs), targetting
+deployments on servers hosting VMs, in particular for Openstack/KVM plaforms.
+
 The goal is *not* to fully implement BGP specifications, but only the subset 
 of specifications required to implement IP VPN VRFs and E-VPN EVIs ([RFC4364](http://tools.ietf.org/html/rfc4364) 
 aka RFC2547bis, [draft-ietf-l2vpn-evpn](http://tools.ietf.org/html/draft-ietf-l2vpn-evpn)/[draft-sd-l2vpn-evpn-overlay](http://tools.ietf.org/html/draft-sd-l2vpn-evpn-overlay),
  and [RFC4684](http://tools.ietf.org/html/RFC4684)).
+
+BaGPipe BGP is designed to use encapsulationis over IP (such as MPLS-over-GRE or VXLAN), 
+and thus does not require the use of LDP. Bare MPLS over Ethernet is also supported and 
+can be used if servers/routers have direct Ethernet connectivity.
 
 Typical Use
 -----------
@@ -93,19 +99,16 @@ and the `linux_vxlan.LinuxVXLANDataplaneDriver` for E-VPN.
 **Note well** that there are specific constraints on which dataplane drivers can 
 currently be used for IP VPNs:
 
-* the MPLSLinux32DataplaneDriver is based on an unmaintained MPLS stack for the 
-Linux 3.2 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L168))
-
-* the MPLSLinuxDataplaneDriver is based on an unmaintained MPLS stack for the Linux 
-3.7 kernel (see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L501))
-
-* the MPLSOVSDataplaneDriver can be used on most recent Linux kernel, but 
+* the MPLSOVSDataplaneDriver can be used on most recent Linux kernels, but 
   requires an OpenVSwitch with suitable MPLS code (current OVS git trunk); 
-  this driver can do MPLS-over-GRE or bare MPLS (but see [Caveats](#caveats));
-  but for bare MPLS this driver requires that the OVS bridge be associated with 
-  an IP address and that IPVPN VRF interfaces be plugged into OVS prior to 
+  this driver can do bare-MPLS or MPLS-over-GRE (but see [Caveats](#caveats) for MPLS-over-GRE);
+  for bare MPLS, this driver requires the OVS bridge to be associated with 
+  an IP address, and that VRF interfaces be plugged into OVS prior to 
   calling BaGPipe BGP API to attach them (details in
    [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345))
+
+* (the MPLSLinuxDataplaneDriver is based on an unmaintained MPLS stack for the Linux 
+3.7 kernel, and should be considered *obsolete* ; see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L501))
 
 For E-VPN, the `linux_vxlan.LinuxVXLANDataplaneDriver` is usable without any 
 particular additional configuration, and simply requires a Linux kernel >=3.10
@@ -333,7 +336,18 @@ Caveats
 * currently, the VRF code will only advertise /32 addresses, and does not
   support aggregation
 * MPLS-over-GRE is supported for IP VPNs, but is not yet standard
-  (OpenVSwitch currently does MPLS/Eth/GRE and not than MPLS/GRE) 
+  (OpenVSwitch currently does MPLS-o-Ethernet-o-GRE and not MPLS-o-GRE)
+
+Unit Tests
+----------
+
+Unit tests can be run with:
+
+        nostests
+
+A report of unit tests coverage can be produced with:
+
+        nosetests --with-coverage --cover-package=bagpipe.bgp --cover-html 
 
 License
 -------

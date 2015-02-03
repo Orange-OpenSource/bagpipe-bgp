@@ -146,7 +146,7 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
 
 class DummyVPNInstanceDataplane(VPNInstanceDataplane):
 
-    def __init__(self,*args):
+    def __init__(self,*args,**kwargs):
         VPNInstanceDataplane.__init__(self,*args)
         self.log.info("----- Init dataplane for VPNInstance %s %d" % (self.__class__.__name__,self.instanceId))
 

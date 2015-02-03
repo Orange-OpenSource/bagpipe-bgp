@@ -85,13 +85,19 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         self._runCommand("brctl addif %s %s" % (self.bridge_name,self.vxlan_if_name))
         
     def _cleanup_vxlan_if(self):
-        # Unplug VXLAN interface from Linux bridge
-        self._unplug_from_bridge(self.vxlan_if_name)
+        if self._is_vxlan_if_on_bridge():
+            # Unplug VXLAN interface from Linux bridge
+            self._unplug_from_bridge(self.vxlan_if_name)
         
-        # Remove VXLAN interface
-        self._runCommand("ip link set %s down" % self.vxlan_if_name)
-        self._runCommand("ip link del %s" % self.vxlan_if_name)
+            # Remove VXLAN interface
+            self._runCommand("ip link set %s down" % self.vxlan_if_name)
+            self._runCommand("ip link del %s" % self.vxlan_if_name)
         
+    def _is_vxlan_if_on_bridge(self):
+        (output, _) = self._runCommand("brctl show %s | grep '%s' | sed -e 's/\s\+//g'" % (self.bridge_name, VXLAN_INTERFACE_PREFIX))
+        
+        return True if (output == self.vxlan_if_name) else False
+    
     def _interface_exists(self, bridge):
         """Check if bridge exists."""
         (_,exitCode) = self._runCommand("ip link show dev %s" % bridge, raiseExceptionOnError=False, acceptableReturnCodes=[-1])

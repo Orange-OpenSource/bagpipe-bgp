@@ -33,6 +33,14 @@ dataplane_driver = DummyDataplaneDriver
 # mpls_interface=*gre*
 mpls_interface=*gre*
 
+# Uncomment the following to allow the use of standard MPLS-o-GRE in OVS
+# (rather than MPLS-o-Eth-o-GRE). 
+# This currently requires a modified OVS, which can be found at: 
+#   https://github.com/tmmorin/openvswitch
+#
+# gre_tunnel_options="options:l3port=true"
+
+
 # IP address that others will us to send us packets
 #   does not need to be specified if different than the BGP local_address
 # dataplane_local_address=1.2.3.4

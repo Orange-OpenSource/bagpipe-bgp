@@ -88,26 +88,30 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         for rt in self.importRTs:
             self._subscribe(self.afi, self.safi, rt)
     
-    def cleanup(self):
-        # cleanup is not supposed to be called if we still have ports attached
-        assert(self.isEmpty())
+    @utils.synchronized
+    def cleanupIfEmpty(self):
+        self.log.debug("cleanupIfEmpty localPort2Endpoints: %s" % self.localPort2Endpoints)
+        if self.isEmpty():
+            # cleanup BGP subscriptions
+            for rt in self.importRTs:
+                self._unsubscribe(self.afi, self.safi, rt)
+            
+            self.dataplane.cleanup()
+            
+            self.labelAllocator.release(self.instanceLabel)
+            
+            # this makes sure that the thread will be stopped, and any remaining routes/subscriptions are released: 
+            self.stop()
+            
+            return True
         
-        # cleanup BGP subscriptions
-        for rt in self.importRTs:
-            self._unsubscribe(self.afi, self.safi, rt)
-        
-        self.dataplane.cleanup()
-        
-        self.labelAllocator.release(self.instanceLabel)
-        
-        # this makes sure that the thread will be stopped, and any remaining routes/subscriptions are released: 
-        self.stop()
-        
+        return False
+
     def isEmpty(self):
-        return False if self.localPort2Endpoints else True
+        return (not self.localPort2Endpoints)
 
     def hasEnpoint(self, linuxif):
-        return True if self.localPort2Endpoints.get(linuxif) else False
+        return (self.localPort2Endpoints.get(linuxif) is not None)
     
     def updateRouteTargets(self, newImportRTs, newExportRTs):
         added_import_rt = set(newImportRTs) - set(self.importRTs)
@@ -194,8 +198,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             portData = self.macAddress2LocalPortData[macAddress]
             
             if (portData.get("port_info") != localPort):
-                raise Exception("No consistent informations for port %s" %
-                                localPort['linuxif'])
+                raise Exception("Port information is not consistent with previous plug for port %s (%s != %s)" %
+                                (localPort['linuxif'],portData.get("port_info"),localPort))
 
         # - Verify (MAC address, IP address) tuple consistency
         if ipAddressPrefix in self.ipAddress2MacAddress:
@@ -214,8 +218,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             
             portData = dict()    
             portData['label'] = self.labelAllocator.getNewLabel(
-                "Incoming traffic for %s %d, interface %s" %
-                (self.instanceType, self.instanceId, localPort['linuxif'])
+                "Incoming traffic for %s %d, interface %s, endpoint (%s, %s)" %
+                (self.instanceType, self.instanceId, localPort['linuxif'],
+                 macAddress, ipAddressPrefix)
             )
             portData["port_info"] = localPort
 

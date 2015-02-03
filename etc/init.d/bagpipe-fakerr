@@ -15,10 +15,8 @@
 
 
 NAME="BaGPipe fakeRR"
-
+COMMAND=bagpipe-fakerr
 PIDFILE=/var/run/bagpipe-fakerr/fakerr.pid
-
-FAKERR=$(which bagpipe-fakerr)
 
 mkdir -p `dirname $PIDFILE`
 
@@ -27,44 +25,47 @@ if [ ! -x `which twistd` ]; then
     exit 1
 fi
 
-if [ ! -f "$FAKERR" ]; then
-    echo "ERROR: FakeRR bootstrap not found: $FAKERR..."
-    exit 1
+if (pgrep -F $PIDFILE >/dev/null 2>&1); then
+	running=1
+else
+	running=0
 fi
 
 case "$1" in
   start)
     # Start the daemon
-    if [ "$(pgrep -fl $FAKERR)" == "" ]; then
-	    echo "Starting $NAME..."
-    	twistd --syslog --pidfile $PIDFILE --prefix bagpipe-fakerr -y $FAKERR
+    if [ "$running" -eq 0 ]; then
+        echo "Starting $NAME..."
+        echo "from bagpipe.bgp.fakerr import application" | \
+            twistd --syslog --pidfile $PIDFILE --prefix $COMMAND -y /dev/stdin
     else
-    	echo "WARNING: $NAME has already been started..."
+        echo "WARNING: $NAME has already been started..."
     fi
     ;;
   stop)
     # Stop the daemon with dataplane cleanup
     echo "Stopping $NAME..."
-    if [ "$(pgrep -fl $FAKERR)" != "" ]; then
-	    kill `cat $PIDFILE`	
-	else
-    	echo "WARNING: $NAME has already been stopped..."
-	fi
+    if [ "$running" -eq 1 ]; then
+        pkill -F $PIDFILE
+    else
+        echo "WARNING: no pidfile but killing anyway"
+	pkill -f "twistd.*$COMMAND"
+    fi
     ;;
   restart)
-  	$0 stop
-  	$0 start
+    $0 stop
+    $0 start
     ;;
   status)
-    if [ "$(pgrep -fl $FAKERR)" != "" ]; then
-    	echo "$NAME component is running."
+    if [ "$running" -eq 1 ]; then
+        echo "$NAME component is running."
     else
-    	echo "$NAME component is stopped."
+        echo "$NAME component is stopped."
     fi
     ;;
   *)
     # Refuse to do other stuff
-    echo "Usage: service bagpipe-fakerr {start|stop|restart|status}"
+    echo "Usage: service $(basename $0) {start|stop|restart|status}"
     exit 1
     ;;
 esac

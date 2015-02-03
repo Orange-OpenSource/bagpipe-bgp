@@ -118,6 +118,3 @@ def main():
         data = json.load(response)   
 
         pretty_print_recurse(data,indent=0,alreadyANewLine=True)
-
-
-if __name__=="__main__": main()

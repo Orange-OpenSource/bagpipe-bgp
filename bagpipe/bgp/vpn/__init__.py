@@ -297,8 +297,9 @@ class VPNManager(object, LookingGlass):
         if vpnInstance.type == "ipvpn" and 'evpn' in localPort:
             self._detach_evpn2ipvpn(vpnInstance)
                 
-        if vpnInstance.isEmpty():
-            vpnInstance.cleanup()
+#         if vpnInstance.isEmpty():
+#             vpnInstance.cleanup()
+        if vpnInstance.cleanupIfEmpty():
             del self.vpnWorkers[externalInstanceId]
             
 

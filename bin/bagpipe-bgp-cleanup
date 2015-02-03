@@ -1,8 +1,0 @@
-#!/usr/bin/env python
-#
-# Copyright 2014 Orange
-
-from bagpipe.bgp.bgp_daemon import cleanup_main as main
-
-if __name__ == "__main__":
-    main()

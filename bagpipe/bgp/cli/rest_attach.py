@@ -16,7 +16,6 @@
 
 import os
 
-import sys
 import re
 import urllib2
 import json
@@ -37,6 +36,8 @@ VPN2NS_INTERFACE_PREFIX = "tons-"
 
 LINUX_DEV_LEN = 15
 
+# Needed so that the OVS bridge kernel interface can hava a high enough MTU
+DEFAULT_MTU=9000
 
 logFormatter = logging.Formatter("[%(levelname)-5.5s]  %(message)s")
 log = logging.getLogger()
@@ -52,6 +53,7 @@ def create_veth_pair(vpn_interface,ns_interface,ns_name):
     runCommand(log,"ip link delete %s" % vpn_interface, raiseExceptionOnError=False )
     runCommand(log,"ip link add %s type veth peer name %s netns %s" % (vpn_interface,ns_interface,ns_name), raiseExceptionOnError=False )
     runCommand(log,"ip link set dev %s up" % vpn_interface )
+    runCommand(log,"ip link set dev %s mtu %d" % (vpn_interface,DEFAULT_MTU) )
     runCommand(log,"ip netns exec %s ip link set dev %s up" % (ns_name,ns_interface) )
 
 def get_vpn2ns_if_name(namespace):
@@ -63,7 +65,7 @@ def getSpecialNetNSPortMacPort(namespace):
     vpn2ns_if_name = get_vpn2ns_if_name(namespace)
     
     # options.mac is the MAC address of the ns2vpn interface
-    (output,returnCode) = runCommand(log,"ip netns exec %s ip -o link show %s | perl -pe 's|.* link/ether ([^ ]+) .*|$1|'" % (namespace,ns2vpn_if_name))
+    (output,_) = runCommand(log,"ip netns exec %s ip -o link show %s | perl -pe 's|.* link/ether ([^ ]+) .*|$1|'" % (namespace,ns2vpn_if_name))
     if "does not exist" in output[0]:
         raise Exception("special netns interface does not exist: %s"% output)  
     mac =  output[0]
@@ -92,8 +94,8 @@ def createSpecialNetNSPort(options):
         create_veth_pair(vpn2ns_if_name, ns2vpn_if_name, netns_name)
     
     if options.mac:
-            runCommand(log,"ip netns exec %s ip link set %s address %s"
-                       % (netns_name,ns2vpn_if_name,options.mac))
+        runCommand(log,"ip netns exec %s ip link set %s address %s"
+                   % (netns_name,ns2vpn_if_name,options.mac))
     
     runCommand(log,"ip netns exec %s ip addr add %s dev %s" % (netns_name, options.ip, ns2vpn_if_name), raiseExceptionOnError=False)
 
@@ -103,7 +105,7 @@ def createSpecialNetNSPort(options):
     runCommand(log,"ip netns exec %s ip link set %s mtu 1420" % (netns_name, ns2vpn_if_name), raiseExceptionOnError=False)
 
 
-if __name__=="__main__": 
+def main():
     usage = "usage: %prog [--attach|--detach] --network-type (ipvpn|evpn) --port (<port>|netns) --ip <ip>[/<mask>] [options] (see --help)"
     parser = OptionParser(usage)
 
@@ -126,7 +128,7 @@ if __name__=="__main__":
     parser.add_option("--ovs-bridge", dest="ovs_bridge", default="br-int", help="if preplug, specifies which OVS bridge to use (default: %default)")
     parser.add_option("--ovs-vlan", dest="ovs_vlan", type='int', help="if specified, only this VLAN from the OVS interface will be attached to the VPN instance (optional)")
 
-    (options, args) = parser.parse_args()
+    (options, _) = parser.parse_args()
 
     if not(options.operation):
         parser.error("Need to specify --attach or --detach")
@@ -205,8 +207,8 @@ if __name__=="__main__":
             parser.error("Need to specify --mac for an EVPN network attachment if port is not 'netns'")
 
     json_data = json.dumps({
-                            "import_rt":  ",".join(importRTs),
-                            "export_rt":  ",".join(exportRTs),
+                            "import_rt":  importRTs,
+                            "export_rt":  exportRTs,
                             "local_port":  local_port,
                             "vpn_instance_id":  options.vpn_instance_id,
                             "vpn_type":    options.network_type,

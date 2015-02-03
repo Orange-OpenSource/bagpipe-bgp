@@ -17,16 +17,21 @@
 
 
 """
-run me with 'twistd -y fakerr.py', and then connect with 
-(at most 2) BGP clients...
+Fake BGP Route Reflector
+
+It is a dumb program connecting two TCP sockets together.
+It will buffer what is sent by the first TCP client, and send it to
+the second one when it arrives. 
+
+It can be used to act as a super crude route reflector between 
+two bagpipe-bgp instances.  But it won't support more than 2 !
 """
 
 from threading import Lock
 
 from twisted.protocols import basic
-
-from twisted.internet import protocol
 from twisted.application import service, internet
+from twisted.internet import protocol, reactor, endpoints
 
 class FakeRR(basic.LineReceiver):
     
@@ -92,14 +97,23 @@ class FakeRR(basic.LineReceiver):
                 self.factory.buffer = []
             self.factory.buffer.append(data)
 
-
-
 factory = protocol.ServerFactory()
 factory.protocol = FakeRR
 factory.clients = []
 factory.ready = False
 factory.buffer = []
 
+# this application definition allows the use with twisted
+# e.g.:
+#  echo "from bagpipe.bgp.fakerr import application" | twistd -y /dev/stdin 
 application = service.Application("fakerr")
 internet.TCPServer(179, factory).setServiceParent(application)
 
+def main():
+    endpoints.serverFromString(reactor, "tcp:179").listen(factory)
+    reactor.run()
+
+if __name__ == '__main__':
+    main()
+
+__all__ = [ main ]

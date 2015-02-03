@@ -1,0 +1,7 @@
+pbr >= 0.6,!= 0.7, < 1.0
+bottle >= 0.11.3
+python-daemon >= 1.5.5, < 2.0
+lockfile >= 0.8
+netaddr >= 0.7.7
+twisted >= 14.0.0
+# python-testtools ?
