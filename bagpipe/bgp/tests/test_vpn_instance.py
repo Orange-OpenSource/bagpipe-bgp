@@ -1,3 +1,19 @@
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+# encoding: utf-8
+
+# Copyright 2014 Orange
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 
 .. module:: test_vpn_instance
@@ -27,45 +43,68 @@ from bagpipe.bgp.tests import RT1, NLRI1
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
-from exabgp.message.update.attributes import Attributes
+from bagpipe.exabgp.message.update.attributes import Attributes
 
 from bagpipe.bgp.engine import RouteEntry
 
-from exabgp.structure.address import AFI, SAFI
+from bagpipe.exabgp.structure.address import AFI, SAFI
 
 MAC1 = "00:00:de:ad:be:ef"
 IP1 = "10.0.0.2/32"
-LOCAL_PORT1 = {'linuxif':'tap1'}
+LOCAL_PORT1 = {'linuxif': 'tap1'}
 
 MAC2 = "00:00:fe:ed:fa:ce"
 IP2 = "10.0.0.3/32"
-LOCAL_PORT2 = {'linuxif':'tap2'}
+LOCAL_PORT2 = {'linuxif': 'tap2'}
 
 MAC3 = "00:00:de:ad:c0:de"
 IP3 = "10.0.0.4/32"
-LOCAL_PORT3 = {'linuxif':'tap3'}
+LOCAL_PORT3 = {'linuxif': 'tap3'}
 
 MAC4 = "00:00:fe:ed:f0:0d"
 IP4 = "10.0.0.5/32"
-LOCAL_PORT4 = {'linuxif':'tap4'}
+LOCAL_PORT4 = {'linuxif': 'tap4'}
+
+
+class TestableVPNInstance(VPNInstance):
+
+    def _bestRouteRemoved(self, entry, route):
+        pass
+
+    def _newBestRoute(self, entry, route, last):
+        pass
+
+    def _route2trackedEntry(self, route):
+        pass
+
+    def generateVifBGPRoute(self):
+        pass
+
 
 class TestVPNInstance(TestCase):
 
     def setUp(self):
         super(TestVPNInstance, self).setUp()
         self.labelAllocator = LabelAllocator()
-        
+
         self.mockDataplane = mock.Mock()
         self.mockDataplane.vifPlugged = mock.Mock()
         self.mockDataplane.vifUnplugged = mock.Mock()
-        
-        self.mockDataplaneDriver = mock.Mock()
-        self.mockDataplaneDriver.initializeDataplaneInstance.returnValue = self.mockDataplane
-        
+
+        self.mockDPDriver = mock.Mock()
+        self.mockDPDriver.initializeDataplaneInstance.returnValue = \
+            self.mockDataplane
+
         VPNInstance.afi = AFI(AFI.ipv4)
         VPNInstance.safi = SAFI(SAFI.mpls_vpn)
-        self.vpnInstance = VPNInstance(mock.Mock(name='BGPManager'), self.labelAllocator, self.mockDataplaneDriver, 1, 1, [RT1], [RT1], '10.0.0.1', 24)
-        self.vpnInstance.synthesizeVifBGPRoute = mock.Mock(return_value=RouteEntry(self.vpnInstance.afi, self.vpnInstance.safi, NLRI1, RT1, Attributes(), None))
+        self.vpnInstance = TestableVPNInstance(mock.Mock(name='BGPManager'),
+                                               self.labelAllocator,
+                                               self.mockDPDriver, 1, 1,
+                                               [RT1], [RT1], '10.0.0.1', 24)
+        self.vpnInstance.synthesizeVifBGPRoute = mock.Mock(
+            return_value=RouteEntry(self.vpnInstance.afi,
+                                    self.vpnInstance.safi, NLRI1, RT1,
+                                    Attributes(), None))
         self.vpnInstance._pushEvent = mock.Mock()
         self.vpnInstance._postFirstPlug = mock.Mock()
         self.vpnInstance.start()
@@ -79,31 +118,42 @@ class TestVPNInstance(TestCase):
     def _get_ipAddress(self, ipAddressPrefix):
         return ipAddressPrefix[0:ipAddressPrefix.find('/')]
 
-    def _validate_ipAddress2MacAddress_consistency(self, macAddress, ipAddress1, ipAddress2=None):
+    def _validate_ipAddress2MacAddress_consistency(self, macAddress,
+                                                   ipAddress1,
+                                                   ipAddress2=None):
         # Validate IP address -> MAC address consistency
         self.assertIn(ipAddress1, self.vpnInstance.ipAddress2MacAddress)
-        
+
         if ipAddress2:
             self.assertIn(ipAddress1, self.vpnInstance.ipAddress2MacAddress)
-            self.assertEquals(self.vpnInstance.ipAddress2MacAddress[ipAddress1],
-                              self.vpnInstance.ipAddress2MacAddress[ipAddress2])
+            self.assertEquals(
+                self.vpnInstance.ipAddress2MacAddress[ipAddress1],
+                self.vpnInstance.ipAddress2MacAddress[ipAddress2])
         else:
-            self.assertEquals(macAddress, self.vpnInstance.ipAddress2MacAddress[ipAddress1])
+            self.assertEquals(
+                macAddress, self.vpnInstance.ipAddress2MacAddress[ipAddress1])
 
-    def _validate_macAddress2LocalPortData_consistency(self, macAddress, localPort):
+    def _validate_macAddress2LocalPortData_consistency(self, macAddress,
+                                                       localPort):
         # Validate MAC address -> Port informations consistency
         self.assertIn(macAddress, self.vpnInstance.macAddress2LocalPortData)
-        
-        port_info = self.vpnInstance.macAddress2LocalPortData[macAddress]['port_info']
+
+        port_info = self.vpnInstance.macAddress2LocalPortData[
+            macAddress]['port_info']
         self.assertEquals(localPort['linuxif'], port_info['linuxif'])
 
-    def _validate_localPort2Endpoints_consistency(self, length, localPort, endpoints):
+    def _validate_localPort2Endpoints_consistency(self, length, localPort,
+                                                  endpoints):
         # Validate Port -> Endpoint (MAC, IP) tuple consistency
-        self.assertEqual(length, len(self.vpnInstance.localPort2Endpoints[localPort['linuxif']]))
-        
+        self.assertEqual(
+            length,
+            len(self.vpnInstance.localPort2Endpoints[localPort['linuxif']]))
+
         for macAddress, ipAddress in endpoints:
             endpoint_info = {'mac': macAddress, 'ip': ipAddress}
-            self.assertIn(endpoint_info, self.vpnInstance.localPort2Endpoints[localPort['linuxif']])
+            self.assertIn(
+                endpoint_info,
+                self.vpnInstance.localPort2Endpoints[localPort['linuxif']])
 
     def testA1_plugEnpointTwiceSamePort(self):
         '''
@@ -119,7 +169,8 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
 
     def testA2_plugMultipleEnpointsWithSameIPSamePort(self):
         '''
@@ -128,7 +179,8 @@ class TestVPNInstance(TestCase):
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
 
-        # An IP address correspond to only one MAC address, exception must be raised 
+        # An IP address correspond to only one MAC address, exception must be
+        # raised
         self.assertRaises(Exception,
                           self.vpnInstance.vifPlugged,
                           MAC2, IP1, LOCAL_PORT1)
@@ -139,7 +191,8 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
         self.assertNotIn(MAC2, self.vpnInstance.macAddress2LocalPortData)
 
     def testA3_plugMultipleEndpointsWithSameMACSamePort(self):
@@ -151,12 +204,15 @@ class TestVPNInstance(TestCase):
         self.vpnInstance.vifPlugged(MAC1, IP2, LOCAL_PORT1)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
-                         "Port different IP addresses must be plugged on dataplane")
+                         "Port different IP addresses must be plugged on "
+                         "dataplane")
         self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
-                         "Route for port different IP addresses must be advertised")
+                         "Route for port different IP addresses must be "
+                         "advertised")
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1, IP2)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(2, LOCAL_PORT1, [(MAC1, IP1), (MAC1, IP2)])
+        self._validate_localPort2Endpoints_consistency(
+            2, LOCAL_PORT1, [(MAC1, IP1), (MAC1, IP2)])
 
     def testA4_plugMultipleEndpointsSamePort(self):
         '''
@@ -166,14 +222,17 @@ class TestVPNInstance(TestCase):
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
-                         "Port different endpoints must be plugged on dataplane")
+                         "Port different endpoints must be plugged on "
+                         "dataplane")
         self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
-                         "Route for port different endpoints must be advertised")
+                         "Route for port different endpoints must be "
+                         "advertised")
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
         self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(2, LOCAL_PORT1, [(MAC1, IP1), (MAC2, IP2)])
+        self._validate_localPort2Endpoints_consistency(
+            2, LOCAL_PORT1, [(MAC1, IP1), (MAC2, IP2)])
 
     def testB1_plugEndpointTwiceDifferentPort(self):
         '''
@@ -182,7 +241,7 @@ class TestVPNInstance(TestCase):
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
 
-        # A port correspond to only one MAC address, exception must be raised 
+        # A port correspond to only one MAC address, exception must be raised
         self.assertRaises(Exception,
                           self.vpnInstance.vifPlugged,
                           MAC1, IP1, LOCAL_PORT2)
@@ -193,8 +252,10 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
-        self.assertNotIn(LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
+        self.assertNotIn(
+            LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
 
     def testB2_plugMultipleEndpointsWithSameIPDifferentPort(self):
         '''
@@ -203,7 +264,8 @@ class TestVPNInstance(TestCase):
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
 
-        # An IP address correspond to only one MAC address, exception must be raised
+        # An IP address correspond to only one MAC address, exception must be
+        # raised
         self.assertRaises(Exception,
                           self.vpnInstance.vifPlugged,
                           MAC2, IP1, LOCAL_PORT2)
@@ -214,8 +276,10 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
-        self.assertNotIn(LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
+        self.assertNotIn(
+            LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
 
     def testB4_plugMultipleEndpointsWithSameMACDifferentPort(self):
         '''
@@ -235,8 +299,10 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
-        self.assertNotIn(LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
+        self.assertNotIn(
+            LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
 
     def testB5_plugMultipleEndpointsDifferentPort(self):
         '''
@@ -253,29 +319,32 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
 
         self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
         self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT2)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT2, [(MAC2, IP2)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT2, [(MAC2, IP2)])
 
     def testC1_unplugUniqueEndpointSamePort(self):
         '''
-        Unplug one endpoint with same MAC and IP addresses as the one plugged on
-        port
+        Unplug one endpoint with same MAC and IP addresses as the one plugged
+        on port
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        
+
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
-        
+
         self.vpnInstance.vifUnplugged(MAC1, IP1)
 
         self.assertEqual(1, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "Endpoint could be unplugged from dataplane")
-        self.assertEqual([((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),)],
-                         self.vpnInstance.dataplane.vifUnplugged.call_args_list)
+        self.assertEqual(
+            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),)],
+            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
         self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
-                         "Route must be first advertised and after withdrawed")
+                         "Route must be first advertised and after withdrawn")
 
         self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
         self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
@@ -283,11 +352,11 @@ class TestVPNInstance(TestCase):
 
     def testC2_unplugUniqueEndpointWithSameIPSamePort(self):
         '''
-        Unplug one endpoint with different MAC addresses and same IP address as the
-        one plugged on port
+        Unplug one endpoint with different MAC addresses and same IP address as
+        the one plugged on port
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        
+
         self.assertRaises(Exception,
                           self.vpnInstance.vifUnplugged,
                           MAC2, IP1)
@@ -299,15 +368,16 @@ class TestVPNInstance(TestCase):
 
         self.assertIn(MAC1, self.vpnInstance.macAddress2LocalPortData)
         self.assertIn(IP1, self.vpnInstance.ipAddress2MacAddress)
-        self.assertIn(LOCAL_PORT1['linuxif'], self.vpnInstance.localPort2Endpoints)
+        self.assertIn(
+            LOCAL_PORT1['linuxif'], self.vpnInstance.localPort2Endpoints)
 
     def testC3_unplugUniqueEndpointWithSameMACSamePort(self):
         '''
-        Unplug one endpoint with same MAC address and different IP addresses as the
-        one plugged on port
+        Unplug one endpoint with same MAC address and different IP addresses
+        as the one plugged on port
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        
+
         self.assertRaises(Exception,
                           self.vpnInstance.vifUnplugged,
                           MAC1, IP2)
@@ -319,7 +389,8 @@ class TestVPNInstance(TestCase):
 
         self.assertIn(MAC1, self.vpnInstance.macAddress2LocalPortData)
         self.assertIn(IP1, self.vpnInstance.ipAddress2MacAddress)
-        self.assertIn(LOCAL_PORT1['linuxif'], self.vpnInstance.localPort2Endpoints)
+        self.assertIn(
+            LOCAL_PORT1['linuxif'], self.vpnInstance.localPort2Endpoints)
 
     def testC4_unplugOneEndpointSamePort(self):
         '''
@@ -328,22 +399,24 @@ class TestVPNInstance(TestCase):
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
-        
+
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
 
         self.vpnInstance.vifUnplugged(MAC1, IP1)
 
         self.assertEqual(1, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "Endpoint must be unplugged from dataplane")
-        self.assertEqual([((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),)],
-                         self.vpnInstance.dataplane.vifUnplugged.call_args_list)
+        self.assertEqual(
+            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),)],
+            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
         self.assertEqual(3, self.vpnInstance._pushEvent.call_count,
                          "Routes for all port endpoints must be first "
-                         "advertised and only one withdrawed")
+                         "advertised and only one withdrawn")
 
         self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
         self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC2, IP2)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC2, IP2)])
 
     def testC5_unplugAllEndpointsSamePort(self):
         '''
@@ -352,21 +425,22 @@ class TestVPNInstance(TestCase):
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
-        
+
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
         label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
-        
+
         self.vpnInstance.vifUnplugged(MAC1, IP1)
         self.vpnInstance.vifUnplugged(MAC2, IP2)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "All port endpoints must be unplugged from dataplane")
-        self.assertEqual([((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
-                          ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT1, label2, True),)],
-                         self.vpnInstance.dataplane.vifUnplugged.call_args_list)
+        self.assertEqual(
+            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
+             ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT1, label2, True),)],
+            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
         self.assertEqual(4, self.vpnInstance._pushEvent.call_count,
                          "Routes for all port endpoints must be first "
-                         "advertised and after withdrawed")
+                         "advertised and after withdrawn")
 
         self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
         self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
@@ -374,8 +448,8 @@ class TestVPNInstance(TestCase):
 
     def testD1_unplugUniqueEndpointsDifferentPort(self):
         '''
-        Unplug the endpoints with different MAC and IP addresses corresponding to
-        those plugged on different ports
+        Unplug the endpoints with different MAC and IP addresses corresponding
+        to those plugged on different ports
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
@@ -389,12 +463,13 @@ class TestVPNInstance(TestCase):
         self.assertEqual(2, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "All different ports endpoints must be unplugged "
                          "from dataplane")
-        self.assertEqual([((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),),
-                          ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT2, label2, True),)],
-                         self.vpnInstance.dataplane.vifUnplugged.call_args_list)
+        self.assertEqual(
+            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),),
+             ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT2, label2, True),)],
+            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
         self.assertEqual(4, self.vpnInstance._pushEvent.call_count,
                          "Routes for all different ports endpoints must be "
-                         "first advertised and after withdrawed")
+                         "first advertised and after withdrawn")
 
         self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
         self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
@@ -420,16 +495,18 @@ class TestVPNInstance(TestCase):
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
         self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT1, [(MAC1, IP1)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT1, [(MAC1, IP1)])
 
         self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
         self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT2)
-        self._validate_localPort2Endpoints_consistency(1, LOCAL_PORT2, [(MAC2, IP2)])
+        self._validate_localPort2Endpoints_consistency(
+            1, LOCAL_PORT2, [(MAC2, IP2)])
 
     def testD3_unplugMultipleEndpointsDifferentPort(self):
         '''
-        Unplug multiple endpoints with same MAC and IP addresses corresponding to
-        those plugged on different ports
+        Unplug multiple endpoints with same MAC and IP addresses corresponding
+        to those plugged on different ports
         '''
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
@@ -449,19 +526,22 @@ class TestVPNInstance(TestCase):
         self.assertEqual(4, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "All different ports endpoints must be unplugged "
                          "from dataplane")
-        self.assertEqual([((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
-                          ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT1, label2, True),),
-                          ((MAC3, self._get_ipAddress(IP3), LOCAL_PORT2, label3, False),),
-                          ((MAC4, self._get_ipAddress(IP4), LOCAL_PORT2, label4, True),)],
-                         self.vpnInstance.dataplane.vifUnplugged.call_args_list)
+        self.assertEqual(
+            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
+             ((MAC2, self._get_ipAddress(
+               IP2), LOCAL_PORT1, label2, True),),
+             ((MAC3, self._get_ipAddress(
+               IP3), LOCAL_PORT2, label3, False),),
+             ((MAC4, self._get_ipAddress(IP4), LOCAL_PORT2, label4, True),)],
+            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
         self.assertEqual(8, self.vpnInstance._pushEvent.call_count,
                          "Routes for all different ports endpoints must be "
-                         "first advertised and after withdrawed")
+                         "first advertised and after withdrawn")
 
         self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
         self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
         self.assertEqual({}, self.vpnInstance.localPort2Endpoints)
-        
+
     def test_getLGLocalPortData(self):
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
