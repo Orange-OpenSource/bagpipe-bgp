@@ -32,7 +32,7 @@ from bagpipe.exabgp.message.update.attribute.communities import Encapsulation
 
 import bagpipe.bgp.common.exceptions as exc
 
-DEFAULT_OVS_BRIDGE = "br-int"
+DEFAULT_OVS_BRIDGE = "br-mpls"
 DEFAULT_OVS_TABLE = 0
 RULE_PRIORITY = 40000
 
@@ -678,7 +678,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
 
         self.bridge = DEFAULT_OVS_BRIDGE
         try:
-            self.bridge = self.config["bridge"]
+            self.bridge = self.config["ovs_bridge"]
         except KeyError:
             self.log.warning("No bridge configured, will use default: %s",
                              DEFAULT_OVS_BRIDGE)
@@ -840,7 +840,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
 
     def getLookingGlassLocalInfo(self, pathPrefix):
         d = {
-            "bridge": self.bridge,
+            "ovs_bridge": self.bridge,
             "mpls_interface": self.mpls_interface,
             "ovs_table_vrfs": self.ovs_table_vrfs,
             "ovs_table_mpls": self.ovs_table_mpls,
