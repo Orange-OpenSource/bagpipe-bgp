@@ -217,7 +217,7 @@ class DummyDataplaneDriver(DataplaneDriver):
         pass
 
     @logDecorator.logInfo
-    def resetState(self, config):
+    def resetState(self):
         pass
 
     @logDecorator.logInfo
