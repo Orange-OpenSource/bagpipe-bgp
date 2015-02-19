@@ -464,7 +464,7 @@ class EVPNMulticast(EVPNNLRI):
         
         self.packedValue = ( self.rd.pack() +
                              self.etag.pack() +
-                             pack("B",len(encoded_ip)) + 
+                             pack("B",len(encoded_ip)*8) + 
                              encoded_ip
                             )
         
@@ -480,9 +480,9 @@ class EVPNMulticast(EVPNNLRI):
         iplen = ord(data[0])
         data=data[1:]
         
-        if iplen == 4:
+        if iplen == 4*8:
             ip = socket.inet_ntop( socket.AF_INET, data[:4] )
-        elif iplen == 16:
+        elif iplen == 16*8:
             ip = socket.inet_ntop( socket.AF_INET6, data[:16] )
         else:
             raise Exception("IP len is %d, but EVPN route currently support only IPv4" % iplen)
