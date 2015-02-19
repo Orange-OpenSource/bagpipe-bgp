@@ -28,8 +28,8 @@ dataplane_driver = DummyDataplaneDriver
 # MPLS outgoing interface (for MPLSLinuxDataplaneDriver and MPLSOVSDataplaneDriver)
 #
 # (not specifying an mpls_interface or using the '*gre*' special value 
-# means that the driver will instantiate a tunnel interface and use an 
-# MPLS/GRE encapsulation)
+# means that the driver will instantiate a tunnel interface and use an 
+# MPLS/GRE encapsulation)
 # mpls_interface=*gre*
 mpls_interface=*gre*
 
@@ -43,7 +43,7 @@ mpls_interface=*gre*
 
 # IP address that others will us to send us packets
 #   does not need to be specified if different than the BGP local_address
-# dataplane_local_address=1.2.3.4
+# dataplane_local_address=1.2.3.4
 
 # required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000

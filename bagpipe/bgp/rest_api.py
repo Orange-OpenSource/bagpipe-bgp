@@ -133,15 +133,15 @@ class RESTAPI(LookingGlass):
                         # OVS bridge:
                         'plugged': True,
                         # name of a linux interface to be plugged into the OVS
-                        # bridge (optional and ignored if port_number is
+                        # bridge (optional and ignored if port_number is
                         # provided):
                         'port_name': 'qvo456abc',
                         # OVS port number (optional if 'port_name' provided):
                         'port_number': '7',
-                        # the VLAN id for VM traffic (optional)
+                        # the VLAN id for VM traffic (optional)
                         'vlan': '42',
                         # optional specification of a distinct port to send
-                        # traffic to the VM(only applies if a vlan is
+                        # traffic to the VM(only applies if a vlan is
                         # specified) :
                         'to_vm_port_number'
                         'to_vm_port_name'
@@ -152,7 +152,7 @@ class RESTAPI(LookingGlass):
                      'ovs_port_name': 'qvb456abc' # optional, if provided,
                                                   # and if ovs/port_name is
                                                   # also provided, then the
-                                                  # interface name will be
+                                                  # interface name will be
                                                   # assumed as already plugged
                                                   # into the evpn
                     }

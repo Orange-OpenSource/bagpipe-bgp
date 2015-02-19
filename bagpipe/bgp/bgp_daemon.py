@@ -56,7 +56,7 @@ def findDataplaneDrivers(dpConfigs, bgpConfig, isCleaningUp=False):
             "Creating dataplane driver for %s, with %s", vpnType, driverName)
 
         # FIXME: this is a hack, dataplane drivers should have a better way to
-        #  access any item in the BGP dataplaneConfig
+        #  access any item in the BGP dataplaneConfig
         if 'dataplane_local_address' not in dpConfig:
             dpConfig['dataplane_local_address'] = bgpConfig['local_address']
 

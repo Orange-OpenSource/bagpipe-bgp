@@ -163,7 +163,7 @@ VMs will need to have proper IP configuration. When BaGPipe BGP is use
 standalone, no DHCP service is provided, and the IP configuration will 
 have to be static. 
 
-#### Another IP VPN example... ####
+#### Another IP VPN example... ####
 
 ...in which the bagpipe-rest-attach tool will build for you a network 
 namespace and a properly configured veth interface to attach to the VRF:
@@ -185,7 +185,7 @@ be able to have traffic exchanged between the network namespaces:
     64 bytes from 12.11.11.2: icmp_req=7 ttl=64 time=0.652 ms
 
 
-#### An E-VPN example ####
+#### An E-VPN example ####
 
 * on server A, plug a netns interface with IP 12.11.11.1 into a new E-VPN named "test2", with route-target 64512:79
 
@@ -312,7 +312,7 @@ Non-goals for this BGP implementation:
 * full-fledged BGP implementation
 * redistribution of routes between BGP peers (hence, no route reflection, no eBGP)
 * accepting incoming BGP connections
-* scaling to a number of routes beyond the number of routes required to route
+* scaling to a number of routes beyond the number of routes required to route
   traffic in/out of VMs hosted on a server running BaGPipe
 
 ### Dataplanes ###
