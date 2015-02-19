@@ -119,10 +119,6 @@ class EVI(VPNInstance, LookingGlass):
     safi = SAFI(SAFI.evpn)
 
     ENABLE_BROADCAST_SUPPORT = True
-    # This is a hack to support the case where our BGP RR does not support
-    # E-VPN Inclusive multicast route and/or the PMSI Tunnel attribute
-    # (it only makes sense to add this if ENABLE_BROADCAST_SUPPORT is False)
-    ENABLE_BROADCAST_SUPPORT_HACKY = False
 
     def __init__(self, *args, **kwargs):
 
@@ -248,13 +244,6 @@ class EVI(VPNInstance, LookingGlass):
             self.dataplane.setupDataplaneForRemoteEndpoint(
                 prefix, remotePE, label, newRoute.nlri, encaps)
 
-            # This is a hack to support the case where our BGP RR does not
-            # support E-VPN Inclusive multicast route and/or the PMSI Tunnel
-            # attribute
-            if EVI.ENABLE_BROADCAST_SUPPORT_HACKY:
-                self.dataplane.setupDataplaneForBroadcastEndpoint(
-                    remotePE, label, newRoute.nlri)
-
         elif entryClass == EVPNMulticast:
             remote_endpoint = info
 
@@ -296,13 +285,6 @@ class EVI(VPNInstance, LookingGlass):
 
             self.dataplane.removeDataplaneForRemoteEndpoint(
                 prefix, remotePE, label, oldRoute.nlri)
-
-            # This is a hack to support the case where our BGP RR does not
-            # support E-VPN Inclusive multicast route and/or the PMSI Tunnel
-            # attribute
-            if EVI.ENABLE_BROADCAST_SUPPORT_HACKY:
-                self.dataplane.removeDataplaneForBroadcastEndpoint(
-                    remotePE, label, oldRoute.nlri)
 
         elif entryClass == EVPNMulticast:
             remote_endpoint = info
