@@ -27,6 +27,7 @@ from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
 from bagpipe.bgp.engine import RouteEvent, RouteEntry, \
     Subscription, Unsubscription
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common.utils import getBoolean
 
 from bagpipe.exabgp.message.update.route import Route
 from bagpipe.exabgp.structure.rtc import RouteTargetConstraint
@@ -40,18 +41,14 @@ log = logging.getLogger(__name__)
 class Manager(LookingGlass):
 
     def __init__(self, _config, peerClass=ExaBGPPeerWorker):
-        def getBoolean(boolValue):
-            return boolValue == "True"
-
         log.debug("Instantiating Manager")
 
         self.config = _config
         self.peerClass = peerClass
 
-        if 'enable_rtc' not in self.config:
-            self.config['enable_rtc'] = True  # RTC is not used by default
-        else:
-            self.config['enable_rtc'] = getBoolean(self.config['enable_rtc'])
+        # RTC is defaults to being enabled
+        self.config['enable_rtc'] = getBoolean(self.config.get('enable_rtc',
+                                                               True))
 
         self.routeTableManager = RouteTableManager()
         self.routeTableManager.start()

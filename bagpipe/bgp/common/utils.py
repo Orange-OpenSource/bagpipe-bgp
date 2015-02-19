@@ -65,6 +65,17 @@ def enum(*sequential, **named):
     return type('Enum', (), enums)
 
 
+def getBoolean(string):
+    '''
+    return True is string represents boolean true ("true","yes","on","1"),
+    False if not
+    '''
+    if isinstance(string, bool):
+        return string
+    assert(isinstance(string, str))
+    return (string.lower() in ["true", "yes", "on", "1"])
+
+
 def plural(x):
     if len(x) > 1:
         return "s"

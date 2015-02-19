@@ -27,6 +27,7 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, \
     LookingGlassLocalLogger, LGMap
 
 from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common.utils import getBoolean
 
 from bagpipe.exabgp.message.update.attribute.communities import Encapsulation
 
@@ -38,7 +39,7 @@ RULE_PRIORITY = 40000
 
 DEFAULT_ARPNS_IF_MTU = 9000
 
-#  grep 'define.*IFNAMSIZ' /usr/src/linux/include/uapi/linux/if.h
+#  grep 'define.*IFNAMSIZ' /usr/src/linux/include/uapi/linux/if.h
 # define    IFNAMSIZ    16
 # (minus 1 for trailing null)
 LINUX_DEV_LEN = 15
@@ -46,7 +47,7 @@ LINUX_DEV_LEN = 15
 OVSBR2ARPNS_INTERFACE_PREFIX = "toarpns"
 
 # name of the veth device in the ARP proxy network namespace,
-#  whose remote end is plugged in the OVS bridge
+#  whose remote end is plugged in the OVS bridge
 PROXYARP2OVS_IF = "ovs"
 
 ARPNETNS_PREFIX = "arp"
@@ -398,7 +399,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
             self._get_ovs_port_specifics(localPort)
 
         # This is a hack used with previous versions of Openstack
-        #  proper MTUs should actually be configured in the hybrid vif driver
+        #  proper MTUs should actually be configured in the hybrid vif driver
         # Please consider this obsolete until it gets clean'd up
         self._mtu_fixup(localPort)
 
@@ -644,7 +645,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             self.mpls_interface = None
 
         try:
-            self.useGRE = (config["mpls_over_gre"].lower() == "true")
+            self.useGRE = getBoolean(config["mpls_over_gre"])
         except KeyError:
             self.useGRE = not (self.mpls_interface and
                                self.mpls_interface != "*gre*")
