@@ -75,7 +75,7 @@ def getSpecialNetNSPortMacPort(namespace):
 
     # options.mac is the MAC address of the ns2vpn interface
     cmd = "ip netns exec %s ip -o link show %s | perl -pe 's|.* " \
-        "link/ether ([^ ]+) .*|$1|'"
+        "link/ether ([^ ]+) .*|$1|' 2>/dev/null"
     (output, _) = runCommand(log, cmd % (namespace, ns2vpn_if_name))
     if "does not exist" in output[0]:
         raise Exception("special netns interface does not exist: %s" % output)
