@@ -485,7 +485,7 @@ class RouteTableManager(Thread, LookingGlass):
                 log.error("Withdraw, but nothing removed in "
                           "_sourcenlri2entryRemove")
 
-        #  self._dumpState()
+        #  self._dumpState()
 
     def _shouldDispatch(self, routeEvent, targetWorker):
         '''

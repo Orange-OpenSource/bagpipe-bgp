@@ -20,6 +20,8 @@ import traceback
 
 import select
 
+import socket
+
 from time import sleep
 
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker, \
@@ -115,6 +117,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         self.rtc_active = False
         self._activeFamilies = []
 
+    def _toIdle(self):
+        self._activeFamilies = []
+
     def _initiateConnection(self):
         self.log.debug("Initiate ExaBGP connection to %s from %s",
                        self.peerAddress, self.localAddress)
@@ -191,7 +196,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                           " the router-id advertized in Open (different from"
                           " peerAddress == %s)", self.name,
                           received_open.router_id.ip, self.peerAddress)
-            self.name = "BGP-x%s" % received_open.router_id.ip
+            self.name = "BGP-%s/%s" % (self.peerAddress,
+                                       received_open.router_id.ip)
 
         try:
             mp_capabilities = received_open.capabilities[
@@ -235,8 +241,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 self.log.warning(
                     "enable_rtc True but peer not configured for RTC")
 
-        # FIXME: this should not be done until we are in established state, or
-        # we may receive RouteEvent before we are ready to send Updates
+    def _toEstablished(self):
+        BGPPeerWorker._toEstablished(self)
+
         if self.rtc_active:
             # subscribe to RTC routes, to be able to propagate them from
             # internal workers to this peer
@@ -246,10 +253,6 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             # all routes of all active families, to be able to send them to him
             for (afi, safi) in self._activeFamilies:
                 self._subscribe(afi, safi)
-        # FIXME: all the above should be reverted when the connection
-        # transitions to Idle state -- this currently works simply because
-        # RouteTableManager resyntethizes events when subscribed is called,
-        # even for subscriptions already subscribed to
 
     def _receiveLoopFun(self):
 
@@ -270,6 +273,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         except Failure as e:
             self.log.warning("Protocol failure: %s", e)
             return 2
+        except socket.error as e:
+            self.log.warning("Socket error: %s", e)
+            return 2
         except Exception as e:
             self.log.error("Error while reading BGP message: %s", e)
             raise
@@ -279,12 +285,11 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             return 1
         elif message.TYPE == Update.TYPE:
             if (self.fsm.state != FSM.Established):
-                raise Exception(
-                    "Update received, but not in Established state")
+                raise Exception("Update received but not in Established state")
             pass  # see below
         elif message.TYPE == KeepAlive.TYPE:
             if (self.fsm.state == FSM.OpenConfirm):
-                self.fsm.state = FSM.Established
+                self._toEstablished()
             self.enqueue(KeepAliveReceived)
             self.log.debug("Received message: %s", message)
         else:

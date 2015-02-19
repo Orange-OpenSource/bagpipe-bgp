@@ -201,15 +201,19 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
 
         self._stopLoops.clear()
 
-        self.fsm.state = FSM.Established
-
         self.initSendKeepAliveTimer()
         self.initKeepAliveReceptionTimer()
 
         # spawns a receive thread
-        self.receiveThread = Thread(
-            target=self._receiveLoop, name="%s:receiveLoop" % self.name)
+        self.receiveThread = Thread(target=self._receiveLoop,
+                                    name="%s:receiveLoop" % self.name)
         self.receiveThread.start()
+
+    def _toEstablished(self):
+        self.fsm.state = FSM.Established
+
+    def _toIdle(self):
+        pass
 
     def _reinitiate(self):
         self.log.info("Re-initiating")
@@ -224,6 +228,8 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
             self.KAReceptionTimer.cancel()
 
         self.bgpManager.cleanup(self)
+
+        self._toIdle()
 
         # TODO(tmmorin): read BGP specs to get the retries timers right
         # TODO(tmmorin): replace with a timer that injects an event, so that we
