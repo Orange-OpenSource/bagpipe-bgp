@@ -65,7 +65,7 @@ class PMSITunnel(Attribute):
       +---------------------------------+
     '''
     ID = AttributeID.PMSI_TUNNEL
-    FLAG = Flag.OPTIONAL
+    FLAG = Flag.OPTIONAL | Flag.TRANSITIVE
     MULTIPLE = False
 
     def __init__ (self,subtype,label=NO_LABEL,flags=0,packedTunnelId=None):
