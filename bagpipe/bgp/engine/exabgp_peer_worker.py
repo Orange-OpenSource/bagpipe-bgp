@@ -336,10 +336,11 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             # if our peer subscribed to a Route Target, it means that we needs
             # to send him all routes of any AFI/SAFI carrying this RouteTarget.
             for (afi, safi) in self._activeFamilies:
-                if route.action == "announce":
-                    self._subscribe(afi, safi, route.nlri.route_target)
-                else:  # withdraw
-                    self._unsubscribe(afi, safi, route.nlri.route_target)
+                if (afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc)):
+                    if route.action == "announce":
+                        self._subscribe(afi, safi, route.nlri.route_target)
+                    else:  # withdraw
+                        self._unsubscribe(afi, safi, route.nlri.route_target)
 
     def _send(self, data):
         # (error if state not the right one for sending updates)
