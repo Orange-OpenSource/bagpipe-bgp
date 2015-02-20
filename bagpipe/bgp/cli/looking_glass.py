@@ -106,25 +106,38 @@ e.g.: %prog vpns instances"""
         help="IP address of BaGPipe BGP (optional, default: %default)",
         default="127.0.0.1")
 
+    parser.add_option(
+        "--port", dest="port", type="int",
+        help="Port of BaGPipe BGP (optional, default: %default)",
+        default=BAGPIPE_PORT)
+
+    parser.add_option(
+        "--prefix", dest="prefix",
+        help="Looking-glass URL Prefix (optional, default: %default)",
+        default=LOOKING_GLASS_BASE)
+
     (options, args) = parser.parse_args()
 
     quoted_args = [urllib2.quote(arg) for arg in args]
 
-    target_url = "http://%s:%d/%s/%s" % (options.server, BAGPIPE_PORT,
-                                         LOOKING_GLASS_BASE,
-                                         "/".join(quoted_args))
+    target_url = "http://%s:%d/%s/%s" % (options.server, options.port,
+                                         options.prefix, "/".join(quoted_args))
     try:
         os.environ['NO_PROXY'] = options.server
         response = urllib2.urlopen(target_url)
+
+        if response.getcode() == 200:
+            data = json.load(response)
+            pretty_print_recurse(data, indent=0, alreadyANewLine=True)
+
     except urllib2.HTTPError as e:
         if e.code == 404:
             print "No such looking glass path: %s\n(%s)" % (
-                " ".join(quoted_args),
-                target_url)
+                " ".join(quoted_args), target_url)
         else:
             print "Error code %d: %s" % (e.getcode(), e.read())
         return
+    except urllib2.URLError as e:
+        print "No server at http://%s:%d : %s" % (options.server,
+                                                  options.port, e)
 
-    if response.getcode() == 200:
-        data = json.load(response)
-        pretty_print_recurse(data, indent=0, alreadyANewLine=True)
