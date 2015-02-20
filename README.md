@@ -1,12 +1,12 @@
 BaGPipe BGP
 ===========
 
-BaGPipe BGP is a lightweight implementation of BGP VPNs (IP VPNs and E-VPNs), targetting
-deployments on servers hosting VMs, in particular for Openstack/KVM plaforms.
+BaGPipe BGP is a lightweight implementation of BGP VPNs (IP VPNs and E-VPNs), targeting
+deployments on servers hosting VMs, in particular for Openstack/KVM platforms.
 
 The goal is *not* to fully implement BGP specifications, but only the subset 
 of specifications required to implement IP VPN VRFs and E-VPN EVIs ([RFC4364](http://tools.ietf.org/html/rfc4364) 
-aka RFC2547bis, [draft-ietf-l2vpn-evpn](http://tools.ietf.org/html/draft-ietf-l2vpn-evpn)/[draft-sd-l2vpn-evpn-overlay](http://tools.ietf.org/html/draft-sd-l2vpn-evpn-overlay),
+a.k.a RFC2547bis, [RFC7432](http://tools.ietf.org/html/rfc7432)/[draft-ietf-bess-evpn-overlay](http://tools.ietf.org/html/draft-ietf-bess-evpn-overlay),
  and [RFC4684](http://tools.ietf.org/html/RFC4684)).
 
 BaGPipe BGP is designed to use encapsulationis over IP (such as MPLS-over-GRE or VXLAN), 
