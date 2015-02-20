@@ -109,16 +109,13 @@ class DummyDataplaneDriver(_DummyDataplaneDriver):
 class EVI(VPNInstance, LookingGlass):
 
     '''
-    Component to manage an E-VPN instance (EVI).
-    Based on specifications draft-ietf-l2vpn-evpn and
-    draft-sd-l2vpn-evpn-overlay.
+    Implementation an E-VPN instance (EVI) based on RFC7432 and
+    draft-ietf-bess-evpn-overlay.
     '''
 
     type = "evpn"
     afi = AFI(AFI.l2vpn)
     safi = SAFI(SAFI.evpn)
-
-    ENABLE_BROADCAST_SUPPORT = True
 
     def __init__(self, *args, **kwargs):
 
@@ -128,48 +125,47 @@ class EVI(VPNInstance, LookingGlass):
 
         self.gwPort = None
 
-        if EVI.ENABLE_BROADCAST_SUPPORT:
-            # Advertise route to receive multi-destination traffic
-            log.info("Generating BGP route for broadcast/multicast traffic")
+        # Advertise route to receive multi-destination traffic
+        log.info("Generating BGP route for broadcast/multicast traffic")
 
-            etag = None
-            label = LabelStackEntry(self.instanceLabel)
+        etag = None
+        label = LabelStackEntry(self.instanceLabel)
 
-            if (Encapsulation(Encapsulation.VXLAN) in
-                    self.dataplaneDriver.supportedEncaps()):
-                etag = EthernetTag(self.instanceLabel)
-                label = None
+        if (Encapsulation(Encapsulation.VXLAN) in
+                self.dataplaneDriver.supportedEncaps()):
+            etag = EthernetTag(self.instanceLabel)
+            label = None
 
-            route = Route(
-                EVPNMulticast(
-                    RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC,
-                                       None,
-                                       self.bgpManager.getLocalAddress(),
-                                       self.instanceId),
-                    etag,
-                    self.bgpManager.getLocalAddress()
-                )
+        route = Route(
+            EVPNMulticast(
+                RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC,
+                                   None,
+                                   self.bgpManager.getLocalAddress(),
+                                   self.instanceId),
+                etag,
+                self.bgpManager.getLocalAddress()
             )
+        )
 
-            route.attributes.add(self._genExtendedCommunities())
+        route.attributes.add(self._genExtendedCommunities())
 
-            # add PMSI Tunnel Attribute route
-            pmsi_tunnel_attribute = PMSITunnelIngressReplication(
-                self.dataplaneDriver.getLocalAddress(), label)
-            route.attributes.add(pmsi_tunnel_attribute)
+        # add PMSI Tunnel Attribute route
+        pmsi_tunnel_attribute = PMSITunnelIngressReplication(
+            self.dataplaneDriver.getLocalAddress(), label)
+        route.attributes.add(pmsi_tunnel_attribute)
 
-            nh = Inet(1, socket.inet_pton(
-                socket.AF_INET, self.dataplaneDriver.getLocalAddress()))
-            route.attributes.add(NextHop(nh))
+        nh = Inet(1, socket.inet_pton(
+            socket.AF_INET, self.dataplaneDriver.getLocalAddress()))
+        route.attributes.add(NextHop(nh))
 
-            self.multicastRouteEntry = self._newRouteEntry(self.afi,
-                                                           self.safi,
-                                                           self.exportRTs,
-                                                           route.nlri,
-                                                           route.attributes)
+        self.multicastRouteEntry = self._newRouteEntry(self.afi,
+                                                       self.safi,
+                                                       self.exportRTs,
+                                                       route.nlri,
+                                                       route.attributes)
 
-            self._pushEvent(
-                RouteEvent(RouteEvent.ADVERTISE, self.multicastRouteEntry))
+        self._pushEvent(
+            RouteEvent(RouteEvent.ADVERTISE, self.multicastRouteEntry))
 
     def generateVifBGPRoute(self, macAddress, ipAddress, label):
         # Generate BGP route and advertise it...
