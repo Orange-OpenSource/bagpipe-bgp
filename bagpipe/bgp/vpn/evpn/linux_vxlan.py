@@ -99,7 +99,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         self._runCommand("ip link set %s up" % self.vxlan_if_name)
 
         # Plug VXLAN interface into bridge
-        self._runCommand("brctl addif %s %s" % (self.bridge_name, 
+        self._runCommand("brctl addif %s %s" % (self.bridge_name,
                                                 self.vxlan_if_name))
 
     def _cleanup_vxlan_if(self):

@@ -103,7 +103,7 @@ class TrackerWorkerThread(TrackerWorker, Thread):
     # class
     def _newBestRoute(self, entry, route):
         pass
-    
+
     def _bestRouteRemoved(self, entry, route):
         pass
 

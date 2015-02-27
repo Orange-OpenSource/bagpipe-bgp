@@ -102,24 +102,20 @@ e.g.: %prog vpns instances"""
     parser = OptionParser(usage)
 
     parser.add_option(
-        "--server", dest="server",
-        help="IP address of BaGPipe BGP (optional, default: %default)",
-        default="127.0.0.1")
+        "--server", dest="server", default="127.0.0.1",
+        help="IP address of BaGPipe BGP (optional, default: %default)")
 
     parser.add_option(
-        "--port", dest="port", type="int",
-        help="Port of BaGPipe BGP (optional, default: %default)",
-        default=BAGPIPE_PORT)
+        "--port", dest="port", type="int", default=BAGPIPE_PORT,
+        help="Port of BaGPipe BGP (optional, default: %default)")
 
     parser.add_option(
-        "--prefix", dest="prefix",
-        help="Looking-glass URL Prefix (optional, default: %default)",
-        default=LOOKING_GLASS_BASE)
+        "--prefix", dest="prefix", default=LOOKING_GLASS_BASE,
+        help="Looking-glass URL Prefix (optional, default: %default)")
 
     (options, args) = parser.parse_args()
 
     quoted_args = [urllib2.quote(arg) for arg in args]
-
     target_url = "http://%s:%d/%s/%s" % (options.server, options.port,
                                          options.prefix, "/".join(quoted_args))
     try:
@@ -140,4 +136,3 @@ e.g.: %prog vpns instances"""
     except urllib2.URLError as e:
         print "No server at http://%s:%d : %s" % (options.server,
                                                   options.port, e)
-

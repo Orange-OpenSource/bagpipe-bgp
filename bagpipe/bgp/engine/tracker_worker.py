@@ -187,8 +187,8 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
 
                 # let's find if we need to update our best routes
                 if currentBestRoute:
-                    routeComparison = self._compareRoutes(
-                        self, newRoute, currentBestRoute)
+                    routeComparison = self._compareRoutes(self, newRoute,
+                                                          currentBestRoute)
                 else:
                     routeComparison = 1
 
@@ -201,8 +201,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                     withdrawnBestRoutes.extend(bestRoutes.copy())
                     bestRoutes.clear()
                     bestRoutes.add(newRoute)
-                    self._callNewBestRoute(
-                        entry, filteredNewRoute)
+                    self._callNewBestRoute(entry, filteredNewRoute)
                     callNewBestRoute4All = False
                 elif routeComparison == 0:
                     # newRoute is as good as the current ones
@@ -215,7 +214,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                     # newRoute is different from all current best routes. This
                     # comparison uses FilteredRouteEntry to *not* take into
                     # account .source (the BGP peer which advertized the route)
-                    # and take only into account a specific set of BGP
+                    # and only takes into account a specific set of BGP
                     # attributes.
                     # TODO: explain more on theses BGP attributes
                     #       related to the cases where a route is re-advertized
@@ -241,8 +240,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                         self._callNewBestRouteForRoutes(entry, bestRoutes)
 
             except (KeyError, StopIteration) as e:
-                self.log.debug(
-                    "We did not had any route for this entry (%s)", e)
+                self.log.debug("We had no route for this entry (%s)", e)
                 self.trackedEntry2bestRoutes[entry] = set([newRoute])
                 bestRoutes = set()
                 self.log.debug("Calling newBestRoute")
@@ -298,8 +296,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                             self._callNewBestRouteForRoutes(entry, bestRoutes)
                             withdrawnRouteIsLast = False
                         else:
-                            self.log.debug(
-                                "Cleanup allRoutes and bestRoutes...")
+                            self.log.debug("Cleanup allRoutes and bestRoutes")
                             del self.trackedEntry2bestRoutes[entry]
                             del self.trackedEntry2routes[entry]
                     else:
