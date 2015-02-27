@@ -35,6 +35,9 @@ DEFAULT_VPN_INSTANCE_ID = "bagpipe-test"
 NS2VPN_INTERFACE_PREFIX = "tovpn-"
 VPN2NS_INTERFACE_PREFIX = "tons-"
 
+NS2VPN_DEFAULT_IFNAME = "tovpn"
+
+
 LINUX_DEV_LEN = 15
 
 # Needed so that the OVS bridge kernel interface can hava a high enough MTU
@@ -67,60 +70,52 @@ def create_veth_pair(vpn_interface, ns_interface, ns_name):
 def get_vpn2ns_if_name(namespace):
     return (VPN2NS_INTERFACE_PREFIX + namespace)[:LINUX_DEV_LEN]
 
-ns2vpn_if_name = "tovpn"
 
-
-def getSpecialNetNSPortMacPort(namespace):
-    vpn2ns_if_name = get_vpn2ns_if_name(namespace)
-
+def getNetNSInterfaceMac(namespace, interface):
     # options.mac is the MAC address of the ns2vpn interface
     cmd = "ip netns exec %s ip -o link show %s | perl -pe 's|.* " \
         "link/ether ([^ ]+) .*|$1|' 2>/dev/null"
-    (output, _) = runCommand(log, cmd % (namespace, ns2vpn_if_name))
+    (output, _) = runCommand(log, cmd % (namespace, interface))
     if "does not exist" in output[0]:
         raise Exception("special netns interface does not exist: %s" % output)
     mac = output[0]
 
-    return (mac, vpn2ns_if_name)
+    return mac
 
 
 def createSpecialNetNSPort(options):
-    print "Will plug local namespace %s into network" % options.vpn_instance_id
-
-    netns_name = options.vpn_instance_id
-
-    vpn2ns_if_name = get_vpn2ns_if_name(netns_name)
+    print "Will plug local namespace %s into network" % options.netns
 
     # create namespace
     runCommand(log, "ip netns add %s" %
-               netns_name, raiseExceptionOnError=False)
+               options.netns, raiseExceptionOnError=False)
 
     # create veth pair and move one into namespace
     if options.ovs_vlan:
-        create_veth_pair(vpn2ns_if_name, "ns2vpn-raw", netns_name)
+        create_veth_pair(options.if2netns, "ns2vpn-raw", options.netns)
 
         runCommand(log, "ip netns exec %s ip link add link ns2vpn-raw "
                    "name %s type vlan id %d"
-                   % (netns_name, ns2vpn_if_name, options.ovs_vlan))
+                   % (options.netns, options.if2vpn, options.ovs_vlan))
         runCommand(log, "ip netns exec %s ip link set %s up"
-                   % (netns_name, ns2vpn_if_name))
+                   % (options.netns, options.if2vpn))
     else:
-        create_veth_pair(vpn2ns_if_name, ns2vpn_if_name, netns_name)
+        create_veth_pair(options.if2netns, options.if2vpn, options.netns)
 
     if options.mac:
         runCommand(log, "ip netns exec %s ip link set %s address %s"
-                   % (netns_name, ns2vpn_if_name, options.mac))
+                   % (options.netns, options.if2vpn, options.mac))
 
     runCommand(log, "ip netns exec %s ip addr add %s dev %s" %
-               (netns_name, options.ip, ns2vpn_if_name),
+               (options.netns, options.ip, options.if2vpn),
                raiseExceptionOnError=False)
 
     runCommand(log, "ip netns exec %s ip route add default dev %s via %s" %
-               (netns_name, ns2vpn_if_name, options.gw_ip),
+               (options.netns, options.if2vpn, options.gw_ip),
                raiseExceptionOnError=False)
 
     runCommand(log, "ip netns exec %s ip link set %s mtu 1420" %
-               (netns_name, ns2vpn_if_name),
+               (options.netns, options.if2vpn),
                raiseExceptionOnError=False)
 
 
@@ -177,6 +172,27 @@ def main():
                       "interface will be attached to the VPN instance "
                       "(optional)")
 
+    parser.add_option("--netns", dest="netns",
+                      help="name of network namespace (optional, for use with"
+                      " --port netns)")
+    parser.add_option("--if2netns", dest="if2netns",
+                      help="name of interface from VPN to network namespace "
+                      "(optional, for use with --port netns)")
+    parser.add_option("--if2vpn", dest="if2vpn", default=NS2VPN_DEFAULT_IFNAME,
+                      help="name of interface in netns toward VPN"
+                      "defaults to %default "
+                      "(optional, for use with --port netns)")
+
+    parser.add_option("--readv-from-rt", dest="reAdvFromRTs",
+                      help="enables route readvertisement from these RTs,"
+                      " works in conjunction with --readv-to-rt",
+                      default=[], action="append")
+
+    parser.add_option("--readv-to-rt", dest="reAdvToRTs",
+                      help="enables route readvertisement to these RTs,"
+                      " works in conjunction with --readv-from-rt",
+                      default=[], action="append")
+
     (options, _) = parser.parse_args()
 
     if not(options.operation):
@@ -220,10 +236,18 @@ def main():
             options.network_type, options.vpn_instance_id)
 
     if options.port == "netns":
+
+        if not options.netns:
+            options.netns = options.vpn_instance_id
+
+        if not options.if2netns:
+            options.if2netns = get_vpn2ns_if_name(options.netns)
+
         if options.operation == "attach":
             createSpecialNetNSPort(options)
-        (options.mac, options.port) = getSpecialNetNSPortMacPort(
-            options.vpn_instance_id)
+
+        options.port = options.if2netns
+        options.mac = getNetNSInterfaceMac(options.netns, options.if2vpn)
 
         print "Local port: %s (%s)" % (options.port, options.mac)
         runCommand(log, "ip link show %s" % options.port)
@@ -261,6 +285,11 @@ def main():
             parser.error("Need to specify --mac for an EVPN network "
                          "attachment if port is not 'netns'")
 
+    readvertise = None
+    if options.reAdvToRTs:
+        readvertise = {"from_rt": options.reAdvFromRTs,
+                       "to_rt": options.reAdvToRTs}
+
     json_data = json.dumps({"import_rt":  importRTs,
                             "export_rt":  exportRTs,
                             "local_port":  local_port,
@@ -268,7 +297,8 @@ def main():
                             "vpn_type":    options.network_type,
                             "gateway_ip":  options.gw_ip,
                             "mac_address": options.mac,
-                            "ip_address":  options.ip
+                            "ip_address":  options.ip,
+                            "readvertise": readvertise
                             })
 
     print "request: %s" % json_data
@@ -287,4 +317,3 @@ def main():
         error_content = e.read()
         print "   %s" % error_content
         sys.exit("error %d, reason: %s" % (e.code, e.reason))
-
