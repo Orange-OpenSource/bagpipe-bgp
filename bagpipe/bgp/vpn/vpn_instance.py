@@ -52,7 +52,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     @logDecorator.log
     def __init__(self, bgpManager, labelAllocator, dataplaneDriver,
                  externalInstanceId, instanceId, importRTs, exportRTs,
-                 gatewayIP, mask, **kwargs):
+                 gatewayIP, mask, readvertise, **kwargs):
 
         self.instanceType = self.__class__.__name__
         self.instanceId = instanceId
@@ -107,6 +107,18 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         for rt in self.importRTs:
             self._subscribe(self.afi, self.safi, rt)
+
+        if readvertise:
+            self.readvertise = True
+            self.readvertiseFromRTs = readvertise['from_rt']
+            self.readvertiseToRTs = readvertise['to_rt']
+            self.log.debug("readvertise enabled, from %s, to %s",
+                           self.readvertiseFromRTs, self.readvertiseToRTs)
+            for rt in self.readvertiseFromRTs:
+                self._subscribe(self.afi, self.safi, rt)
+        else:
+            self.log.debug("readvertise not enabled")
+            self.readvertise = False
 
     @utils.synchronized
     def stop(self):
@@ -232,7 +244,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             portData = self.macAddress2LocalPortData[macAddress]
 
             if (portData.get("port_info") != localPort):
-                raise Exception("Port information is not consistent. MAC " 
+                raise Exception("Port information is not consistent. MAC "
                                 "address cannot be bound to two different"
                                 "ports. Previous plug for port %s (%s != %s)" %
                                 (localPort['linuxif'],
@@ -365,18 +377,21 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     def _checkEncaps(self, route):
         '''
         returns a list of encaps supported by both the dataplane driver and the
-        route advertizer (based on BGP Encapsulation community)
+        advertized route (based on BGP Encapsulation community)
 
-        raise an Exception, if there is no common encap
+        logs a warning if there is no common encap
         '''
+        advEncaps = None
         try:
             advEncaps = filter(lambda ecom: isinstance(ecom, Encapsulation),
                                route.attributes[
                 AttributeID.EXTENDED_COMMUNITY].communities
             )
             self.log.debug("Advertized Encaps: %s", advEncaps)
-        except Exception as e:
-            self.log.debug("Exception on adv encaps: %s", e)
+        except KeyError:
+            self.log.debug("no encap advertized, let's use default")
+
+        if not advEncaps:
             advEncaps = [Encapsulation(Encapsulation.DEFAULT)]
 
         goodEncaps = set(advEncaps) & set(
@@ -408,7 +423,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             "gateway_ip":    (LGMap.VALUE, self.gatewayIP),
             "subnet_mask":   (LGMap.VALUE, self.mask),
             "instance_dataplane_id": (LGMap.VALUE, self.instanceLabel),
-            "ports":         (LGMap.SUBTREE, self.getLGLocalPortData)
+            "ports":         (LGMap.SUBTREE, self.getLGLocalPortData),
+            "readvertise":   (LGMap.SUBITEM, self.getLGReadvertise)
         }
 
     def getLGLocalPortData(self, pathPrefix):
@@ -433,3 +449,10 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             "import": [repr(rt) for rt in self.importRTs],
             "export": [repr(rt) for rt in self.exportRTs]
         }
+
+    def getLGReadvertise(self):
+        if self.readvertise:
+            return {'from': [repr(rt) for rt in self.readvertiseFromRTs],
+                    'to': [repr(rt) for rt in self.readvertiseToRTs]}
+        else:
+            return {}

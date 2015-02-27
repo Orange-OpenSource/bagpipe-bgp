@@ -76,13 +76,16 @@ class RESTAPI(LookingGlass):
         return "%d" % self.BGP_SEQ_NUM
 
     def _check_attach_parameters(self, params, attach):
-        paramList = ('vpn_instance_id', 'ip_address', 'local_port')
+        log.debug("checking params: %s", params)
+        paramList = ('vpn_instance_id', 'mac_address', 'ip_address',
+                     'local_port')
         if attach:
-            paramList += ('import_rt', 'export_rt', 'gateway_ip')
+            paramList += ('vpn_type', 'import_rt', 'export_rt', 'gateway_ip')
 
         for paramName in paramList:
             if paramName not in params:
-                abort(400, 'Mandatory parameter "%s" is missing ' % paramName)
+                log.warning("Mandatory parameter '%s' is missing", paramName)
+                abort(400, "Mandatory parameter '%s' is missing" % paramName)
 
         # if local_port is not a dict, then assume it designates a linux
         # interface
@@ -108,18 +111,18 @@ class RESTAPI(LookingGlass):
 
     def attach_localport(self):
         """
-        vpn_instance_id: external VPN instance identifier (all ports with same
+        'vpn_instance_id: external VPN instance identifier (all ports with same
                          vpn_instance_id will be plugged in the same VPN
                          instance
-        vpn_type: type of the VPN instance ('ipvpn' or 'evpn')
-        import_rt: list of import Route Targets (or comma-separated string)
-        export_rt: list of export Route Targets (or comma-separated string)
-        gateway_ip: IP address of gateway for this VPN instance
-        mac_address: MAC address of endpoint to connect to the VPN instance
-        ip_address: IP/mask address of endpoint to connect to the VPN instance
-        linuxbr: Name of a linux bridge to which the linuxif is already
+        'vpn_type': type of the VPN instance ('ipvpn' or 'evpn')
+        'import_rt': list of import Route Targets (or comma-separated string)
+        'export_rt': list of export Route Targets (or comma-separated string)
+        'gateway_ip': IP address of gateway for this VPN instance
+        'mac_address': MAC address of endpoint to connect to the VPN instance
+        'ip_address': IP/mask of endpoint to connect to the VPN instance
+        'linuxbr': Name of a linux bridge to which the linuxif is already
                  plugged-in (optional)
-        local_port: local port to plug to the VPN instance
+        'local_port': local port to plug to the VPN instance
             should be a dict containing any of the following key,value pairs
             {
                 'linuxif': 'tap456abc', # name of a linux interface
@@ -159,6 +162,11 @@ class RESTAPI(LookingGlass):
             }
             if local_port is not a list, it is assumed to be a name of a linux
             interface (string)
+        'readvertise': {  # optional, used to re-advertise addresses...
+            'from_rt': [list of RTs]  # ...received on these RTs
+            'to_rt': [list of RTs] # ...toward these RTs
+        }
+
         """
 
         try:
@@ -179,7 +187,8 @@ class RESTAPI(LookingGlass):
                                          attach_params['ip_address'],
                                          attach_params['gateway_ip'],
                                          attach_params['local_port'],
-                                         attach_params.get('linuxbr'))
+                                         attach_params.get('linuxbr'),
+                                         attach_params.get('readvertise'))
         except Exception as e:
             log.error('attach_localport: An error occurred during local port'
                       ' plug to VPN: %s', e)

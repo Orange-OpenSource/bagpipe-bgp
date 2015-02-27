@@ -100,7 +100,8 @@ class TestVPNInstance(TestCase):
         self.vpnInstance = TestableVPNInstance(mock.Mock(name='BGPManager'),
                                                self.labelAllocator,
                                                self.mockDPDriver, 1, 1,
-                                               [RT1], [RT1], '10.0.0.1', 24)
+                                               [RT1], [RT1], '10.0.0.1', 24,
+                                               None)
         self.vpnInstance.synthesizeVifBGPRoute = mock.Mock(
             return_value=RouteEntry(self.vpnInstance.afi,
                                     self.vpnInstance.safi, NLRI1, RT1,

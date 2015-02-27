@@ -39,6 +39,20 @@ from bagpipe.exabgp.message.update.attribute.communities import RouteTarget
 log = logging.getLogger(__name__)
 
 
+def convertRouteTargets(orig_list):
+    assert(isinstance(orig_list, list))
+    list_ = []
+    for rt in orig_list:
+        if rt == '':
+            continue
+        try:
+            asn, nn = rt.split(':')
+            list_.append(RouteTarget(int(asn), None, int(nn)))
+        except Exception:
+            raise Exception("Malformed route target: '%s'" % rt)
+    return list_
+
+
 class VPNManager(LookingGlass):
 
     """
@@ -50,13 +64,12 @@ class VPNManager(LookingGlass):
                   "evpn": EVI
                   }
 
+    @logDecorator.log
     def __init__(self, bgpManager, dataplaneDrivers):
         '''
         dataplaneDrivers is a dict from vpn type to each dataplane driver,
         e.g. { "ipvpn": driverA, "evpn": driverB }
         '''
-
-        log.debug("VPNManager init")
 
         self.bgpManager = bgpManager
 
@@ -76,19 +89,6 @@ class VPNManager(LookingGlass):
         self._evpn_ipvpn_ifs = {}
 
         self.lock = Lock()
-
-    def _convertRouteTargets(self, orig_list):
-        assert(isinstance(orig_list, list))
-        list_ = []
-        for rt in orig_list:
-            if rt == '':
-                continue
-            try:
-                asn, nn = rt.split(':')
-                list_.append(RouteTarget(int(asn), None, int(nn)))
-            except Exception:
-                raise Exception("Malformed route target: '%s'" % rt)
-        return list_
 
     def _formatIpAddressPrefix(self, ipAddress):
         if re.match(r'([12]?\d?\d\.){3}[12]?\d?\d\/[123]?\d', ipAddress):
@@ -231,7 +231,7 @@ class VPNManager(LookingGlass):
     @logDecorator.logInfo
     def plugVifToVPN(self, externalInstanceId, instanceType, importRTs,
                      exportRTs, macAddress, ipAddress, gatewayIP,
-                     localPort, linuxbr):
+                     localPort, linuxbr, readvertise):
 
         # Verify and format IP address with prefix if necessary
         try:
@@ -240,8 +240,15 @@ class VPNManager(LookingGlass):
             raise
 
         # Convert route target string to RouteTarget dictionary
-        importRTs = self._convertRouteTargets(importRTs)
-        exportRTs = self._convertRouteTargets(exportRTs)
+        importRTs = convertRouteTargets(importRTs)
+        exportRTs = convertRouteTargets(exportRTs)
+
+        if readvertise:
+            try:
+                readvertise = {k: convertRouteTargets(readvertise[k])
+                               for k in ['from_rt', 'to_rt']}
+            except KeyError as e:
+                raise Exception("Wrong 'readvertise' parameters: %s" % e)
 
         # retrieve network mask
         mask = int(ipAddressPrefix.split('/')[1])
@@ -281,7 +288,7 @@ class VPNManager(LookingGlass):
             vpnInstance = vpnInstanceFactory(
                 self.bgpManager, self.labelAllocator, dataplaneDriver,
                 externalInstanceId, instanceId, importRTs, exportRTs,
-                gatewayIP, mask, **kwargs)
+                gatewayIP, mask, readvertise, **kwargs)
 
             # Update VPN instance list
             self.vpnInstances[externalInstanceId] = vpnInstance
