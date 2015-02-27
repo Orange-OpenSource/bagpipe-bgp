@@ -26,8 +26,10 @@ from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
 from bagpipe.bgp.engine import RouteEvent, RouteEntry, \
     Subscription, Unsubscription
+
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 from bagpipe.bgp.common.utils import getBoolean
+from bagpipe.bgp.common import logDecorator
 
 from bagpipe.exabgp.message.update.route import Route
 from bagpipe.exabgp.structure.rtc import RouteTargetConstraint
@@ -81,6 +83,7 @@ class Manager(LookingGlass):
         # we need a .name since we'll masquerade as a routeEntry source
         self.name = "BGPManager"
 
+    @logDecorator.log
     def stop(self):
         for peer in self.peers.itervalues():
             peer.stop()
@@ -117,9 +120,8 @@ class Manager(LookingGlass):
         else:
             assert(False)
 
+    @logDecorator.log
     def _routeEventSubscribe(self, subscription):
-
-        log.debug("subscription: %s", subscription)
 
         self.routeTableManager.enqueue(subscription)
 
@@ -144,9 +146,8 @@ class Manager(LookingGlass):
                           "(firstWorkerForSubscription:%s) ",
                           firstWorkerForSubscription)
 
+    @logDecorator.log
     def _routeEventUnsubscribe(self, unsubscription):
-
-        log.debug("unsubscription: %s", unsubscription)
 
         self.routeTableManager.enqueue(unsubscription)
 

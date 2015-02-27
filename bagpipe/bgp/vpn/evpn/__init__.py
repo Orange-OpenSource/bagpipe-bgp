@@ -49,8 +49,6 @@ from bagpipe.exabgp.message.update.attribute.pmsi_tunnel import PMSITunnel, \
     PMSITunnelIngressReplication
 from bagpipe.exabgp.message.update.attribute.id import AttributeID
 
-log = logging.getLogger(__name__)
-
 
 class VPNInstanceDataplane(_VPNInstanceDataplane):
     __metaclass__ = ABCMeta
@@ -117,16 +115,15 @@ class EVI(VPNInstance, LookingGlass):
     afi = AFI(AFI.l2vpn)
     safi = SAFI(SAFI.evpn)
 
+    @logDecorator.log
     def __init__(self, *args, **kwargs):
-
-        log.debug("Init EVI")
 
         VPNInstance.__init__(self, *args, **kwargs)
 
         self.gwPort = None
 
         # Advertise route to receive multi-destination traffic
-        log.info("Generating BGP route for broadcast/multicast traffic")
+        self.log.info("Generating BGP route for broadcast/multicast traffic")
 
         etag = None
         label = LabelStackEntry(self.instanceLabel)
@@ -215,8 +212,8 @@ class EVI(VPNInstance, LookingGlass):
         elif isinstance(route.nlri, EVPNMulticast):
             return (EVPNMulticast, (route.nlri.ip, route.nlri.rd))
         elif isinstance(route.nlri, EVPNNLRI):
-            log.warning("Received EVPN route of unsupported subtype: %s",
-                        route.nlri.subtype)
+            self.log.warning("Received EVPN route of unsupported subtype: %s",
+                             route.nlri.subtype)
         else:
             raise Exception("EVI %d should not receive routes of type %s" %
                             (self.instanceId, type(route.nlri)))
@@ -247,19 +244,18 @@ class EVI(VPNInstance, LookingGlass):
             # ingress replication
             pmsi_tunnel = newRoute.attributes.get(PMSITunnel.ID)
             if not isinstance(pmsi_tunnel, PMSITunnelIngressReplication):
-                log.warning("Received PMSI Tunnel of unsupported type: %s",
-                            type(pmsi_tunnel))
+                self.log.warning("Received PMSITunnel of unsupported type: %s",
+                                 type(pmsi_tunnel))
             else:
                 remote_endpoint = pmsi_tunnel.ip
                 label = pmsi_tunnel.label.labelValue
 
-                log.info("Setting up dataplane for new ingress replication "
-                         "destination %s", remote_endpoint)
+                self.log.info("Setting up dataplane for new ingress "
+                              "replication destination %s", remote_endpoint)
                 self.dataplane.addDataplaneForBroadcastEndpoint(
                     remote_endpoint, label, newRoute.nlri, encaps)
         else:
-            log.error(
-                "newBestRoute not supposed to be called with such an entry")
+            self.log.warning("unsupported entryClass: %s", entryClass.__name__)
 
     @utils.synchronized
     @logDecorator.log
@@ -289,18 +285,17 @@ class EVI(VPNInstance, LookingGlass):
             # ingress replication
             pmsi_tunnel = oldRoute.attributes.get(PMSITunnel.ID)
             if not isinstance(pmsi_tunnel, PMSITunnelIngressReplication):
-                log.warning(
-                    "PMSI Tunnel of suppressed route is of unsupported type")
+                self.log.warning("PMSITunnel of suppressed route is of"
+                                 " unsupported type")
             else:
                 remote_endpoint = pmsi_tunnel.ip
                 label = pmsi_tunnel.label.labelValue
-                log.info("Cleaning up dataplane for ingress replication "
-                         "destination %s", remote_endpoint)
+                self.log.info("Cleaning up dataplane for ingress replication "
+                              "destination %s", remote_endpoint)
                 self.dataplane.removeDataplaneForBroadcastEndpoint(
                     remote_endpoint, label, oldRoute.nlri)
         else:
-            log.error(
-                "newBestRoute not supposed to be called with such an entry")
+            self.log.warning("unsupported entryClass: %s", entryClass.__name__)
 
     # Looking Glass ####
 
