@@ -408,18 +408,17 @@ class RouteTableManager(Thread, LookingGlass):
 
         log.debug("Try to find a entry from same peer with same nlri")
         try:
-            replacedEntry = self._source_nlri2entry[
-                (entry.source, entry.nlri)]
+            replacedEntry = self._source_nlri2entry[(entry.source, entry.nlri)]
         except KeyError:
             replacedEntry = None
 
         log.debug("   Result: %s", replacedEntry)
 
         # replacedEntry should be non-empty for a withdraw
-        if replacedEntry is None and (routeEvent.type ==
-                                      RouteEvent.WITHDRAW):
-            raise Exception(
-                "WITHDRAW, but no route entry found that we could remove")
+        if replacedEntry is None and (routeEvent.type == RouteEvent.WITHDRAW):
+            log.warning("WITHDRAW but found no route that we could remove: %s",
+                        routeEvent.routeEntry)
+            return
 
         # Propagate events to interested workers...
         if routeEvent.type == RouteEvent.ADVERTISE:
