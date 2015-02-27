@@ -9,7 +9,7 @@ of specifications required to implement IP VPN VRFs and E-VPN EVIs ([RFC4364](ht
 a.k.a RFC2547bis, [RFC7432](http://tools.ietf.org/html/rfc7432)/[draft-ietf-bess-evpn-overlay](http://tools.ietf.org/html/draft-ietf-bess-evpn-overlay),
  and [RFC4684](http://tools.ietf.org/html/RFC4684)).
 
-BaGPipe BGP is designed to use encapsulationis over IP (such as MPLS-over-GRE or VXLAN), 
+BaGPipe BGP is designed to use encapsulations over IP (such as MPLS-over-GRE or VXLAN), 
 and thus does not require the use of LDP. Bare MPLS over Ethernet is also supported and 
 can be used if servers/routers have direct Ethernet connectivity.
 
@@ -40,7 +40,7 @@ in `/etc/init.d` and sample config files in `/etc/bagpipe-bgp`.
 BGP and Route Reflection
 ------------------------
 
-If you only want to test how to interconnect one server runing bagpipe-bgp and an 
+If you only want to test how to interconnect one server running bagpipe-bgp and an 
 IP/MPLS router, you don't need to setup a BGP Route Reflector. But to use BaGPipe 
 BGP on more than one server, the current code currently requires setting up a 
 BGP Route Reflector (see [Caveats](#caveats)).
