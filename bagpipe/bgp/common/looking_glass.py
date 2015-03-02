@@ -17,6 +17,8 @@
 
 import logging
 
+import re
+
 import urllib
 
 from bagpipe.bgp.common.utils import enum
@@ -367,6 +369,9 @@ class LookingGlassLogHandler(logging.Handler):
     def getRecords(self):
         return self.records
 
+    def resetLocalLGLogs(self):
+        del self.records[:]
+
 
 class LookingGlassLocalLogger(LookingGlass):
 
@@ -376,7 +381,7 @@ class LookingGlassLocalLogger(LookingGlass):
     logger using LookingGlassLogHandler.
 
     This additional logger is used to make the last <n> records (above WARNING)
-    available through the look
+    available through the looking glass
     """
 
     def __init__(self, appendToName=""):
@@ -387,6 +392,10 @@ class LookingGlassLocalLogger(LookingGlass):
             name = self.__module__  # + "." + self.__class__.__name__
             if appendToName:
                 name += "." + appendToName
+            elif (hasattr(self, 'instanceId')):
+                name += ".%d" % self.instanceId
+            elif (hasattr(self, 'name')):
+                name += ".%s" % re.sub("[. ]", "-", self.name).lower()
             self.log = logging.getLogger(name)
             self.log.addHandler(self.lgLogHandler)
 
@@ -398,3 +407,6 @@ class LookingGlassLocalLogger(LookingGlass):
                  'time': self.lgLogHandler.formatter.formatTime(record),
                  'message': record.msg}
                 for record in self.lgLogHandler.getRecords()]
+
+    def _resetLocalLGLogs(self):
+        self.lgLogHandler.resetLocalLGLogs()

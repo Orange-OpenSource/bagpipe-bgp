@@ -177,6 +177,7 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
         self._initiateConnectionAndThreads()
 
     def _initiateConnectionAndThreads(self):
+        self._resetLocalLGLogs()
         # initiate connection
 
         self.fsm.state = FSM.Connect
