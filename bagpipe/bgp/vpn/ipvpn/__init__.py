@@ -24,10 +24,12 @@ from bagpipe.bgp.common import logDecorator
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
+from bagpipe.bgp.engine import RouteEvent
+
 from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver \
     as _DummyDataplaneDriver
 
-from bagpipe.bgp.common.looking_glass import LookingGlass
+from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 
 from bagpipe.exabgp.structure.vpn import RouteDistinguisher, VPNLabelledPrefix
 from bagpipe.exabgp.structure.mpls import LabelStackEntry
@@ -35,8 +37,7 @@ from bagpipe.exabgp.structure.address import AFI, SAFI
 from bagpipe.exabgp.structure.ip import Inet, Prefix
 from bagpipe.exabgp.message.update.route import Route
 from bagpipe.exabgp.message.update.attribute.nexthop import NextHop
-
-log = logging.getLogger(__name__)
+from bagpipe.exabgp.message.update.attribute.communities import ECommunities
 
 
 class DummyDataplaneDriver(_DummyDataplaneDriver):
@@ -58,23 +59,87 @@ class VRF(VPNInstance, LookingGlass):
     @logDecorator.log
     def __init__(self, *args, **kwargs):
         VPNInstance.__init__(self, *args, **kwargs)
+        self.readvertised = set()
+
+    def _routeFrom(self, prefix, label, rd):
+        return Route(VPNLabelledPrefix(self.afi, self.safi, prefix, rd,
+                                       [LabelStackEntry(label, True)]
+                                       ))
 
     def generateVifBGPRoute(self, macAdress, ipAddress, label):
         # Generate BGP route and advertise it...
-        route = Route(VPNLabelledPrefix(self.afi,
-                                        self.safi,
-                                        Prefix(self.afi, ipAddress, 32),
-                                        RouteDistinguisher(
-                                            RouteDistinguisher.TYPE_IP_LOC,
-                                            None,
-                                            self.bgpManager.getLocalAddress(),
-                                            self.instanceId),
-                                        [LabelStackEntry(label, True)]
-                                        )
-                      )
+        route = self._routeFrom(Prefix(self.afi, ipAddress, 32), label,
+                                RouteDistinguisher(
+                                    RouteDistinguisher.TYPE_IP_LOC, None,
+                                    self.bgpManager.getLocalAddress(),
+                                    self.instanceId)
+                                )
+        self.log.debug("route attributes: %s", route.attributes)
 
         return self._newRouteEntry(self.afi, self.safi, self.exportRTs,
                                    route.nlri, route.attributes)
+
+    def _getLocalLabels(self):
+        for portData in self.macAddress2LocalPortData.itervalues():
+            yield portData['label']
+
+    def _getRDFromLabel(self, label):
+        # FIXME: this is a crude hack that will break beyond 10000 VRFs
+        return RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC, None,
+                                  self.bgpManager.getLocalAddress(),
+                                  10000+label)
+
+    @logDecorator.log
+    def _readvertise(self, nlri):
+        for label in self._getLocalLabels():
+            # need a distinct RD for each route...
+            route = self._routeFrom(nlri.prefix, label,
+                                    self._getRDFromLabel(label))
+
+            nh = Inet(1, socket.inet_pton(socket.AF_INET,
+                      self.dataplane.driver.getLocalAddress()))
+
+            route.attributes.add(NextHop(nh))
+
+            route.attributes.add(ECommunities(self.readvertiseToRTs))
+
+            routeEntry = self._newRouteEntry(self.afi, self.safi,
+                                             self.readvertiseToRTs,
+                                             route.nlri, route.attributes)
+            self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
+
+        self.readvertised.add(nlri.prefix)
+
+    @logDecorator.log
+    def _readvertiseStop(self, nlri):
+        for label in self._getLocalLabels():
+            route = self._routeFrom(nlri.prefix, label,
+                                    self._getRDFromLabel(label))
+            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
+                                             route.nlri, route.attributes)
+            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+
+        self.readvertised.remove(nlri.prefix)
+
+    def vifPlugged(self, macAddress, ipAddressPrefix, localPort):
+        VPNInstance.vifPlugged(self, macAddress, ipAddressPrefix, localPort)
+
+        label = self.macAddress2LocalPortData[macAddress]['label']
+        for prefix in self.readvertised:
+            route = self._routeFrom(prefix, label, self._getRDFromLabel(label))
+            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
+                                             route.nlri, route.attributes)
+            self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
+
+    def vifUnplugged(self, macAddress, ipAddressPrefix):
+        label = self.macAddress2LocalPortData[macAddress]['label']
+        for prefix in self.readvertised:
+            route = self._routeFrom(prefix, label, self._getRDFromLabel(label))
+            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
+                                             route.nlri, route.attributes)
+            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+
+        VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
@@ -82,12 +147,35 @@ class VRF(VPNInstance, LookingGlass):
         if isinstance(route.nlri, VPNLabelledPrefix):
             return route.nlri.prefix
         else:
-            raise Exception("VRF %d should not receive routes of type %s" %
-                            (self.instanceId, type(route.nlri)))
+            self.log.error("We should not receive routes of type %s",
+                           type(route.nlri))
+            return None
+
+    def _toReadvertise(self, route):
+        return (len(set(route.routeTargets).intersection(
+                    set(self.readvertiseFromRTs))) > 0)
+
+    def _imported(self, route):
+        return (len(set(route.routeTargets).intersection(
+                    set(self.readvertiseFromRTs))) > 0)
 
     @utils.synchronized
     @logDecorator.log
-    def _newBestRoute(self, prefix, newRoute):
+    def _newBestRoute(self, entry, newRoute):
+
+        prefix = entry
+
+        if self.readvertise:
+            # check if this is a route we need to re-advertise
+            self.log.debug("route RTs: %s", newRoute.routeTargets)
+            self.log.debug("readv from RTs: %s", self.readvertiseFromRTs)
+            if self._toReadvertise(newRoute):
+                self.log.debug("Need to re-advertise %s", prefix)
+                self._readvertise(newRoute.nlri)
+                if not self._imported(newRoute):
+                    self.log.debug("No need to setup dataplane for:%s", prefix)
+                    return
+
         encaps = self._checkEncaps(newRoute)
         if not encaps:
             return
@@ -98,7 +186,19 @@ class VRF(VPNInstance, LookingGlass):
 
     @utils.synchronized
     @logDecorator.log
-    def _bestRouteRemoved(self, prefix, oldRoute, last):
+    def _bestRouteRemoved(self, entry, oldRoute, last):
+
+        prefix = entry
+
+        if self.readvertise and last:
+            # check if this is a route we were re-advertising
+            if self._toReadvertise(oldRoute):
+                self.log.debug("Need to stop re-advertising %s", prefix)
+                self._readvertiseStop(oldRoute.nlri)
+                if not self._imported(oldRoute):
+                    self.log.debug("No need to setup dataplane for:%s", prefix)
+                    return
+
         if self._skipRouteRemoval(last):
             self.log.debug("Skipping removal of non-last route because "
                            "dataplane does not want it")
@@ -107,3 +207,9 @@ class VRF(VPNInstance, LookingGlass):
         self.dataplane.removeDataplaneForRemoteEndpoint(
             prefix, oldRoute.attributes.get(NextHop.ID).next_hop,
             oldRoute.nlri.labelStack[0].labelValue, oldRoute.nlri)
+
+    def getLGMap(self):
+        return {
+            "readvertised":  (LGMap.VALUE, [repr(prefix) for prefix in
+                                            self.readvertised])
+        }
