@@ -347,7 +347,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 try:
                     port = self.driver.find_ovs_port_number(portName)
                 except:
-                    self._runCommand("ovs-vsctl add-port %s %s" %
+                    self._runCommand("ovs-vsctl --may-exist add-port %s %s" %
                                      (self.bridge, portName))
                     port = self.driver.find_ovs_port_number(portName)
                 self.log.debug("Corresponding port number: %s", port)
@@ -446,9 +446,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                        localPort['linuxif'], ovs_port_from_vm, ovs_port_to_vm,
                        ipAddress)
         self._ovsPortInfo[localPort['linuxif']] = {
-            "ip_address": ipAddress,
             "localport_match": localport_match,
-            "vlan_specific": (push_vlan_action, strip_vlan_action),
             "port_unplug_action": port_unplug_action
         }
 
