@@ -140,7 +140,9 @@ def main():
                       default=DEFAULT_VPN_INSTANCE_ID)
     parser.add_option("--port", dest="port",
                       help="local port to attach/detach (use special port "
-                      "'netns' to have a local netns attached/detached)")
+                      "'netns[:if]' to have an interface to a local network "
+                      "namespace attached/detached "
+                      "[with 'if' as the name of the interface to the netns]")
 
     parser.add_option("--rt", dest="routeTargets",
                       help="route target [default: 64512:0] (can be "
@@ -153,13 +155,22 @@ def main():
                       "multiple times)", default=[], action="append")
 
     parser.add_option("--ip", dest="ip",
-                      help="IP address / mask (mask defaults to /24)")
+                      help="IP prefix / mask (mask defaults to /24)")
     parser.add_option("--gateway-ip", dest="gw_ip",
                       help="IP address of network gateway (optional, "
                       "defaults to last IP in range)")
     parser.add_option("--mac", dest="mac",
                       help="MAC address (required for evpn if port"
                       " is not 'netns')")
+
+    parser.set_defaults(advertiseSubnet=False)
+    parser.add_option("--advertise-singleton", action="store_false",
+                      dest="advertiseSubnet",
+                      help="advertise IP address as a /32 (default)")
+
+    parser.add_option("--advertise-subnet", action="store_true",
+                      dest="advertiseSubnet",
+                      help="advertise the whole IP subnet")
 
     parser.add_option("--ovs-preplug", action="store_true", dest="ovs_preplug",
                       default=False, help="should we prealably plug the port "
@@ -175,9 +186,6 @@ def main():
     parser.add_option("--netns", dest="netns",
                       help="name of network namespace (optional, for use with"
                       " --port netns)")
-    parser.add_option("--if2netns", dest="if2netns",
-                      help="name of interface from VPN to network namespace "
-                      "(optional, for use with --port netns)")
     parser.add_option("--if2vpn", dest="if2vpn", default=NS2VPN_DEFAULT_IFNAME,
                       help="name of interface in netns toward VPN"
                       "defaults to %default "
@@ -223,7 +231,7 @@ def main():
     for rt in options.exportOnlyRouteTargets:
         exportRTs.append(rt)
 
-    if not re.match('.*/[1-9][0-9]{0,2}$', options.ip):
+    if not re.match('.*/[0-9]+$', options.ip):
         options.ip = options.ip + "/24"
 
     if not(options.gw_ip):
@@ -235,12 +243,14 @@ def main():
         options.vpn_instance_id = "%s-%s" % (
             options.network_type, options.vpn_instance_id)
 
-    if options.port == "netns":
+    if options.port.startswith("netns"):
 
         if not options.netns:
             options.netns = options.vpn_instance_id
 
-        if not options.if2netns:
+        try:
+            (_, options.if2netns) = options.port.split(":")
+        except:
             options.if2netns = get_vpn2ns_if_name(options.netns)
 
         if options.operation == "attach":
@@ -298,6 +308,7 @@ def main():
                             "gateway_ip":  options.gw_ip,
                             "mac_address": options.mac,
                             "ip_address":  options.ip,
+                            "advertise_subnet": options.advertiseSubnet,
                             "readvertise": readvertise
                             })
 
