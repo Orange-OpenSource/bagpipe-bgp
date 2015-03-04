@@ -330,11 +330,9 @@ Caveats
 
 * release early, release often: not everything is perfect yet
 * BGP implementation not written for compliancy
+  * the BaGPipe BGP daemon does not listen for incoming BGP connections
   * the state machine, in particular retry timers are certainly not compliant yet
-  * the BaGPipe BGP daemon does not listen for incoming BGP connections 
-  * however, basic interop testing has been done
-* currently, the VRF code will only advertise /32 addresses, and does not
-  support aggregation
+  * however, interop testing has been done with a fair amount of implementations
 * MPLS-over-GRE is supported for IP VPNs, but is not yet standard
   (OpenVSwitch currently does MPLS-o-Ethernet-o-GRE and not MPLS-o-GRE)
 
