@@ -34,6 +34,10 @@ log = logging.getLogger(__name__)
 LOOKING_GLASS_BASE = "looking-glass"
 
 
+class APIException(Exception):
+    pass
+
+
 class RESTAPI(LookingGlass):
 
     """BGP component REST API."""
@@ -107,6 +111,10 @@ class RESTAPI(LookingGlass):
                 'evpn' in params['local_port']):
             abort(400, "Mandatory key is missing in local_port parameter"
                   "(linuxif, or evpn)")
+
+        if not isinstance(params.get('advertise_subnet', False), bool):
+            abort(400, "'advertise_subnet' must be a boolean")
+
         return params
 
     def attach_localport(self):
@@ -120,6 +128,9 @@ class RESTAPI(LookingGlass):
         'gateway_ip': IP address of gateway for this VPN instance
         'mac_address': MAC address of endpoint to connect to the VPN instance
         'ip_address': IP/mask of endpoint to connect to the VPN instance
+        'advertise_subnet': optional, if set to True then VRF will advertise
+                            the whole subnet (defaults to False, readvertise
+                            ip_address as a singleton (/32)
         'linuxbr': Name of a linux bridge to which the linuxif is already
                  plugged-in (optional)
         'local_port': local port to plug to the VPN instance
@@ -188,12 +199,17 @@ class RESTAPI(LookingGlass):
                                          attach_params['gateway_ip'],
                                          attach_params['local_port'],
                                          attach_params.get('linuxbr'),
+                                         attach_params.get('advertise_subnet',
+                                                           False),
                                          attach_params.get('readvertise'))
+        except APIException as e:
+            log.warning('attach_localport: API parameter error: %s', e)
+            abort(400, "API parameter error: %s" % e)
         except Exception as e:
             log.error('attach_localport: An error occurred during local port'
                       ' plug to VPN: %s', e)
             log.info(traceback.format_exc())
-            abort(400, 'An error occurred during local port plug to VPN')
+            abort(500, 'An error occurred during local port plug to VPN')
 
     def detach_localport(self):
 
@@ -210,12 +226,18 @@ class RESTAPI(LookingGlass):
             self.vpnManager.unplugVifFromVPN(detach_params['vpn_instance_id'],
                                              detach_params['mac_address'],
                                              detach_params['ip_address'],
-                                             detach_params['local_port'])
+                                             detach_params['local_port'],
+                                             detach_params.get(
+                                                 'advertise_subnet', False),
+                                             )
+        except APIException as e:
+            log.warning('detach_localport: API parameter error: %s', e)
+            abort(400, "API parameter error: %s" % e)
         except Exception as e:
             log.error('detach_localport: An error occurred during local port'
                       ' unplug from VPN: %s', e)
             log.info(traceback.format_exc())
-            abort(400, 'An error occurred during local port unplug from VPN')
+            abort(500, 'An error occurred during local port unplug from VPN')
 
     def looking_glass_root(self):
         return self.looking_glass('/')

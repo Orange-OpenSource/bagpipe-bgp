@@ -66,9 +66,9 @@ class VRF(VPNInstance, LookingGlass):
                                        [LabelStackEntry(label, True)]
                                        ))
 
-    def generateVifBGPRoute(self, macAdress, ipAddress, label):
+    def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
-        route = self._routeFrom(Prefix(self.afi, ipAddress, 32), label,
+        route = self._routeFrom(Prefix(self.afi, ipPrefix, prefixLen), label,
                                 RouteDistinguisher(
                                     RouteDistinguisher.TYPE_IP_LOC, None,
                                     self.bgpManager.getLocalAddress(),
@@ -121,8 +121,10 @@ class VRF(VPNInstance, LookingGlass):
 
         self.readvertised.remove(nlri.prefix)
 
-    def vifPlugged(self, macAddress, ipAddressPrefix, localPort):
-        VPNInstance.vifPlugged(self, macAddress, ipAddressPrefix, localPort)
+    def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
+                   advertiseSubnet):
+        VPNInstance.vifPlugged(self, macAddress, ipAddressPrefix, localPort,
+                               advertiseSubnet)
 
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
@@ -131,7 +133,7 @@ class VRF(VPNInstance, LookingGlass):
                                              route.nlri, route.attributes)
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
 
-    def vifUnplugged(self, macAddress, ipAddressPrefix):
+    def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
             route = self._routeFrom(prefix, label, self._getRDFromLabel(label))
@@ -139,7 +141,8 @@ class VRF(VPNInstance, LookingGlass):
                                              route.nlri, route.attributes)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
-        VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix)
+        VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
+                                 advertiseSubnet)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 

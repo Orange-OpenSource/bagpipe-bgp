@@ -231,7 +231,7 @@ class VPNManager(LookingGlass):
     @logDecorator.logInfo
     def plugVifToVPN(self, externalInstanceId, instanceType, importRTs,
                      exportRTs, macAddress, ipAddress, gatewayIP,
-                     localPort, linuxbr, readvertise):
+                     localPort, linuxbr, advertiseSubnet, readvertise):
 
         # Verify and format IP address with prefix if necessary
         try:
@@ -307,7 +307,8 @@ class VPNManager(LookingGlass):
             self._attach_evpn2ipvpn(localPort, vpnInstance)
 
         # Plug VIF to VPN instance
-        vpnInstance.vifPlugged(macAddress, ipAddressPrefix, localPort)
+        vpnInstance.vifPlugged(macAddress, ipAddressPrefix, localPort,
+                               advertiseSubnet)
 
     @logDecorator.logInfo
     def unplugVifFromVPN(self, externalInstanceId, macAddress, ipAddress,

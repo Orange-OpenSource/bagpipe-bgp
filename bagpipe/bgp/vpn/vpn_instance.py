@@ -24,6 +24,9 @@ from copy import copy
 from threading import Thread
 from threading import Lock
 
+from netaddr.ip import IPNetwork
+import netaddr
+
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
@@ -41,6 +44,8 @@ from bagpipe.exabgp.message.update.attribute.id import AttributeID
 
 from bagpipe.exabgp.message.update.attribute.nexthop import NextHop
 from bagpipe.exabgp.structure.ip import Inet
+
+from bagpipe.bgp.rest_api import APIException
 
 
 class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
@@ -110,9 +115,12 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         if readvertise:
             self.readvertise = True
-            self.readvertiseFromRTs = readvertise['from_rt']
-            self.readvertiseToRTs = readvertise['to_rt']
-            self.log.debug("readvertise enabled, from %s, to %s",
+            try:
+                self.readvertiseToRTs = readvertise['to_rt']
+            except KeyError:
+                raise APIException("'readvertise' specified with no 'to_rt'")
+            self.readvertiseFromRTs = readvertise.get('from_rt', [])
+            self.log.debug("readvertise enabled, from RT:%s, to %s",
                            self.readvertiseFromRTs, self.readvertiseToRTs)
             for rt in self.readvertiseFromRTs:
                 self._subscribe(self.afi, self.safi, rt)
@@ -198,7 +206,10 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         ipAddress = ""
         mask = 0
         try:
-            (ipAddress, mask) = ipAddressPrefix.split('/')
+            net = IPNetwork(ipAddressPrefix)
+            (ipAddress, mask) = (str(net.ip), net.prefixlen)
+        except netaddr.core.AddrFormatError as e:
+            raise APIException("Bogus IP prefix: %s" % ipAddressPrefix)
         except ValueError as e:
             self.log.error("Cannot split %s into address/mask (%s)",
                            ipAddressPrefix, e)
@@ -219,11 +230,12 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         return ecommunities
 
     @abstractmethod
-    def generateVifBGPRoute(self, macAddress, ipAddress, label):
+    def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         pass
 
-    def synthesizeVifBGPRoute(self, macAddress, ipAddress, label):
-        routeEntry = self.generateVifBGPRoute(macAddress, ipAddress, label)
+    def synthesizeVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
+        routeEntry = self.generateVifBGPRoute(macAddress, ipPrefix, prefixLen,
+                                              label)
         assert(isinstance(routeEntry, RouteEntry))
 
         nh = Inet(1, socket.inet_pton(socket.AF_INET,
@@ -235,7 +247,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     @utils.synchronized
     @logDecorator.logInfo
-    def vifPlugged(self, macAddress, ipAddressPrefix, localPort):
+    def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
+                   advertiseSubnet=False):
         # Check if this port has already been plugged
         # - Verify port informations consistency
         if macAddress in self.macAddress2LocalPortData:
@@ -262,9 +275,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         # Else, plug port on dataplane
         try:
             # Parse address/mask
-            (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
+            (ipPrefix, prefixLen) = self._parseIPAddressPrefix(ipAddressPrefix)
 
-            self.log.debug("Plugging port (%s)", ipAddress)
+            self.log.debug("Plugging port (%s)", ipPrefix)
 
             portData = dict()
             portData['label'] = self.labelAllocator.getNewLabel(
@@ -275,14 +288,19 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             portData["port_info"] = localPort
 
             # Call driver to setup the dataplane for incoming traffic
-            self.dataplane.vifPlugged(
-                macAddress, ipAddress, localPort, portData['label'])
+            self.dataplane.vifPlugged(macAddress, ipPrefix,
+                                      localPort, portData['label'])
+
+            if not advertiseSubnet:
+                self.log.debug("Will advertise as /32 instead of /%d" %
+                               prefixLen)
+                prefixLen = 32
 
             self.log.info("Synthesizing and advertising BGP route for VIF %s "
-                          "endpoint (%s, %s)", localPort['linuxif'],
-                          macAddress, ipAddressPrefix)
+                          "endpoint (%s, %s/%d)", localPort['linuxif'],
+                          macAddress, ipPrefix, prefixLen)
             routeEntry = self.synthesizeVifBGPRoute(macAddress,
-                                                    ipAddress,
+                                                    ipPrefix, prefixLen,
                                                     portData['label'])
 
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
@@ -291,7 +309,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                 self.localPort2Endpoints[localPort['linuxif']] = list()
 
             self.localPort2Endpoints[localPort['linuxif']].append(
-                {'mac': macAddress, 'ip': ipAddressPrefix}
+                {'mac': macAddress, 'ip': ipAddressPrefix,
+                 }
             )
             self.macAddress2LocalPortData[macAddress] = portData
             self.ipAddress2MacAddress[ipAddressPrefix] = macAddress
@@ -314,7 +333,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     @utils.synchronized
     @logDecorator.logInfo
-    def vifUnplugged(self, macAddress, ipAddressPrefix):
+    def vifUnplugged(self, macAddress, ipAddressPrefix,
+                     advertiseSubnet = False):
         # Verify port and endpoint (MAC address, IP address) tuple consistency
         portData = self.macAddress2LocalPortData.get(macAddress)
         if (not portData or
@@ -338,22 +358,27 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         if localPort['linuxif'] in self.localPort2Endpoints:
             # Parse address/mask
-            (ipAddress, _) = self._parseIPAddressPrefix(ipAddressPrefix)
+            (ipPrefix, prefixLen) = self._parseIPAddressPrefix(ipAddressPrefix)
 
             lastEndpoint = len(self.localPort2Endpoints[localPort['linuxif']
                                                         ]) <= 1
 
+            if not advertiseSubnet:
+                self.log.debug("Will advertise as /32 instead of /%d" %
+                               prefixLen)
+                prefixLen = 32
+
             self.log.info("Synthesizing and withdrawing BGP route for VIF %s "
-                          "endpoint (%s, %s)",
-                          localPort['linuxif'], macAddress, ipAddressPrefix)
+                          "endpoint (%s, %s/%d)", localPort['linuxif'],
+                          macAddress, ipPrefix, prefixLen)
             routeEntry = self.synthesizeVifBGPRoute(macAddress,
-                                                    ipAddress,
+                                                    ipPrefix, prefixLen,
                                                     label)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
             # Unplug endpoint from data plane
             self.dataplane.vifUnplugged(
-                macAddress, ipAddress, localPort, label, lastEndpoint)
+                macAddress, ipPrefix, localPort, label, lastEndpoint)
 
             # Free label to the allocator
             self.labelAllocator.release(label)

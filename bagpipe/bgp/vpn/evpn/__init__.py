@@ -164,8 +164,10 @@ class EVI(VPNInstance, LookingGlass):
         self._pushEvent(
             RouteEvent(RouteEvent.ADVERTISE, self.multicastRouteEntry))
 
-    def generateVifBGPRoute(self, macAddress, ipAddress, label):
+    def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
+
+        assert(prefixLen == 32)
 
         lse = LabelStackEntry(label, True)
         etag = None
@@ -184,7 +186,7 @@ class EVI(VPNInstance, LookingGlass):
                 etag,
                 MAC(macAddress),
                 lse,
-                ipAddress
+                ipPrefix
             )
         )
 
