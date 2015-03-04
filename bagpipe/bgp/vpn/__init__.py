@@ -312,7 +312,7 @@ class VPNManager(LookingGlass):
 
     @logDecorator.logInfo
     def unplugVifFromVPN(self, externalInstanceId, macAddress, ipAddress,
-                         localPort):
+                         localPort, readvertise):
 
         # Verify and format IP address with prefix if necessary
         try:
@@ -329,7 +329,7 @@ class VPNManager(LookingGlass):
             raise exc.VPNNotFound(externalInstanceId)
 
         # Unplug VIF from VPN instance
-        vpnInstance.vifUnplugged(macAddress, ipAddressPrefix)
+        vpnInstance.vifUnplugged(macAddress, ipAddressPrefix, readvertise)
 
         if vpnInstance.type == "ipvpn" and 'evpn' in localPort:
             self._detach_evpn2ipvpn(vpnInstance)
