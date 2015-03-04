@@ -61,4 +61,7 @@ function wait_ready {
 	done
 }
 
+function clean_stop {
+	r_both /etc/init.d/bagpipe-bgp stop
+}
 

@@ -110,3 +110,5 @@ r_b bagpipe-looking-glass vpns instances net2vm2 dataplane flows
 
 r_both bagpipe-looking-glass logs
 
+clean_stop
+
