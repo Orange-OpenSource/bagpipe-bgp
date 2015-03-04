@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# Will setup netns $1 so that traffic from ifa is routed with a default route to gateway b on ifb
+# and traffic from ifb is routed with a default route to gateway a on ifa.
+#
+# Example use: setup-cross-routing mynetns eth_left 100.0.0.254 eth_right 200.0.0.254
+#
+
+netns=$1
+if_a=$2
+gw_a=$3
+if_b=$4
+gw_b=$5
+
+table_to_a=11
+table_to_b=12
+
+exec="ip netns exec $netns"
+
+echo "Setting up cross-routing in $netns between $if_a/$gw_a and $if_b/$gw_b"
+
+$exec ip route add table $table_to_a default via $gw_a dev $if_a 
+$exec ip route add table $table_to_b default via $gw_b dev $if_b 
+
+$exec ip rule add iif $if_a table $table_to_b prio 1000
+$exec ip rule add iif $if_b table $table_to_a prio 1000
+
+for if_ in $if_a $if_b; do
+	$exec sysctl "net.ipv4.conf.${if_}.forwarding=1"
+done
+
+

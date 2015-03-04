@@ -1,0 +1,64 @@
+#!/bin/bash
+
+hostA=$1
+shift
+hostB=$1
+shift
+
+###############################################################################
+
+function r_both {
+	echo "$hostA: ssh $hostA $*" >&2
+	ssh $hostA "$*"
+	[ $? -gt 0 ] && return $?
+	echo "$hostB: ssh $hostB $*" >&2
+	ssh $hostB "$*"
+	return $?
+}
+function r_a {
+	echo "$hostA: ssh $hostA $*" >&2
+	ssh $hostA "$*"
+	return $?
+}
+function r_b {
+	echo "$hostB: ssh $hostB $*" >&2
+	ssh $hostB "$*"
+	return $?
+}
+
+###############################################################################
+
+
+if [ -z "$hostA" -o -z "$hostB" ]; then
+ 	echo "You need to specify the two bagpipe-bgp hosts to use on the command line (you specified: $hostA $hostB)"
+ 	echo "   e.g. $0 myserverA myserverB"
+	exit -1
+fi
+
+r_a echo foo || (echo "ssh must be setup for $hostA with public-key login" && false) || exit -1
+r_b echo foo || (echo "ssh must be setup for $hostB with public-key login" && false) || exit -1
+
+scp $(dirname $0)/setup-cross-routing $hostA:
+scp $(dirname $0)/setup-cross-routing $hostB:
+
+###############################################################################
+
+function clean_start {
+	r_both /etc/init.d/bagpipe-bgp start
+	if r_a 'test $(bagpipe-looking-glass summary vpn_instances_count) -ge 1'; then
+		r_a /etc/init.d/bagpipe-bgp restart
+	fi
+
+	if r_b 'test $(bagpipe-looking-glass summary vpn_instances_count) -ge 1'; then
+		r_b /etc/init.d/bagpipe-bgp restart
+	fi
+}
+
+function wait_ready {
+	while (test $(r_a bagpipe-looking-glass summary BGP_established_peers) -eq 0); do
+		echo .
+	        sleep 1
+	done
+}
+
+
