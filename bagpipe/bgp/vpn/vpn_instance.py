@@ -210,10 +210,6 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             (ipAddress, mask) = (str(net.ip), net.prefixlen)
         except netaddr.core.AddrFormatError as e:
             raise APIException("Bogus IP prefix: %s" % ipAddressPrefix)
-        except ValueError as e:
-            self.log.error("Cannot split %s into address/mask (%s)",
-                           ipAddressPrefix, e)
-            raise Exception("Cannot split %s into address/mask (%s)")
 
         return (ipAddress, mask)
 
@@ -257,18 +253,19 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             portData = self.macAddress2LocalPortData[macAddress]
 
             if (portData.get("port_info") != localPort):
-                raise Exception("Port information is not consistent. MAC "
-                                "address cannot be bound to two different"
-                                "ports. Previous plug for port %s (%s != %s)" %
-                                (localPort['linuxif'],
-                                 portData.get("port_info"), localPort))
+                raise APIException("Port information is not consistent. MAC "
+                                   "address cannot be bound to two different"
+                                   "ports. Previous plug for port %s "
+                                   "(%s != %s)" % (localPort['linuxif'],
+                                                   portData.get("port_info"),
+                                                   localPort))
 
         # - Verify (MAC address, IP address) tuple consistency
         if ipAddressPrefix in self.ipAddress2MacAddress:
             if self.ipAddress2MacAddress.get(ipAddressPrefix) != macAddress:
-                raise Exception("Inconsistent endpoint info: %s already bound "
-                                "to a MAC address different from %s" %
-                                (ipAddressPrefix, macAddress))
+                raise APIException("Inconsistent endpoint info: %s already "
+                                   "bound to a MAC address different from %s" %
+                                   (ipAddressPrefix, macAddress))
             else:
                 return
 
@@ -334,7 +331,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     @utils.synchronized
     @logDecorator.logInfo
     def vifUnplugged(self, macAddress, ipAddressPrefix,
-                     advertiseSubnet = False):
+                     advertiseSubnet=False):
         # Verify port and endpoint (MAC address, IP address) tuple consistency
         portData = self.macAddress2LocalPortData.get(macAddress)
         if (not portData or
@@ -342,9 +339,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.log.error("vifUnplugged called for endpoint (%s, %s), but no "
                            "consistent informations or was not plugged yet",
                            macAddress, ipAddressPrefix)
-            raise Exception("No consistent endpoint (%s, %s) informations or "
-                            "was not plugged yet, cannot unplug" %
-                            (macAddress, ipAddressPrefix))
+            raise APIException("No consistent endpoint (%s, %s) informations "
+                               "or was not plugged yet, cannot unplug" %
+                               (macAddress, ipAddressPrefix))
 
         # Finding label and local port informations
         label = portData.get('label')
@@ -353,8 +350,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.log.error("vifUnplugged called for endpoint (%s, %s), but "
                            "port data (%s, %s) is incomplete",
                            macAddress, ipAddressPrefix, label, localPort)
-            raise Exception("Inconsistent informations for port, bug "
-                            "in BaGPipe BGP?")
+            raise Exception("Inconsistent informations for port, bug ?")
 
         if localPort['linuxif'] in self.localPort2Endpoints:
             # Parse address/mask
