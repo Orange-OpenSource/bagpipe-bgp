@@ -18,6 +18,8 @@
 
 import os.path
 
+import sys
+
 from logging import Logger
 import logging.config
 
@@ -217,6 +219,9 @@ def daemon_main():
                       help="Do not daemonize", default=True)
     (options, _) = parser.parse_args()
 
+    action = sys.argv[1]
+    assert(action == "start" or action == "stop")
+
     if not os.path.isfile(options.logFile):
         logging.basicConfig()
         print "no logging configuration file at %s" % options.logFile
@@ -224,7 +229,13 @@ def daemon_main():
     else:
         logging.config.fileConfig(
             options.logFile, disable_existing_loggers=False)
-        logging.root.name = "[BgpDaemon]"
+
+    if action == "start":
+        logging.root.name = "Main"
+        logging.info("Starting...")
+    else:  # stop
+        logging.root.name = "Stopper"
+        logging.info("Signal daemon to stop")
 
     catchAllLogHandler = LookingGlassLogHandler()
 
@@ -238,8 +249,6 @@ def daemon_main():
     logging.root.addHandler(catchAllLogHandler)
 
     # logging_tree.printout()
-
-    logging.info("Starting")
 
     config = _loadConfig(options.configFile)
 
