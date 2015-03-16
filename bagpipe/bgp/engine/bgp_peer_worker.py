@@ -83,6 +83,10 @@ class FSM(object):
         return self._state
 
 
+class StoppedException(Exception):
+    pass
+
+
 class InitiateConnectionException(Exception):
     pass
 
@@ -191,6 +195,9 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
             return
             # FIXME: we should transition to Active or Idle state depending how
             # many times we already tried
+        except StoppedException:
+            self.log.info("Stopped during connection init")
+            return
         except Exception as e:
             self.log.warning("Exception while initiating connection: %s", e)
             if self.log.isEnabledFor(logging.DEBUG):

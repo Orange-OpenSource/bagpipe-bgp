@@ -26,7 +26,7 @@ from time import sleep
 
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker, \
     KeepAliveReceived, SendKeepAlive, FSM, InitiateConnectionException, \
-    OpenWaitTimeout
+    OpenWaitTimeout, StoppedException
 from bagpipe.bgp.engine import RouteEvent
 
 from bagpipe.bgp.common.looking_glass import LookingGlass
@@ -182,7 +182,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 # FIXME
 
         if self.shouldStop:
-            raise Exception("shouldStop")
+            raise StoppedException()
 
         # An Open was received
         received_open = message
