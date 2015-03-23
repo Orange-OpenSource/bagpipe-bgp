@@ -346,6 +346,10 @@ class RouteTableManager(Thread, LookingGlass):
 
         self._checkMatch2workersAndEntriesCleanup(match)
 
+        if ('_rtm_matches' not in sub.worker.__dict__ or
+                not sub.worker._rtm_matches):
+            self._workers.pop(sub.worker.name, None)
+
         # self._dumpState()
 
     def _matchesFor(self, afi, safi, routeTargets):

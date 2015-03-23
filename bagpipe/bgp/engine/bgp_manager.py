@@ -212,7 +212,7 @@ class Manager(LookingGlass):
         attributes.add(NextHop(self.config['local_address']))
 
         routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.rtc),
-                                [], nlri, attributes, self)
+                                nlri, attributes)
 
         return routeEntry
 

@@ -136,9 +136,6 @@ class Worker(LookingGlass):
             routeEvent.source = self
         self.bgpManager._pushEvent(routeEvent)
 
-    def _newRouteEntry(self, afi, safi, rts, nlri, attributes=None):
-        return RouteEntry(afi, safi, rts, nlri, attributes, self)
-
     def __repr__(self):
         return "Worker %s" % (self.name)
 

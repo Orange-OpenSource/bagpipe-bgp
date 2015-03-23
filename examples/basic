@@ -24,5 +24,5 @@ echo "---------------------- logs --------------------"
 echo
 r_both bagpipe-looking-glass logs
 
-clean_stop
+#clean_stop
 

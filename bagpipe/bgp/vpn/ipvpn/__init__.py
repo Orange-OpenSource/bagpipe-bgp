@@ -24,7 +24,7 @@ from bagpipe.bgp.common import logDecorator
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
-from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
 from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver
 
@@ -90,8 +90,7 @@ class VRF(VPNInstance, LookingGlass):
         # FIXME: action is set to ANNOUNCE, need be able to override it
         #        from caller ?
 
-        return self._newRouteEntry(self.afi, self.safi, self.exportRTs,
-                                   nlri, Attributes())
+        return RouteEntry(self.afi, self.safi, nlri)
 
     def _getLocalLabels(self):
         for portData in self.macAddress2LocalPortData.itervalues():
@@ -117,9 +116,8 @@ class VRF(VPNInstance, LookingGlass):
 
             attributes.add(ExtendedCommunities(self.readvertiseToRTs))
 
-            routeEntry = self._newRouteEntry(self.afi, self.safi,
-                                             self.readvertiseToRTs,
-                                             nlri, attributes)
+            routeEntry = RouteEntry(self.afi, self.safi, nlri,
+                                    self.readvertiseToRTs, attributes)
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
 
         self.readvertised.add(nlri.prefix)
@@ -130,8 +128,7 @@ class VRF(VPNInstance, LookingGlass):
             nlri = self._nlriFrom(prefixFromNLRI(nlri), label,
                                   self._getRDFromLabel(label),
                                   OUT.WITHDRAW)
-            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
-                                             nlri, Attributes())
+            routeEntry = RouteEntry(self.afi, self.safi, nlri)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
         self.readvertised.remove(nlri.prefix)
@@ -145,15 +142,16 @@ class VRF(VPNInstance, LookingGlass):
         for prefix in self.readvertised:
             nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label),
                                   OUT.ANNOUNCE)
-            routeEntry = self._newRouteEntry(self.afi, self.safi, None, nlri)
+            routeEntry = RouteEntry(self.afi, self.safi, nlri,
+                                    self.readvertiseToRTs)
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
             nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label),
-                                  OUT.ANNOUNCE)
-            routeEntry = self._newRouteEntry(self.afi, self.safi, None, nlri)
+                                  OUT.WITHDRAW)
+            routeEntry = RouteEntry(self.afi, self.safi, nlri)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,

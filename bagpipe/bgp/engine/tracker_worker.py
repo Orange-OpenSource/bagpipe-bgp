@@ -54,8 +54,7 @@ class FilteredRouteEntry(RouteEntry):
             if attributeId in keepAttributes:
                 attributes.add(attribute)
 
-        RouteEntry.__init__(
-            self, re.afi, re.safi, re.routeTargets, re.nlri, attributes, None)
+        RouteEntry.__init__(self, re.afi, re.safi, re.nlri, attributes, None)
 
 
 def filteredRoutes(routes):

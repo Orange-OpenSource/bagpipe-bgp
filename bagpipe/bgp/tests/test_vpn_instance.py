@@ -104,8 +104,7 @@ class TestVPNInstance(TestCase):
                                                None)
         self.vpnInstance.synthesizeVifBGPRoute = mock.Mock(
             return_value=RouteEntry(self.vpnInstance.afi,
-                                    self.vpnInstance.safi, NLRI1, RT1,
-                                    Attributes(), None))
+                                    self.vpnInstance.safi, NLRI1, [RT1]))
         self.vpnInstance._pushEvent = mock.Mock()
         self.vpnInstance._postFirstPlug = mock.Mock()
         self.vpnInstance.start()
@@ -549,5 +548,4 @@ class TestVPNInstance(TestCase):
         self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2)
         self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2)
 
-        print "\n"
-        print self.vpnInstance.getLGLocalPortData("")
+        self.vpnInstance.getLGLocalPortData("")

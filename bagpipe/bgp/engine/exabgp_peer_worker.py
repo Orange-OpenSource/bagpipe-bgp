@@ -27,7 +27,7 @@ from time import sleep
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker, \
     KeepAliveReceived, SendKeepAlive, FSM, InitiateConnectionException, \
     OpenWaitTimeout, StoppedException
-from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
 from bagpipe.bgp.common.looking_glass import LookingGlass
 
@@ -306,18 +306,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     def _processReceivedRoute(self, route):
         self.log.info("Received route: %s", route)
 
-        rts = []
-        if AttributeID.EXTENDED_COMMUNITY in route.attributes:
-            rts = [ecom for ecom in route.attributes[
-                   AttributeID.EXTENDED_COMMUNITY].communities
-                   if isinstance(ecom, RouteTarget)]
-
-            if not rts:
-                raise Exception("Unable to find any Route Targets"
-                                "in the received route")
-
-        routeEntry = self._newRouteEntry(route.nlri.afi, route.nlri.safi, rts,
-                                         route.nlri, route.attributes)
+        routeEntry = RouteEntry(route.nlri.afi, route.nlri.safi,
+                                route.nlri, route.attributes)
 
         if route.action == "announce":
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))

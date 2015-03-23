@@ -64,7 +64,7 @@ class BaseTestBagPipeBGP():
         attributes.add(NextHop(nh))
         attributes.add(LocalPreference(lp))
         routeEvent = RouteEvent(eventType, RouteEntry(
-            afi, safi, rts, nlri, attributes, source), source)
+            afi, safi, nlri, rts, attributes, source), source)
         routeEvent.setReplacedRoute(replacedRouteEntry)
 
         self.eventTargetWorker.enqueue(routeEvent)

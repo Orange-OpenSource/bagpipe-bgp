@@ -23,7 +23,7 @@ import socket
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.vpn.dataplane_drivers import \
@@ -164,14 +164,12 @@ class EVI(VPNInstance, LookingGlass):
             socket.AF_INET, self.dataplaneDriver.getLocalAddress()))
         route.attributes.add(NextHop(nh))
 
-        self.multicastRouteEntry = self._newRouteEntry(self.afi,
-                                                       self.safi,
-                                                       self.exportRTs,
-                                                       route.nlri,
-                                                       route.attributes)
+        self.multicastRouteEntry = RouteEntry(self.afi, self.safi,
+                                              route.nlri, route.attributes,
+                                              self.exportRTs)
 
-        self._pushEvent(
-            RouteEvent(RouteEvent.ADVERTISE, self.multicastRouteEntry))
+        self._pushEvent(RouteEvent(RouteEvent.ADVERTISE,
+                                   self.multicastRouteEntry))
 
     def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
@@ -199,8 +197,7 @@ class EVI(VPNInstance, LookingGlass):
             )
         )
 
-        return self._newRouteEntry(self.afi, self.safi, self.exportRTs,
-                                   route.nlri, route.attributes)
+        return RouteEntry(self.afi, self.safi, nlri)
 
     @logDecorator.log
     def setGatewayPort(self, linuxif, ipvpn):

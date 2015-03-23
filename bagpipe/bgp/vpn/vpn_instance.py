@@ -191,17 +191,17 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
                               routeEntry.nlri, newExportRTs)
 
-                updatedAttributes = copy(routeEntry.attributes)
-                del updatedAttributes[Attribute.CODE.EXTENDED_COMMUNITY]
-                updatedAttributes.add(self._genExtendedCommunities())
+                updatedRouteEntry = RouteEntry(routeEntry.afi, routeEntry.safi,
+                                               routeEntry.nlri, None,
+                                               copy(routeEntry.attributes))
+                # reset the routeTargets
+                # will RTs originally present in routeEntry.attributes
+                updatedRouteEntry.setRouteTargets(self.exportRTs)
 
-                updatedRouteEntry = self._newRouteEntry(
-                    routeEntry.afi, routeEntry.safi, self.exportRTs,
-                    routeEntry.nlri, updatedAttributes)
                 self.log.debug("   updated route: %s", updatedRouteEntry)
 
-                self._pushEvent(
-                    RouteEvent(RouteEvent.ADVERTISE, updatedRouteEntry))
+                self._pushEvent(RouteEvent(RouteEvent.ADVERTISE,
+                                           updatedRouteEntry))
 
     def _parseIPAddressPrefix(self, ipAddressPrefix):
         ipAddress = ""
@@ -228,7 +228,11 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         return ecommunities
 
     @abstractmethod
+    #FIXME: to be changed into a generateVifBGPNLRI
     def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
+        '''
+        returns a RouteEntry
+        '''
         pass
 
     def synthesizeVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
@@ -239,6 +243,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         routeEntry.attributes.add(
             NextHop(self.dataplane.driver.getLocalAddress()))
         routeEntry.attributes.add(self._genExtendedCommunities())
+        routeEntry.setRouteTargets(self.exportRTs)
 
         return routeEntry
 

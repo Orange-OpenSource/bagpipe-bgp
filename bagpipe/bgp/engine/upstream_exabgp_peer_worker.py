@@ -21,12 +21,13 @@ import time
 import traceback
 
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.bgp_peer_worker import KeepAliveReceived
-from bagpipe.bgp.engine.bgp_peer_worker import SendKeepAlive
 from bagpipe.bgp.engine.bgp_peer_worker import FSM
+from bagpipe.bgp.engine.bgp_peer_worker import KeepAliveReceived
 from bagpipe.bgp.engine.bgp_peer_worker import InitiateConnectionException
-from bagpipe.bgp.engine.bgp_peer_worker import OpenWaitTimeout, StoppedException
+from bagpipe.bgp.engine.bgp_peer_worker import OpenWaitTimeout
+from bagpipe.bgp.engine.bgp_peer_worker import StoppedException
 
+from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
 
 from bagpipe.bgp.common.looking_glass import LookingGlass
@@ -145,6 +146,7 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
             if self.shouldStop or action == ACTION.CLOSE:
                 raise StoppedException()
+        #FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
 
         # check the capabilities of the session just established...
 
@@ -251,11 +253,8 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             self.log.warning("Received unexpected message: %s", message)
 
         if isinstance(message, Update):
-            self.log.info("Received message: UPDATE...")
             if message.nlris:
                 for nlri in message.nlris:
-                    self.log.info("Received message: UPDATE nlri: %s, type:%s", nlri, type(nlri))
-                    self.log.info("Received message: UPDATE %s", nlri.action)
                     if nlri.action == IN.ANNOUNCED:
                         action = RouteEvent.ADVERTISE
                     elif nlri.action == IN.WITHDRAWN:
@@ -282,8 +281,8 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 raise Exception("Unable to find any Route Targets"
                                 "in the received route")
 
-        routeEntry = self._newRouteEntry(nlri.afi, nlri.safi, rts,
-                                         nlri, attributes)
+        routeEntry = RouteEntry(nlri.afi, nlri.safi,
+                                nlri, rts, attributes)
 
         self._pushEvent(RouteEvent(action, routeEntry))
 

@@ -48,46 +48,66 @@ from exabgp.bgp.message.update import Attributes
 from bagpipe.bgp.common.looking_glass import LookingGlass, \
     LookingGlassReferences
 
+from exabgp.bgp.message.update.attribute.community.extended.communities \
+    import ExtendedCommunities
+
 log = logging.getLogger(__name__)
 
 
 class RouteEntry(LookingGlass):
-
     """A route entry describes a BGP route, i.e. the association of:
-
 * a BGP NLRI of a specific type (e.g. a VPNv4 route
   like "1.2.3.4:5:192.168.0.5/32")
 * BGP attributes
 * the source of the BGP route (e.g. the BGP peer, or the local VPN instance,
   that advertizes the route)
-
 """
 
-    def __init__(self, afi, safi, routeTargets, nlri, attributes, source):
+    def __init__(self, afi, safi, nlri, RTs=None, attributes=None, source=None):
         assert(isinstance(afi, AFI))
         assert(isinstance(safi, SAFI))
-        assert(attributes is None or isinstance(attributes, Attributes))
+        if attributes is None:
+            attributes = Attributes()
+        assert(isinstance(attributes, Attributes))
 
         self.source = source
         self.afi = afi
         self.safi = safi
         self.nlri = nlri
         self.attributes = attributes
-        if self.attributes is None:
-            self.attributes = Attributes()
         # a list of exabgp.bgp.message.update.attribute.community.
         #   extended.RouteTargetASN2Number
-        self.routeTargets = routeTargets
+        self._routeTargets = []
+        if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
+            self._routeTargets = [ecom for ecom in self.attributes[
+                Attribute.CODE.EXTENDED_COMMUNITY].communities
+                if isinstance(ecom, RouteTarget)]
+        if RTs:
+            self.attributes.add(ExtendedCommunities(RTs))
+            self._routeTargets += RTs
+
+    @property
+    def routeTargets(self):
+        return self._routeTargets
+
+    def setRouteTargets(self, routeTargets):
+        self._routeTargets = routeTargets
+        del self.attributes[Attribute.CODE.EXTENDED_COMMUNITY]
+        self.attributes.add(ExtendedCommunities(self.routeTargets))
 
     def __cmp__(self, other):
-        if (isinstance(other, RouteEntry) and
-                self.afi == other.afi and
+        if other is None:
+            return -1
+        assert(isinstance(other, RouteEntry))
+        if (self.afi == other.afi and
                 self.safi == other.safi and
                 self.source == other.source and
                 self.nlri == other.nlri and
                 self.attributes.sameValuesAs(other.attributes)):
             return 0
         else:
+            log.debug("attributes comparison: %s",
+                      self.attributes.sameValuesAs(other.attributes))
             return -1
 
     def __hash__(self):  # FIXME: improve for better performance ?
@@ -100,7 +120,7 @@ class RouteEntry(LookingGlass):
         return "[RouteEntry: %s %s %s %s RT:%s%s]" % (self.afi, self.safi,
                                                       self.nlri,
                                                       self.attributes,
-                                                      self.routeTargets,
+                                                      self._routeTargets,
                                                       fromString)
 
     def getLookingGlassLocalInfo(self, pathPrefix):
@@ -154,6 +174,7 @@ class RouteEvent(object):
         self.routeEntry = routeEntry
         if source is not None:
             self.source = source
+            self.routeEntry.source = source
         else:
             self.source = routeEntry.source
         self.replacedRoute = None
