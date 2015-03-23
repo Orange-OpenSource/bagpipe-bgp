@@ -51,6 +51,8 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, \
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
 
+from bagpipe.exabgp.message.update.attribute.communities import ECommunities
+
 log = logging.getLogger(__name__)
 
 
@@ -63,18 +65,27 @@ class RouteEntry(LookingGlass):
   that advertizes the route)
 """
 
+<<<<<<< HEAD
     def __init__(self, afi, safi, nlri, RTs=None, attributes=None, source=None):
+=======
+    def __init__(self, afi, safi, nlri, attributes, routeTargets=None):
+>>>>>>> 306add2... refactor RouteEntry and pushEvent
         assert(isinstance(afi, AFI))
         assert(isinstance(safi, SAFI))
         if attributes is None:
             attributes = Attributes()
         assert(isinstance(attributes, Attributes))
+<<<<<<< HEAD
 
         self.source = source
+=======
+        self.source = None
+>>>>>>> 306add2... refactor RouteEntry and pushEvent
         self.afi = afi
         self.safi = safi
         self.nlri = nlri
         self.attributes = attributes
+<<<<<<< HEAD
         # a list of exabgp.bgp.message.update.attribute.community.
         #   extended.RouteTargetASN2Number
         self._routeTargets = []
@@ -85,6 +96,22 @@ class RouteEntry(LookingGlass):
         if RTs:
             self.attributes.add(ExtendedCommunities(RTs))
             self._routeTargets += RTs
+=======
+        # a list of exabgp.message.update.attribute.communities.RouteTarget:
+        self._routeTargets = []
+
+        if AttributeID.EXTENDED_COMMUNITY not in self.attributes:
+            self.attributes.add(ECommunities())
+
+        self._routeTargets = [ecom for ecom in self.attributes[
+            AttributeID.EXTENDED_COMMUNITY].communities
+            if isinstance(ecom, RouteTarget)]
+
+        if routeTargets:
+            self.attributes[AttributeID.EXTENDED_COMMUNITY
+                            ].communities += routeTargets
+            self._routeTargets += routeTargets
+>>>>>>> 306add2... refactor RouteEntry and pushEvent
 
     @property
     def routeTargets(self):
@@ -92,8 +119,22 @@ class RouteEntry(LookingGlass):
 
     def setRouteTargets(self, routeTargets):
         self._routeTargets = routeTargets
+<<<<<<< HEAD
         del self.attributes[Attribute.CODE.EXTENDED_COMMUNITY]
         self.attributes.add(ExtendedCommunities(self.routeTargets))
+=======
+        log.debug("attributes before srt: %s", self.attributes)
+        # first remove all the route targets
+        for ecom in self.attributes[AttributeID.EXTENDED_COMMUNITY]:
+            if isinstance(ecom, RouteTarget):
+                self.attributes[AttributeID.EXTENDED_COMMUNITY
+                                ].communities.delete(ecom)
+
+        self.attributes[AttributeID.EXTENDED_COMMUNITY
+                        ].communities += routeTargets
+
+        log.debug("attributes after srt: %s", self.attributes)
+>>>>>>> 306add2... refactor RouteEntry and pushEvent
 
     def __cmp__(self, other):
         if other is None:
@@ -177,6 +218,7 @@ class RouteEvent(object):
             self.routeEntry.source = source
         else:
             self.source = routeEntry.source
+        assert(self.source is not None)
         self.replacedRoute = None
         # FIXME: check consistency of eventType and nlri.action
 
@@ -243,3 +285,47 @@ class Unsubscription(_SubUnsubCommon):
 
     def __init__(self, afi, safi, routeTarget=None, worker=None):
         _SubUnsubCommon.__init__(self, afi, safi, routeTarget, worker)
+
+
+class EventSource(LookingGlass):
+    '''
+    Class for objects that advertise and withdraw routes 
+    need to have a 'name' attribute
+    '''
+
+    def __init__(self, routeTableManager):
+        self.routeTableManager = routeTableManager
+        # private data of RouteTableManager
+        self._rtm_routeEntries = set()
+
+    def getRouteEntries(self):
+        return self._rtm_routeEntries
+
+    def _advertiseRoute(self, routeEntry):
+        log.debug("Publish withdraw route event")
+        self.routeTableManager.enqueue(RouteEvent(RouteEvent.ADVERTISE,
+                                                  routeEntry, self))
+
+    def _withdrawRoute(self, routeEntry):
+        log.debug("Publish advertise route event")
+        self.routeTableManager.enqueue(RouteEvent(RouteEvent.WITHDRAW,
+                                                  routeEntry, self))
+
+    def getLGMap(self):
+        return {
+            "adv_routes": (LGMap.SUBTREE, self.getLGRoutes)
+        }
+
+    def getLGRoutes(self, pathPrefix):
+        return [route.getLookingGlassInfo(pathPrefix) for route in
+                self.getRouteEntries()]
+
+
+class WorkerCleanupEvent(object):
+
+    def __init__(self, worker):
+        self.worker = worker
+
+    def __repr__(self):
+        return "WorkerCleanupEvent:%s" % (self.worker.name)
+

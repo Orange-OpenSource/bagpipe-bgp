@@ -153,7 +153,7 @@ class EVI(VPNInstance, LookingGlass):
             )
         )
 
-        route.attributes.add(self._genExtendedCommunities())
+        route.attributes.add(ECommunities(self._genExtendedCommunities()))
 
         # add PMSI Tunnel Attribute route
         pmsi_tunnel_attribute = PMSITunnelIngressReplication(
@@ -168,8 +168,7 @@ class EVI(VPNInstance, LookingGlass):
                                               route.nlri, route.attributes,
                                               self.exportRTs)
 
-        self._pushEvent(RouteEvent(RouteEvent.ADVERTISE,
-                                   self.multicastRouteEntry))
+        self._advertiseRoute(self.multicastRouteEntry)
 
     def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...

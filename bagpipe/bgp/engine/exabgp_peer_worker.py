@@ -310,9 +310,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                                 route.nlri, route.attributes)
 
         if route.action == "announce":
-            self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
+            self._advertiseRoute(routeEntry)
         else:
-            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+            self._withdrawRoute(routeEntry)
 
         # TODO(tmmorin): move RTC code out-of the peer-specific code
         if (route.nlri.afi, route.nlri.safi) == (AFI(AFI.ipv4),
@@ -347,8 +347,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     def _updateForRouteEvent(self, event):
         r = Route(event.routeEntry.nlri)
         if event.type == event.ADVERTISE:
-            self.log.info("Generate UPDATE message: %s", r)
             r.attributes = event.routeEntry.attributes
+            self.log.info("Generate UPDATE message: %s", r)
             try:
                 return Update([r]).update(False, self.config['my_as'],
                                           self.config['my_as'])

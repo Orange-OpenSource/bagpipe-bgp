@@ -118,7 +118,7 @@ class VRF(VPNInstance, LookingGlass):
 
             routeEntry = RouteEntry(self.afi, self.safi, nlri,
                                     self.readvertiseToRTs, attributes)
-            self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
+            self._advertiseRoute(routeEntry)
 
         self.readvertised.add(nlri.prefix)
 
@@ -129,7 +129,7 @@ class VRF(VPNInstance, LookingGlass):
                                   self._getRDFromLabel(label),
                                   OUT.WITHDRAW)
             routeEntry = RouteEntry(self.afi, self.safi, nlri)
-            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+            self._withdrawRoute(routeEntry)
 
         self.readvertised.remove(nlri.prefix)
 
@@ -144,7 +144,7 @@ class VRF(VPNInstance, LookingGlass):
                                   OUT.ANNOUNCE)
             routeEntry = RouteEntry(self.afi, self.safi, nlri,
                                     self.readvertiseToRTs)
-            self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
+            self._advertiseRoute(routeEntry)
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
@@ -152,7 +152,7 @@ class VRF(VPNInstance, LookingGlass):
             nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label),
                                   OUT.WITHDRAW)
             routeEntry = RouteEntry(self.afi, self.safi, nlri)
-            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+            self._withdrawRoute(routeEntry)
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
                                  advertiseSubnet)

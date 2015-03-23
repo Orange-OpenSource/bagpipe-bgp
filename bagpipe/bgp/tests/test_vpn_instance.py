@@ -105,7 +105,8 @@ class TestVPNInstance(TestCase):
         self.vpnInstance.synthesizeVifBGPRoute = mock.Mock(
             return_value=RouteEntry(self.vpnInstance.afi,
                                     self.vpnInstance.safi, NLRI1, [RT1]))
-        self.vpnInstance._pushEvent = mock.Mock()
+        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._withdrawRoute = mock.Mock()
         self.vpnInstance._postFirstPlug = mock.Mock()
         self.vpnInstance.start()
 
@@ -164,7 +165,7 @@ class TestVPNInstance(TestCase):
 
         self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Port must be plugged only once on dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
                          "Route for port must be advertised only once")
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -186,7 +187,7 @@ class TestVPNInstance(TestCase):
                           MAC2, IP1, LOCAL_PORT1)
         self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
                          "Only route for first port must be advertised")
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -206,7 +207,7 @@ class TestVPNInstance(TestCase):
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Port different IP addresses must be plugged on "
                          "dataplane")
-        self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
                          "Route for port different IP addresses must be "
                          "advertised")
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1, IP2)
@@ -224,7 +225,7 @@ class TestVPNInstance(TestCase):
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Port different endpoints must be plugged on "
                          "dataplane")
-        self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
                          "Route for port different endpoints must be "
                          "advertised")
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -247,7 +248,7 @@ class TestVPNInstance(TestCase):
                           MAC1, IP1, LOCAL_PORT2)
         self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
                          "Only route for first port must be advertised")
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -271,7 +272,7 @@ class TestVPNInstance(TestCase):
                           MAC2, IP1, LOCAL_PORT2)
         self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
                          "Only route for first port must be advertised")
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -294,7 +295,7 @@ class TestVPNInstance(TestCase):
                           MAC1, IP2, LOCAL_PORT2)
         self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
                          "Only route for first port must be advertised")
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -314,7 +315,7 @@ class TestVPNInstance(TestCase):
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "All ports must be plugged on dataplane")
-        self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
                          "Routes for all ports must be advertised")
 
         self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
@@ -343,7 +344,9 @@ class TestVPNInstance(TestCase):
         self.assertEqual(
             [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),)],
             self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+                         "Route must be first advertised and after withdrawn")
+        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count,
                          "Route must be first advertised and after withdrawn")
 
         self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
@@ -363,8 +366,8 @@ class TestVPNInstance(TestCase):
 
         self.assertEqual(0, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "Endpoint could not be unplugged from dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
-                         "Route must only be advertised")
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+                         "only one Route must be advertised")
 
         self.assertIn(MAC1, self.vpnInstance.macAddress2LocalPortData)
         self.assertIn(IP1, self.vpnInstance.ipAddress2MacAddress)
@@ -384,8 +387,10 @@ class TestVPNInstance(TestCase):
 
         self.assertEqual(0, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "Endpoint could not be unplugged from dataplane")
-        self.assertEqual(1, self.vpnInstance._pushEvent.call_count,
-                         "Route must only be advertised")
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+                         "Route must only be advertised once")
+        self.assertEqual(0, self.vpnInstance._withdrawRoute.call_count,
+                         "Route must not be withdrawn")
 
         self.assertIn(MAC1, self.vpnInstance.macAddress2LocalPortData)
         self.assertIn(IP1, self.vpnInstance.ipAddress2MacAddress)
@@ -409,7 +414,10 @@ class TestVPNInstance(TestCase):
         self.assertEqual(
             [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),)],
             self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(3, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+                         "Routes for all port endpoints must be first "
+                         "advertised and only one withdrawn")
+        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count,
                          "Routes for all port endpoints must be first "
                          "advertised and only one withdrawn")
 
@@ -438,7 +446,10 @@ class TestVPNInstance(TestCase):
             [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
              ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT1, label2, True),)],
             self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(4, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+                         "Routes for all port endpoints must be first "
+                         "advertised and after withdrawn")
+        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count,
                          "Routes for all port endpoints must be first "
                          "advertised and after withdrawn")
 
@@ -467,7 +478,10 @@ class TestVPNInstance(TestCase):
             [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),),
              ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT2, label2, True),)],
             self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(4, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+                         "Routes for all different ports endpoints must be "
+                         "first advertised and after withdrawn")
+        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count,
                          "Routes for all different ports endpoints must be "
                          "first advertised and after withdrawn")
 
@@ -489,7 +503,7 @@ class TestVPNInstance(TestCase):
 
         self.assertEqual(0, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "Endpoint could not be unplugged from dataplane")
-        self.assertEqual(2, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
                          "Routes for all different ports endpoints must only "
                          "be advertised")
 
@@ -534,7 +548,10 @@ class TestVPNInstance(TestCase):
                IP3), LOCAL_PORT2, label3, False),),
              ((MAC4, self._get_ipAddress(IP4), LOCAL_PORT2, label4, True),)],
             self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(8, self.vpnInstance._pushEvent.call_count,
+        self.assertEqual(4, self.vpnInstance._withdrawRoute.call_count,
+                         "Routes for all different ports endpoints must be "
+                         "first advertised and after withdrawn")
+        self.assertEqual(4, self.vpnInstance._advertiseRoute.call_count,
                          "Routes for all different ports endpoints must be "
                          "first advertised and after withdrawn")
 
@@ -549,3 +566,6 @@ class TestVPNInstance(TestCase):
         self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2)
 
         self.vpnInstance.getLGLocalPortData("")
+
+
+    ## FIXME add test of change of rt export list 

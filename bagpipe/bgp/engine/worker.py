@@ -39,8 +39,8 @@ class Worker(LookingGlass):
     These objects will:
     * use _subscribe(...) and _unsubscribe(...) to subscribe to routing events
     * will specialize _onEvent(event) to react to received events
-    * use _pushEvent(event) to publish routing events
 
+    They also inherit from EventSource to publish events
     """
 
     stopEvent = object()
@@ -128,13 +128,6 @@ class Worker(LookingGlass):
 
     def getWorkerRouteEntries(self):
         return self.bgpManager.routeTableManager.getWorkerRouteEntries(self)
-
-    def _pushEvent(self, routeEvent):
-        assert(isinstance(routeEvent, RouteEvent))
-        log.debug("Pushing route event to BGPManager")
-        if routeEvent.source is None:
-            routeEvent.source = self
-        self.bgpManager._pushEvent(routeEvent)
 
     def __repr__(self):
         return "Worker %s" % (self.name)

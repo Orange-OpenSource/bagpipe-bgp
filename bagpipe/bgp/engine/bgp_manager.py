@@ -26,7 +26,7 @@ from bagpipe.bgp.engine.upstream_exabgp_peer_worker \
 from bagpipe.bgp.engine import RouteEvent, RouteEntry, \
     Subscription, Unsubscription
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common.looking_glass import LGMap
 from bagpipe.bgp.common.utils import getBoolean
 from bagpipe.bgp.common import logDecorator
 
@@ -80,6 +80,8 @@ class Manager(LookingGlass):
 
         # we need a .name since we'll masquerade as a routeEntry source
         self.name = "BGPManager"
+
+        EventSource.__init__(self, self.routeTableManager)
 
     @logDecorator.log
     def stop(self):

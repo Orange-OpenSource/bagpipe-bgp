@@ -237,7 +237,7 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
         if self.KAReceptionTimer:
             self.KAReceptionTimer.cancel()
 
-        self.bgpManager.cleanup(self)
+        self._cleanup()
 
         self._toIdle()
 

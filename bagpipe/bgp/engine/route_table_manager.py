@@ -512,24 +512,19 @@ class RouteTableManager(Thread, LookingGlass):
         '''
         log.info("Cleanup for worker %s", worker.name)
         # synthesize withdraw events for all routes from this worker
-        if worker in self._source2entries:
-            entries = self._source2entries[worker]
+        if '_rtm_routeEntries' in worker.__dict__:
             log.info("  Preparing to withdraw %d routes that were advertised "
-                     "by worker", len(entries))
-            for entry in entries:
+                     "by worker", len(worker._rtm_routeEntries))
+            for entry in worker._rtm_routeEntries:
                 log.info("  Enqueue event to Withdraw route %s", entry)
                 self.enqueue(RouteEvent(RouteEvent.WITHDRAW, entry))
 
-            del self._source2entries[worker]
-        else:
-            log.info("(we had no trace of %s in _source2entries)", worker)
-
         # remove worker from all of its subscriptions
-        if worker in self._worker2matches:
-            for match in self._worker2matches[worker]:
-                assert(match in self._match2workersAndEntries)
-                self._match2workers(match).remove(worker)
-            del self._worker2matches[worker]
+        if '_rtm_matches' in worker.__dict__:
+            for match in worker._rtm_matches:
+                wa = self._match2workersAndEntries[match]
+                wa.delWorker(worker)
+            del worker._rtm_matches
 
         # self._dumpState()
 

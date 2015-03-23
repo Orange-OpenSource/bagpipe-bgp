@@ -200,8 +200,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
                 self.log.debug("   updated route: %s", updatedRouteEntry)
 
-                self._pushEvent(RouteEvent(RouteEvent.ADVERTISE,
-                                           updatedRouteEntry))
+                self._advertiseRoute(updatedRouteEntry)
 
     def _parseIPAddressPrefix(self, ipAddressPrefix):
         ipAddress = ""
@@ -245,6 +244,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         routeEntry.attributes.add(self._genExtendedCommunities())
         routeEntry.setRouteTargets(self.exportRTs)
 
+        self.log.debug("synthesized route entry: %s", routeEntry)
         return routeEntry
 
     @utils.synchronized
@@ -306,7 +306,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                                                     ipPrefix, prefixLen,
                                                     portData['label'])
 
-            self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
+            self._advertiseRoute(routeEntry)
 
             if localPort['linuxif'] not in self.localPort2Endpoints:
                 self.localPort2Endpoints[localPort['linuxif']] = list()
@@ -376,7 +376,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             routeEntry = self.synthesizeVifBGPRoute(macAddress,
                                                     ipPrefix, prefixLen,
                                                     label)
-            self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
+            self._withdrawRoute(routeEntry)
 
             # Unplug endpoint from data plane
             self.dataplane.vifUnplugged(
