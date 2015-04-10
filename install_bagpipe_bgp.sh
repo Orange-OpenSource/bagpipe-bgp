@@ -31,6 +31,12 @@ if [ ! -f $confFile -a -f $oldConf ]; then
     mv -v $oldConf $confFile
 fi
 
+if [ ! -f "$confFile" ]; then
+    cp /etc/bagpipe-bgp/bgp.conf.template $confFile
+fi
+
+mkdir /var/log/bagpipe-bgp
+
 case $1 in
     "manual")
         echo -e "\n\n*** WARNING: BaGPipe BGP component service must be started manually ***"
