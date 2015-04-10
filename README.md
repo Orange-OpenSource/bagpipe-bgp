@@ -27,7 +27,7 @@ Neutron components:
 * the [bagpipe ML2 mechanism driver](https://github.com/stackforge/networking-bagpipe-l2) using E-VPN
 
 BaGPipe-BGP can also be used standalone (e.g. for testing purposes), 
-with for instance VMs tap interfaces or veth interfaces to network namespaces (see below).
+with for instance VMs tap interfaces or veth interfaces to network namespaces (see [below](#netns-example)).
 
 Installation
 ------------
@@ -102,19 +102,19 @@ and the `linux_vxlan.LinuxVXLANDataplaneDriver` for E-VPN.
 currently be used for IP VPNs:
 
 * the MPLSOVSDataplaneDriver can be used on most recent Linux kernels, but 
-  requires an OpenVSwitch with suitable MPLS code (current OVS git trunk); 
+  requires an OpenVSwitch with suitable MPLS code (current OVS git trunk is suitable, this code hasn't been successfully tested with OVS 2.3.x); 
   this driver can do bare-MPLS or MPLS-over-GRE (but see [Caveats](#caveats) for MPLS-over-GRE);
   for bare MPLS, this driver requires the OVS bridge to be associated with 
   an IP address, and that VRF interfaces be plugged into OVS prior to 
   calling BaGPipe BGP API to attach them (details in
-   [mpls\_ovs\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L345))
+   [mpls\_ovs\_dataplane.py](bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L578))
 
 * (the MPLSLinuxDataplaneDriver is based on an unmaintained MPLS stack for the Linux 
-3.7 kernel, and should be considered *obsolete* ; see [mpls\_linux\_dataplane.py](src/bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L501))
+3.7 kernel, and should be considered *obsolete* ; see [mpls\_linux\_dataplane.py](bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L245))
 
 For E-VPN, the `linux_vxlan.LinuxVXLANDataplaneDriver` is usable without any 
 particular additional configuration, and simply requires a Linux kernel >=3.10
-with VXLAN compiled-in or provided as a module ([linux_vxlan.py](src/bagpipe/bgp/vpn/evpn/linux_vxlan.py#L175)).
+with VXLAN compiled-in or provided as a module ([linux_vxlan.py](bagpipe/bgp/vpn/evpn/linux_vxlan.py#L269)).
 
 Usage
 -----
@@ -148,6 +148,8 @@ See `bagpipe-rest-attach --help`.
 
 #### IP VPN example with a VM tap interface ####
 
+This example assumes that there is a pre-existing tap interface 'tap42'.
+
 * on server A, plug tap interface tap42, MAC de:ad:00:00:be:ef, IP 11.11.11.1 into an IP VPN VRF with route-target 64512:77:
 
         bagpipe-rest-attach --attach --port tap42 --mac de:ad:00:00:be:ef --ip 11.11.11.1 --gateway-ip 11.11.11.254 --network-type ipvpn --rt 64512:77
@@ -165,10 +167,12 @@ VMs will need to have proper IP configuration. When BaGPipe BGP is use
 standalone, no DHCP service is provided, and the IP configuration will 
 have to be static. 
 
+<a name="netns-example"></a>
 #### Another IP VPN example... ####
 
-...in which the bagpipe-rest-attach tool will build for you a network 
-namespace and a properly configured veth interface to attach to the VRF:
+In this example, the bagpipe-rest-attach tool will build for you a network
+namespace and a properly configured pair of veth interfaces, and will plug
+one of the veth to the VRF:
 
 * on server A, plug a netns interface with IP 12.11.11.1 into a new IP VPN VRF named "test", with route-target 64512:78
 
@@ -188,6 +192,10 @@ be able to have traffic exchanged between the network namespaces:
 
 
 #### An E-VPN example ####
+
+In this example, similarly as the previous one, the bagpipe-rest-attach tool 
+will build for you a network namespace and a properly configured pair of
+veth interfaces, and will plug one of the veth to the E-VPN instance:
 
 * on server A, plug a netns interface with IP 12.11.11.1 into a new E-VPN named "test2", with route-target 64512:79
 
