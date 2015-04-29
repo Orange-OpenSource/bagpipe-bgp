@@ -63,10 +63,19 @@ class VPNInstanceDataplane(_VPNInstanceDataplane):
 
     @abstractmethod
     def setGatewayPort(self, linuxif):
+        '''
+        Used to determine a port to which traffic at the destination of the
+        IP gateway should be sent.  This is used to plug an EVI into an IP VPN
+        VRF.
+        '''
         pass
 
     @abstractmethod
     def gatewayPortDown(self, linuxif):
+        '''
+        Used to revert the action done when setGatewayPort was called.
+        Relevant only when an EVI had been plugged into an IP VPN VRF.
+        '''
         pass
 
 
