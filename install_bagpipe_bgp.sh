@@ -35,7 +35,7 @@ if [ ! -f "$confFile" ]; then
     cp /etc/bagpipe-bgp/bgp.conf.template $confFile
 fi
 
-mkdir /var/log/bagpipe-bgp
+[ -d "/var/log/bagpipe-bgp" ] || mkdir /var/log/bagpipe-bgp
 
 case $1 in
     "manual")
