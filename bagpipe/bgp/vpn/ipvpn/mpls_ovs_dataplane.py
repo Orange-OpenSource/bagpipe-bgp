@@ -583,7 +583,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     Based on an OpenVSwtich MPLS kernel dataplane implementation to be
     included in OVS 2.4.
 
-    In the meantime, the master openvswitch git repository can be used:
+    In the meantime, the master branch of openvswitch git repository can be
+    used:
         https://github.com/openvswitch/ovs.git
 
     This driver uses MPLS-over-GRE by default. However, note well that current
