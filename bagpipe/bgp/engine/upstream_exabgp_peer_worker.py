@@ -1,0 +1,348 @@
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+# encoding: utf-8
+
+# Copyright 2014 Orange
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import select
+import time
+
+import traceback
+
+from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
+from bagpipe.bgp.engine.bgp_peer_worker import KeepAliveReceived
+from bagpipe.bgp.engine.bgp_peer_worker import SendKeepAlive
+from bagpipe.bgp.engine.bgp_peer_worker import FSM
+from bagpipe.bgp.engine.bgp_peer_worker import InitiateConnectionException
+from bagpipe.bgp.engine.bgp_peer_worker import OpenWaitTimeout, StoppedException
+
+from bagpipe.bgp.engine import RouteEvent
+
+from bagpipe.bgp.common.looking_glass import LookingGlass
+
+from exabgp.reactor.peer import Peer
+from exabgp.reactor.peer import ACTION
+from exabgp.bgp.neighbor import Neighbor
+from exabgp.bgp.message.open.asn import ASN
+
+from exabgp.protocol.ip import IP
+
+from exabgp.reactor.protocol import AFI
+from exabgp.reactor.protocol import SAFI
+
+from exabgp.bgp.message.update.attribute.community.extended.rt \
+    import RouteTarget
+from exabgp.bgp.message.open import RouterID
+from exabgp.bgp.message.open.capability.capability import Capability
+
+from exabgp.bgp.message.nop import NOP
+from exabgp.bgp.message import Notification
+from exabgp.bgp.message import Update
+from exabgp.bgp.message import KeepAlive
+
+from exabgp.bgp.message import IN
+
+from exabgp.bgp.message.update.attribute.attribute import Attribute
+
+from exabgp.bgp.message import STATE
+
+
+# initialize ExaBGP config
+from exabgp.configuration.environment import environment
+import exabgp.configuration.setup  # initialises environment.configuration
+environment.application = 'bagpipe-bgp'
+conf = environment.setup(None)
+# tell exabgp to parse routes:
+conf.log.routes = True
+conf.log.destination="/var/log/bagpipe-bgp/bagpipe-bgp.log"
+conf.log.level="DEBUG"
+conf.log.all=True
+conf.log.packets=True
+
+class FakeReactor(object):
+    '''
+    used to mocks exabgp.reactor.loop.Reactor
+    '''
+    pass
+
+TranslateExaBGPState = {STATE.IDLE: FSM.Idle,
+                        STATE.ACTIVE: FSM.Active,
+                        STATE.CONNECT: FSM.Connect,
+                        STATE.OPENSENT: FSM.OpenSent,
+                        STATE.OPENCONFIRM: FSM.OpenConfirm,
+                        STATE.ESTABLISHED: FSM.Established,
+                        }
+
+
+class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
+
+    enabledFamilies = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
+                       # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
+                       (AFI(AFI.l2vpn), SAFI(SAFI.evpn))]
+
+    def __init__(self, bgpManager, name, peerAddress, config):
+        BGPPeerWorker.__init__(self, bgpManager, name, peerAddress)
+        self.config = config
+        self.localAddress = self.config['local_address']
+        self.peerAddress = peerAddress
+
+        self.peer = None
+
+        self.rtc_active = False
+        self._activeFamilies = []
+
+    def _toIdle(self):
+        self._activeFamilies = []
+
+        if self.peer is not None:
+            self.log.info("Stopping peer before reinit")
+            self.peer.stop()
+            self.peer = None
+
+    def _initiateConnection(self):
+        self.log.debug("Initiate ExaBGP connection to %s from %s",
+                       self.peerAddress, self.localAddress)
+
+        self.rtc_active = False
+
+        neighbor = Neighbor()
+        neighbor.router_id = RouterID(self.config['local_address'])
+        neighbor.local_as = ASN(self.config['my_as'])
+        neighbor.peer_as = ASN(self.config['peer_as'])
+        neighbor.local_address = IP.create(self.localAddress)
+        neighbor.peer_address = IP.create(self.peerAddress)
+
+        for afi_safi in self.__class__.enabledFamilies:
+            neighbor.add_family(afi_safi)
+
+        if self.config['enable_rtc']:
+            neighbor.add_family((AFI(AFI.ipv4), SAFI(SAFI.rtc)))
+
+        self.log.debug("Instantiate ExaBGP Peer")
+        self.peer = Peer(neighbor, FakeReactor())
+
+        # FIXME: enclose in try/except to catch Exception during
+        # session init
+        for action in self.peer._connect():
+            self.log.debug("action: %s", action)
+            self.fsm.state = TranslateExaBGPState[self.peer._['out']['state']]
+
+            if action == ACTION.LATER:
+                time.sleep(2)
+            elif action == ACTION.NOW:
+                time.sleep(0.1)
+
+            if self.shouldStop or action == ACTION.CLOSE:
+                raise StoppedException()
+
+        # check the capabilities of the session just established...
+
+        self.protocol = self.peer._['out']['proto']
+
+        received_open = self.protocol.negotiated.received_open
+
+        self._setHoldTime(received_open.hold_time)
+
+        # Hack to ease troubleshooting, have the real peer address appear in
+        # the logs when fakerr is used
+        if received_open.router_id.ip != self.peerAddress:
+            self.log.info("changing thread name from %s to BGP-x%s, based on"
+                          " the router-id advertized in Open (different from"
+                          " peerAddress == %s)", self.name,
+                          received_open.router_id.ip, self.peerAddress)
+            self.name = "BGP-%s/%s" % (self.peerAddress,
+                                       received_open.router_id.ip)
+
+        try:
+            mp_capabilities = received_open.capabilities[
+                Capability.CODE.MULTIPROTOCOL]
+        except Exception:
+            mp_capabilities = []
+
+        # check that our peer advertized at least mpls_vpn and evpn
+        # capabilities
+        self._activeFamilies = []
+        for (afi, safi) in (self.__class__.enabledFamilies +
+                            [(AFI(AFI.ipv4), SAFI(SAFI.rtc))]):
+            if (afi, safi) not in mp_capabilities:
+                if (((afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc))) or
+                        self.config['enable_rtc']):
+                    self.log.warning("Peer does not advertise (%s,%s) "
+                                     "capability", afi, safi)
+            else:
+                self.log.info(
+                    "Family (%s,%s) successfully negotiated with peer %s",
+                    afi, safi, self.peerAddress)
+                self._activeFamilies.append((afi, safi))
+
+        if len(self._activeFamilies) == 0:
+            self.log.error("No family was negotiated for VPN routes")
+
+        self.rtc_active = False
+
+        if self.config['enable_rtc']:
+            if (AFI(AFI.ipv4), SAFI(SAFI.rtc)) in mp_capabilities:
+                self.log.info(
+                    "RTC successfully enabled with peer %s", self.peerAddress)
+                self.rtc_active = True
+            else:
+                self.log.warning(
+                    "enable_rtc True but peer not configured for RTC")
+
+####FIXME Totremove        # create message generator
+#####        self.incoming_messages = self.protocol.read_messages()
+
+    def _toEstablished(self):
+        BGPPeerWorker._toEstablished(self)
+
+        if self.rtc_active:
+            # subscribe to RTC routes, to be able to propagate them from
+            # internal workers to this peer
+            self._subscribe(AFI(AFI.ipv4), SAFI(SAFI.rtc))
+        else:
+            # if we don't use RTC with our peer, then we need to see events for
+            # all routes of all active families, to be able to send them to him
+            for (afi, safi) in self._activeFamilies:
+                self._subscribe(afi, safi)
+
+    def _receiveLoopFun(self):
+
+        try:
+            select.select([self.protocol.connection.io], [], [], 2)
+            message = self.protocol.read_message().next()
+            if message.ID != NOP.ID:
+                self.log.debug("protocol read message: %s", message)
+        except Notification as e:
+            self.log.error("Notification: %s", e)
+            return 2
+#        except Failure as e:
+#            self.log.warning("Protocol failure: %s", e)
+#            return 2
+#        except socket.error as e:
+#            self.log.warning("Socket error: %s", e)
+#            return 2
+        except Exception as e:
+            self.log.error("Error while reading BGP message: %s", e)
+            raise
+
+        if message.ID == NOP.ID:
+            return 1
+        if message.ID == Update.ID:
+            if (self.fsm.state != FSM.Established):
+                raise Exception("Update received but not in Established state")
+            pass  # see below
+        elif message.ID == KeepAlive.ID:
+            if (self.fsm.state == FSM.OpenConfirm):
+                self._toEstablished()
+            self.enqueue(KeepAliveReceived)
+            self.log.debug("Received message: %s", message)
+        else:
+            self.log.warning("Received unexpected message: %s", message)
+
+        if isinstance(message, Update):
+            self.log.info("Received message: UPDATE...")
+            if message.nlris:
+                for nlri in message.nlris:
+                    self.log.info("Received message: UPDATE nlri: %s, type:%s", nlri, type(nlri))
+                    self.log.info("Received message: UPDATE %s", nlri.action)
+                    if nlri.action == IN.ANNOUNCED:
+                        action = RouteEvent.ADVERTISE
+                    elif nlri.action == IN.WITHDRAWN:
+                        action = RouteEvent.WITHDRAW
+                    else:
+                        raise Exception("should not be reached (action:%s)",
+                                        nlri.action)
+                    self._processReceivedRoute(action, nlri,
+                                               message.attributes)
+        return 1
+
+    def _processReceivedRoute(self, action, nlri, attributes):
+        self.log.info("Received route: %s, %s", nlri, attributes)
+
+        rts = []
+        if Attribute.CODE.EXTENDED_COMMUNITY in attributes:
+            self.log.debug("type: %s", type(attributes[
+                Attribute.CODE.EXTENDED_COMMUNITY]))
+            rts = [ecom for ecom in attributes[
+                   Attribute.CODE.EXTENDED_COMMUNITY].communities
+                   if isinstance(ecom, RouteTarget)]
+
+            if not rts:
+                raise Exception("Unable to find any Route Targets"
+                                "in the received route")
+
+        routeEntry = self._newRouteEntry(nlri.afi, nlri.safi, rts,
+                                         nlri, attributes)
+
+        self._pushEvent(RouteEvent(action, routeEntry))
+
+        # TODO(tmmorin): move RTC code out-of the peer-specific code
+        if (nlri.afi, nlri.safi) == (AFI(AFI.ipv4),
+                                     SAFI(SAFI.rtc)):
+            self.log.info("Received an RTC route")
+
+            if nlri.rt is None:
+                self.log.info("Received RTC is a wildcard")
+
+            # the semantic of RTC routes does not distinguish between AFI/SAFIs
+            # if our peer subscribed to a Route Target, it means that we needs
+            # to send him all routes of any AFI/SAFI carrying this RouteTarget.
+            for (afi, safi) in self._activeFamilies:
+                if (afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc)):
+                    if action == RouteEvent.ADVERTISE:
+                        self._subscribe(afi, safi, nlri.rt)
+                    else:  # withdraw
+                        self._unsubscribe(afi, safi, nlri.rt)
+
+    def _send(self, data):
+        # (error if state not the right one for sending updates)
+        self.log.debug("Sending %d bytes on socket to peer %s",
+                       len(data), self.peerAddress)
+        try:
+            self.protocol.write(data)
+        except Exception as e:
+            self.log.error("Was not able to send data: %s", e)
+
+    def _keepAliveMessageData(self):
+        return KeepAlive().message()
+
+    def _updateForRouteEvent(self, event):
+        # FIXME: the action is now in the NLRI !
+        try:
+            r = Update(event.routeEntry.nlri, event.routeEntry.attributes)
+            return ''.join(r.messages(self.protocol.negotiated))
+        except Exception as e:
+            self.log.error("Exception while generating message for "
+                           "route %s: %s", r, e)
+            self.log.warning("%s", traceback.format_exc())
+            return ''
+
+    def stop(self):
+        if self.peer is not None:
+            self.peer.stop()
+        BGPPeerWorker.stop(self)
+
+    # Looking Glass ###############
+
+    def getLookingGlassLocalInfo(self, pathPrefix):
+        return {
+            "peeringAddresses": {"peerAddress":  self.peerAddress,
+                                 "localAddress": self.localAddress},
+            "as_info": {"local": self.config['my_as'],
+                        "peer":  self.config['peer_as']},
+            "rtc": {"active": self.rtc_active,
+                    "enabled": self.config['enable_rtc']},
+            "active_families": [repr(f) for f in self._activeFamilies],
+            "peer_state": self.peer._['out']['state'],
+        }

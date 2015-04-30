@@ -35,9 +35,9 @@ from bagpipe.exabgp.network.connection import Connection
 from bagpipe.exabgp.network.protocol import Protocol, Failure
 from bagpipe.exabgp.structure.neighbor import Neighbor
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
+from exabgp.reactor.protocol import AFI, SAFI
 
-from bagpipe.exabgp.message.update.attribute.communities import RouteTarget
+from exabgp.bgp.message.update.attribute.community.extended import RouteTargetASN2Number as RouteTarget
 from bagpipe.exabgp.message.nop import NOP
 from bagpipe.exabgp.message.open import Open, RouterID, Capabilities
 from bagpipe.exabgp.message.update import Update

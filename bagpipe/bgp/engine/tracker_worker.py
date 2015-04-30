@@ -33,14 +33,14 @@ from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
 from bagpipe.bgp.common.utils import plural
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.exabgp.message.update.attribute import AttributeID
-from bagpipe.exabgp.message.update.attributes import Attributes
+from exabgp.bgp.message.update.attribute.attribute import Attribute
+from exabgp.bgp.message.update import Attributes
 
-keepAttributes_default = [AttributeID.NEXT_HOP,
-                          AttributeID.PMSI_TUNNEL,
-                          AttributeID.MED,
-                          AttributeID.EXTENDED_COMMUNITY,  # FIXME
-                          AttributeID.LOCAL_PREF]
+keepAttributes_default = [Attribute.CODE.NEXT_HOP,
+                          Attribute.CODE.PMSI_TUNNEL,
+                          Attribute.CODE.MED,
+                          Attribute.CODE.EXTENDED_COMMUNITY,  # FIXME
+                          Attribute.CODE.LOCAL_PREF]
 
 
 class FilteredRouteEntry(RouteEntry):

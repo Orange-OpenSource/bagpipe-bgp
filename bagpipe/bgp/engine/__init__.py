@@ -36,10 +36,14 @@ route table manager (singleton)
 
 import logging
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
-from bagpipe.exabgp.message.update.attribute.communities import RouteTarget
-from bagpipe.exabgp.message.update.attribute import AttributeID
-from bagpipe.exabgp.message.update.attributes import Attributes
+from exabgp.reactor.protocol import AFI, SAFI
+
+from exabgp.bgp.message.update.attribute.community.extended import \
+    RouteTargetASN2Number as RouteTarget
+
+from exabgp.bgp.message.update.attribute.attribute import Attribute
+from exabgp.bgp.message.update import Attributes
+
 
 from bagpipe.bgp.common.looking_glass import LookingGlass, \
     LookingGlassReferences
@@ -62,13 +66,17 @@ class RouteEntry(LookingGlass):
     def __init__(self, afi, safi, routeTargets, nlri, attributes, source):
         assert(isinstance(afi, AFI))
         assert(isinstance(safi, SAFI))
-        assert(isinstance(attributes, Attributes))
+        assert(attributes is None or isinstance(attributes, Attributes))
+
         self.source = source
         self.afi = afi
         self.safi = safi
         self.nlri = nlri
         self.attributes = attributes
-        # a list of exabgp.message.update.attribute.communities.RouteTarget:
+        if self.attributes is None:
+            self.attributes = Attributes()
+        # a list of exabgp.bgp.message.update.attribute.community.
+        #   extended.RouteTargetASN2Number
         self.routeTargets = routeTargets
 
     def __cmp__(self, other):
@@ -102,13 +110,12 @@ class RouteEntry(LookingGlass):
         for (attributeId, value) in self.attributes.iteritems():
 
             # skip some attributes that we care less about
-            if (attributeId == AttributeID.AS_PATH or
-               attributeId == AttributeID.ORIGIN or
-               attributeId == AttributeID.LOCAL_PREF):
+            if (attributeId == Attribute.CODE.AS_PATH or
+               attributeId == Attribute.CODE.ORIGIN or
+               attributeId == Attribute.CODE.LOCAL_PREF):
                 continue
 
-            attributesDict[
-                str(AttributeID(attributeId)).lower()] = repr(value)
+            attributesDict[repr(attributeId)] = repr(value)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
                "attributes": attributesDict
@@ -150,6 +157,7 @@ class RouteEvent(object):
         else:
             self.source = routeEntry.source
         self.replacedRoute = None
+        # FIXME: check consistency of eventType and nlri.action
 
     def setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a

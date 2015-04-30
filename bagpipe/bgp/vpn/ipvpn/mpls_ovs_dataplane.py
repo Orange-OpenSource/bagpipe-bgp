@@ -29,7 +29,8 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, \
 from bagpipe.bgp.common import logDecorator
 from bagpipe.bgp.common.utils import getBoolean
 
-from bagpipe.exabgp.message.update.attribute.communities import Encapsulation
+from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
+    import Encapsulation
 
 import bagpipe.bgp.common.exceptions as exc
 
@@ -704,13 +705,13 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
 
     def supportedEncaps(self):
         if self.useGRE:
-            return [Encapsulation(Encapsulation.GRE),
-                    Encapsulation(Encapsulation.DEFAULT)
+            return [Encapsulation(Encapsulation.Type.GRE),
+                    Encapsulation(Encapsulation.Type.DEFAULT)
                     # we will accept routes with no encap
                     # specified and force the use of GRE
                     ]
         else:
-            return [Encapsulation(Encapsulation.MPLS)]
+            return [Encapsulation(Encapsulation.Type.MPLS)]
 
     @logDecorator.logInfo
     def _initReal(self, config):

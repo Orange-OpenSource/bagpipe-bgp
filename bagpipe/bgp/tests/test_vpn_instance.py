@@ -43,11 +43,11 @@ from bagpipe.bgp.tests import RT1, NLRI1
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
-from bagpipe.exabgp.message.update.attributes import Attributes
+from exabgp.bgp.message.update import Attributes
 
 from bagpipe.bgp.engine import RouteEntry
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
+from exabgp.reactor.protocol import AFI, SAFI
 
 MAC1 = "00:00:de:ad:be:ef"
 IP1 = "10.0.0.2/32"

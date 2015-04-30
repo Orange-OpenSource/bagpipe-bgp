@@ -40,14 +40,14 @@ from bagpipe.exabgp.structure.vpn import RouteDistinguisher
 from bagpipe.exabgp.structure.evpn import EVPNNLRI, EVPNMACAdvertisement, \
     EVPNMulticast, EthernetSegmentIdentifier, EthernetTag, MAC
 from bagpipe.exabgp.structure.mpls import LabelStackEntry
-from bagpipe.exabgp.structure.address import AFI, SAFI
+from exabgp.reactor.protocol import AFI, SAFI
 from bagpipe.exabgp.structure.ip import Inet
 from bagpipe.exabgp.message.update.route import Route
-from bagpipe.exabgp.message.update.attribute.nexthop import NextHop
-from bagpipe.exabgp.message.update.attribute.communities import Encapsulation
+from exabgp.bgp.message.update.attribute.nexthop import NextHop
+from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
+    import Encapsulation
 from bagpipe.exabgp.message.update.attribute.pmsi_tunnel import PMSITunnel, \
     PMSITunnelIngressReplication
-from bagpipe.exabgp.message.update.attribute.id import AttributeID
 
 
 class VPNInstanceDataplane(_VPNInstanceDataplane):
@@ -105,7 +105,7 @@ class DummyVPNInstanceDataplane(_DummyVPNInstanceDataplane,
 class DummyDataplaneDriver(_DummyDataplaneDriver):
 
     dataplaneInstanceClass = DummyVPNInstanceDataplane
-    encaps = [Encapsulation(Encapsulation.VXLAN)]
+    encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 
     def __init__(self, *args):
         _DummyDataplaneDriver.__init__(self, *args)
@@ -137,7 +137,7 @@ class EVI(VPNInstance, LookingGlass):
         etag = None
         label = LabelStackEntry(self.instanceLabel)
 
-        if (Encapsulation(Encapsulation.VXLAN) in
+        if (Encapsulation(Encapsulation.Type.VXLAN) in
                 self.dataplaneDriver.supportedEncaps()):
             etag = EthernetTag(self.instanceLabel)
             label = None
@@ -181,7 +181,7 @@ class EVI(VPNInstance, LookingGlass):
         lse = LabelStackEntry(label, True)
         etag = None
 
-        if (Encapsulation(Encapsulation.VXLAN) in
+        if (Encapsulation(Encapsulation.Type.VXLAN) in
                 self.dataplaneDriver.supportedEncaps()):
             lse = None
             etag = EthernetTag(self.instanceLabel)
@@ -242,7 +242,7 @@ class EVI(VPNInstance, LookingGlass):
             prefix = info
 
             nh = newRoute.attributes.get(NextHop.ID)
-            remotePE = nh.next_hop
+            remotePE = nh.ip
             label = newRoute.nlri.label.labelValue
 
             self.dataplane.setupDataplaneForRemoteEndpoint(
@@ -283,7 +283,7 @@ class EVI(VPNInstance, LookingGlass):
             prefix = info
 
             nh = oldRoute.attributes.get(NextHop.ID)
-            remotePE = nh.next_hop
+            remotePE = nh.ip
             label = oldRoute.nlri.label.labelValue
 
             self.dataplane.removeDataplaneForRemoteEndpoint(

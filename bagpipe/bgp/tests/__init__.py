@@ -21,25 +21,25 @@ import socket
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
-from bagpipe.exabgp.structure.ip import Inet
-from bagpipe.exabgp.message.update.attribute.communities import RouteTarget
-from bagpipe.exabgp.message.update.attributes import Attributes
-from bagpipe.exabgp.message.update.attribute.nexthop import NextHop
-from bagpipe.exabgp.message.update.attribute.localpref import LocalPreference
+from exabgp.reactor.protocol import AFI, SAFI
+from exabgp.bgp.message.update.attribute.community.extended import \
+    RouteTargetASN2Number as RouteTarget
+from exabgp.bgp.message.update import Attributes
+from exabgp.bgp.message.update.attribute.nexthop import NextHop
+from exabgp.bgp.message.update.attribute.localpref import LocalPreference
 
 WAIT_TIME = 0.05
 
-RT1 = RouteTarget(64512, None, 10)
-RT2 = RouteTarget(64512, None, 20)
-RT3 = RouteTarget(64512, None, 30)
+RT1 = RouteTarget(64512, 10)
+RT2 = RouteTarget(64512, 20)
+RT3 = RouteTarget(64512, 30)
 
 NLRI1 = "NLRI1"
 NLRI2 = "NLRI2"
 
-NH1 = Inet(1, socket.inet_pton(socket.AF_INET, "1.1.1.1"))
-NH2 = Inet(1, socket.inet_pton(socket.AF_INET, "2.2.2.2"))
-NH3 = Inet(1, socket.inet_pton(socket.AF_INET, "3.3.3.3"))
+NH1 = "1.1.1.1"
+NH2 = "2.2.2.2"
+NH3 = "3.3.3.3"
 
 NBR = "NBR"
 BRR = "BRR"

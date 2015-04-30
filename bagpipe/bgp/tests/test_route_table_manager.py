@@ -74,7 +74,7 @@ from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.route_table_manager import RouteTableManager, Match, \
     WorkerCleanupEvent
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
+from exabgp.reactor.protocol import AFI, SAFI
 
 log = logging.getLogger()
 

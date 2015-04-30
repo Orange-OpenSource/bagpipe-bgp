@@ -25,7 +25,8 @@ from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
 
 from bagpipe.bgp.common.run_command import runCommand
 
-from bagpipe.exabgp.message.update.attribute.communities import Encapsulation
+from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
+    import Encapsulation
 
 
 class DataplaneDriver(LookingGlassLocalLogger):
@@ -33,7 +34,7 @@ class DataplaneDriver(LookingGlassLocalLogger):
 
     dataplaneInstanceClass = None
 
-    encaps = [Encapsulation(Encapsulation.DEFAULT)]
+    encaps = [Encapsulation(Encapsulation.Type.DEFAULT)]
     makeB4BreakSupport = False
     ecmpSupport = False
 

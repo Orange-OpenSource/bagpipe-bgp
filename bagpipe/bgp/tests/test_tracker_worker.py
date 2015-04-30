@@ -53,7 +53,7 @@ from bagpipe.bgp.tests import BaseTestBagPipeBGP, RT1, RT2, NLRI1, NLRI2, \
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine.tracker_worker import TrackerWorker
-from bagpipe.exabgp.message.update.attribute import AttributeID
+from exabgp.bgp.message.update.attribute.attribute import Attribute
 
 import logging
 
@@ -70,11 +70,11 @@ def _test_compareRoutes(self, routeA, routeB):
         if (routeA.attributes.sameValuesAs(routeB.attributes)):
             return 0
         else:
-            lpA = routeA.attributes[AttributeID.LOCAL_PREF].localpref
-            nhA = routeA.attributes[AttributeID.NEXT_HOP].next_hop
+            lpA = routeA.attributes[Attribute.CODE.LOCAL_PREF].localpref
+            nhA = routeA.attributes[Attribute.CODE.NEXT_HOP].next_hop
 
-            lpB = routeB.attributes[AttributeID.LOCAL_PREF].localpref
-            nhB = routeB.attributes[AttributeID.NEXT_HOP].next_hop
+            lpB = routeB.attributes[Attribute.CODE.LOCAL_PREF].localpref
+            nhB = routeB.attributes[Attribute.CODE.NEXT_HOP].next_hop
 
             if nhA != nhB and lpA == lpB:
                     # ECMP routes

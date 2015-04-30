@@ -16,14 +16,13 @@
 # limitations under the License.
 
 
-import socket
-
 import logging
 
 from bagpipe.bgp.engine.route_table_manager import RouteTableManager, \
     WorkerCleanupEvent
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
+from bagpipe.bgp.engine.upstream_exabgp_peer_worker \
+    import UpstreamExaBGPPeerWorker as BGPWorker
 from bagpipe.bgp.engine import RouteEvent, RouteEntry, \
     Subscription, Unsubscription
 
@@ -31,22 +30,22 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 from bagpipe.bgp.common.utils import getBoolean
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.exabgp.message.update.route import Route
-from bagpipe.exabgp.structure.rtc import RouteTargetConstraint
-from bagpipe.exabgp.structure.address import AFI, SAFI
-from bagpipe.exabgp.structure.ip import Inet
-from bagpipe.exabgp.message.update.attribute.nexthop import NextHop
+from exabgp.bgp.message.update.nlri.rtc import RouteTargetConstraint
+from exabgp.reactor.protocol import AFI, SAFI
+from exabgp.bgp.message.update import Attributes
+from exabgp.bgp.message.update.attribute.nexthop import NextHop
+
+from exabgp.bgp.message import OUT
 
 log = logging.getLogger(__name__)
 
 
 class Manager(LookingGlass):
 
-    def __init__(self, _config, peerClass=ExaBGPPeerWorker):
+    def __init__(self, _config):
         log.debug("Instantiating Manager")
 
         self.config = _config
-        self.peerClass = peerClass
 
         # RTC is defaults to being enabled
         self.config['enable_rtc'] = getBoolean(self.config.get('enable_rtc',
@@ -73,8 +72,7 @@ class Manager(LookingGlass):
                               self.config['peers'].strip().split(",")]
             for peerAddress in peersAddresses:
                 log.debug("Creating a peer worker for %s", peerAddress)
-                peerWorker = self.peerClass(
-                    self, None, peerAddress, self.config)
+                peerWorker = BGPWorker(self, None, peerAddress, self.config)
                 self.peers[peerAddress] = peerWorker
                 peerWorker.start()
 
@@ -137,7 +135,9 @@ class Manager(LookingGlass):
                     and firstWorkerForSubscription):
                 routeEvent = RouteEvent(
                     RouteEvent.ADVERTISE,
-                    self._subscription2RTCRouteEntry(subscription), self)
+                    self._subscription2RTCRouteEntry(subscription,
+                                                     OUT.ANNOUNCE),
+                    self)
                 log.debug(
                     "Based on subscription => synthesized RTC %s", routeEvent)
                 self.routeTableManager.enqueue(routeEvent)
@@ -164,7 +164,9 @@ class Manager(LookingGlass):
                 # route
                 routeEvent = RouteEvent(
                     RouteEvent.WITHDRAW,
-                    self._subscription2RTCRouteEntry(unsubscription), self)
+                    self._subscription2RTCRouteEntry(unsubscription,
+                                                     OUT.WITHDRAW),
+                    self)
                 log.debug("Based on unsubscription => synthesized withdraw"
                           " for RTC %s", routeEvent)
                 self.routeTableManager.enqueue(routeEvent)
@@ -200,16 +202,17 @@ class Manager(LookingGlass):
         else:
             return 0
 
-    def _subscription2RTCRouteEntry(self, subscription):
+    def _subscription2RTCRouteEntry(self, subscription, action):
 
-        route = Route(RouteTargetConstraint(AFI(AFI.ipv4), SAFI(
-            SAFI.rtc), self.config['my_as'], subscription.routeTarget))
-        nh = Inet(
-            1, socket.inet_pton(socket.AF_INET, self.config['local_address']))
-        route.attributes.add(NextHop(nh))
+        nlri = RouteTargetConstraint(AFI(AFI.ipv4), SAFI(
+            SAFI.rtc), action, self.config['my_as'],
+            subscription.routeTarget)
 
-        routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(
-            SAFI.rtc), [], route.nlri, route.attributes, self)
+        attributes = Attributes()
+        attributes.add(NextHop(self.config['local_address']))
+
+        routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.rtc),
+                                [], nlri, attributes, self)
 
         return routeEntry
 

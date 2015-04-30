@@ -36,14 +36,15 @@ from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
+from exabgp.reactor.protocol import AFI, SAFI
 
-from bagpipe.exabgp.message.update.attribute.communities import ECommunities, \
-    Encapsulation
-from bagpipe.exabgp.message.update.attribute.id import AttributeID
+from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
+    import Encapsulation
+from exabgp.bgp.message.update.attribute.attribute import Attribute
+from exabgp.bgp.message.update.attribute.nexthop import NextHop
 
-from bagpipe.exabgp.message.update.attribute.nexthop import NextHop
-from bagpipe.exabgp.structure.ip import Inet
+from exabgp.bgp.message.update.attribute.community.extended.communities \
+    import ExtendedCommunities
 
 from bagpipe.bgp.rest_api import APIException
 
@@ -191,7 +192,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                               routeEntry.nlri, newExportRTs)
 
                 updatedAttributes = copy(routeEntry.attributes)
-                del updatedAttributes[AttributeID.EXTENDED_COMMUNITY]
+                del updatedAttributes[Attribute.CODE.EXTENDED_COMMUNITY]
                 updatedAttributes.add(self._genExtendedCommunities())
 
                 updatedRouteEntry = self._newRouteEntry(
@@ -214,13 +215,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         return (ipAddress, mask)
 
     def _genExtendedCommunities(self):
-        ecommunities = ECommunities(copy(self.exportRTs))
+        ecommunities = ExtendedCommunities(copy(self.exportRTs))
         for encap in self.dataplaneDriver.supportedEncaps():
             if not isinstance(encap, Encapsulation):
                 raise Exception("dataplaneDriver.supportedEncaps() should "
-                                "return a list of Encapsulation objects")
+                                "return a list of Encapsulation objects (%s)",
+                                type(encap))
 
-            if encap != Encapsulation(Encapsulation.DEFAULT):
+            if encap != Encapsulation(Encapsulation.Type.DEFAULT):
                 ecommunities.add(encap)
         # FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
@@ -234,9 +236,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                                               label)
         assert(isinstance(routeEntry, RouteEntry))
 
-        nh = Inet(1, socket.inet_pton(socket.AF_INET,
-                                      self.dataplane.driver.getLocalAddress()))
-        routeEntry.attributes.add(NextHop(nh))
+        routeEntry.attributes.add(
+            NextHop(self.dataplane.driver.getLocalAddress()))
         routeEntry.attributes.add(self._genExtendedCommunities())
 
         return routeEntry
@@ -406,14 +407,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         try:
             advEncaps = filter(lambda ecom: isinstance(ecom, Encapsulation),
                                route.attributes[
-                AttributeID.EXTENDED_COMMUNITY].communities
+                Attribute.CODE.EXTENDED_COMMUNITY].communities
             )
             self.log.debug("Advertized Encaps: %s", advEncaps)
         except KeyError:
             self.log.debug("no encap advertized, let's use default")
 
         if not advEncaps:
-            advEncaps = [Encapsulation(Encapsulation.DEFAULT)]
+            advEncaps = [Encapsulation(Encapsulation.Type.DEFAULT)]
 
         goodEncaps = set(advEncaps) & set(
             self.dataplaneDriver.supportedEncaps())

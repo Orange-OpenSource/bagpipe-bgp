@@ -28,8 +28,8 @@ from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.exabgp.structure.address import AFI, SAFI
-from bagpipe.exabgp.message.update.attribute.communities import RouteTarget
+from exabgp.reactor.protocol import AFI, SAFI
+from exabgp.bgp.message.update.attribute.community.extended import RouteTargetASN2Number as RouteTarget
 
 log = logging.getLogger(__name__)
 
@@ -66,11 +66,11 @@ class Match(object):
 
         self_afi = self.afi or AFI(0)
         self_safi = self.safi or SAFI(0)
-        self_rt = self.routeTarget or RouteTarget(0, None, 0)
+        self_rt = self.routeTarget or RouteTarget(0, 0)
 
         other_afi = other.afi or AFI(0)
         other_safi = other.safi or SAFI(0)
-        other_rt = other.routeTarget or RouteTarget(0, None, 0)
+        other_rt = other.routeTarget or RouteTarget(0, 0)
 
         return cmp((self_afi,  self_safi,  self_rt),
                    (other_afi, other_safi, other_rt))

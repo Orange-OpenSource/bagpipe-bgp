@@ -69,6 +69,8 @@ class FSM(object):
 
     @state.setter
     def state(self, state):
+        if state == self._state:
+            return
         if state in self.allStates:
             self._prevState = self._state
             self._state = state
@@ -255,8 +257,7 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
             try:
                 loopResult = self._receiveLoopFun()
                 if loopResult == 0:
-                    self.log.info(
-                        "receiveLoopFun returned 0, aborting receiveLoop")
+                    self.log.info("receiveLoopFun returned 0, aborting")
                     break
                 elif loopResult == 2:
                     self.log.warning("receiveLoopFun returned 2 (error), "
