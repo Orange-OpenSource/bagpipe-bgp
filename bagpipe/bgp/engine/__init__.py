@@ -44,9 +44,9 @@ from exabgp.bgp.message.update.attribute.community.extended import \
 from exabgp.bgp.message.update.attribute.attribute import Attribute
 from exabgp.bgp.message.update import Attributes
 
-
-from bagpipe.bgp.common.looking_glass import LookingGlass, \
-    LookingGlassReferences
+from bagpipe.bgp.common.looking_glass import LookingGlass
+from bagpipe.bgp.common.looking_glass import LookingGlassReferences
+from bagpipe.bgp.common.looking_glass import LGMap
 
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
@@ -65,27 +65,19 @@ class RouteEntry(LookingGlass):
   that advertizes the route)
 """
 
-<<<<<<< HEAD
+
     def __init__(self, afi, safi, nlri, RTs=None, attributes=None, source=None):
-=======
-    def __init__(self, afi, safi, nlri, attributes, routeTargets=None):
->>>>>>> 306add2... refactor RouteEntry and pushEvent
         assert(isinstance(afi, AFI))
         assert(isinstance(safi, SAFI))
         if attributes is None:
             attributes = Attributes()
         assert(isinstance(attributes, Attributes))
-<<<<<<< HEAD
 
         self.source = source
-=======
-        self.source = None
->>>>>>> 306add2... refactor RouteEntry and pushEvent
         self.afi = afi
         self.safi = safi
         self.nlri = nlri
         self.attributes = attributes
-<<<<<<< HEAD
         # a list of exabgp.bgp.message.update.attribute.community.
         #   extended.RouteTargetASN2Number
         self._routeTargets = []
@@ -96,45 +88,33 @@ class RouteEntry(LookingGlass):
         if RTs:
             self.attributes.add(ExtendedCommunities(RTs))
             self._routeTargets += RTs
-=======
-        # a list of exabgp.message.update.attribute.communities.RouteTarget:
-        self._routeTargets = []
-
-        if AttributeID.EXTENDED_COMMUNITY not in self.attributes:
-            self.attributes.add(ECommunities())
-
-        self._routeTargets = [ecom for ecom in self.attributes[
-            AttributeID.EXTENDED_COMMUNITY].communities
-            if isinstance(ecom, RouteTarget)]
-
-        if routeTargets:
-            self.attributes[AttributeID.EXTENDED_COMMUNITY
-                            ].communities += routeTargets
-            self._routeTargets += routeTargets
->>>>>>> 306add2... refactor RouteEntry and pushEvent
 
     @property
     def routeTargets(self):
         return self._routeTargets
 
     def setRouteTargets(self, routeTargets):
-        self._routeTargets = routeTargets
-<<<<<<< HEAD
-        del self.attributes[Attribute.CODE.EXTENDED_COMMUNITY]
-        self.attributes.add(ExtendedCommunities(self.routeTargets))
-=======
         log.debug("attributes before srt: %s", self.attributes)
-        # first remove all the route targets
-        for ecom in self.attributes[AttributeID.EXTENDED_COMMUNITY]:
-            if isinstance(ecom, RouteTarget):
-                self.attributes[AttributeID.EXTENDED_COMMUNITY
-                                ].communities.delete(ecom)
 
-        self.attributes[AttributeID.EXTENDED_COMMUNITY
-                        ].communities += routeTargets
+        # first build a list of ecoms without any RT
+        newEComs = ExtendedCommunities()
+        if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
+            ecoms = self.attributes[
+                Attribute.CODE.EXTENDED_COMMUNITY].communities
+            log.debug("ecoms: %s", ecoms)
+            log.debug("ecoms type: %s", type(ecoms))
+            for ecom in ecoms:
+                if not isinstance(ecom, RouteTarget):
+                    newEComs.communities.append(ecom)
+
+        # then add the right RTs
+        newEComs.communities += routeTargets
+
+        # update
+        self._routeTargets = routeTargets
+        self.attributes[Attribute.CODE.EXTENDED_COMMUNITY] = newEComs
 
         log.debug("attributes after srt: %s", self.attributes)
->>>>>>> 306add2... refactor RouteEntry and pushEvent
 
     def __cmp__(self, other):
         if other is None:
@@ -176,7 +156,7 @@ class RouteEntry(LookingGlass):
                attributeId == Attribute.CODE.LOCAL_PREF):
                 continue
 
-            attributesDict[repr(attributeId)] = repr(value)
+            attributesDict[str(attributeId)] = repr(value)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
                "attributes": attributesDict
@@ -289,7 +269,7 @@ class Unsubscription(_SubUnsubCommon):
 
 class EventSource(LookingGlass):
     '''
-    Class for objects that advertise and withdraw routes 
+    Class for objects that advertise and withdraw routes
     need to have a 'name' attribute
     '''
 
@@ -328,4 +308,3 @@ class WorkerCleanupEvent(object):
 
     def __repr__(self):
         return "WorkerCleanupEvent:%s" % (self.worker.name)
-

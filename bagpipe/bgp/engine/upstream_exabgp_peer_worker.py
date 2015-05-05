@@ -92,8 +92,8 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                        # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
                        (AFI(AFI.l2vpn), SAFI(SAFI.evpn))]
 
-    def __init__(self, bgpManager, name, peerAddress, config):
-        BGPPeerWorker.__init__(self, bgpManager, name, peerAddress)
+    def __init__(self, routeTableManager, name, peerAddress, config):
+        BGPPeerWorker.__init__(self, routeTableManager, name, peerAddress)
         self.config = config
         self.localAddress = self.config['local_address']
         self.peerAddress = peerAddress
@@ -156,21 +156,8 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
         self._setHoldTime(received_open.hold_time)
 
-        # Hack to ease troubleshooting, have the real peer address appear in
-        # the logs when fakerr is used
-        if received_open.router_id.ip != self.peerAddress:
-            self.log.info("changing thread name from %s to BGP-x%s, based on"
-                          " the router-id advertized in Open (different from"
-                          " peerAddress == %s)", self.name,
-                          received_open.router_id.ip, self.peerAddress)
-            self.name = "BGP-%s/%s" % (self.peerAddress,
-                                       received_open.router_id.ip)
-
-        try:
-            mp_capabilities = received_open.capabilities[
-                Capability.CODE.MULTIPROTOCOL]
-        except Exception:
-            mp_capabilities = []
+        mp_capabilities = received_open.capabilities.get(
+            Capability.CODE.MULTIPROTOCOL, [])
 
         # check that our peer advertized at least mpls_vpn and evpn
         # capabilities
@@ -269,22 +256,25 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     def _processReceivedRoute(self, action, nlri, attributes):
         self.log.info("Received route: %s, %s", nlri, attributes)
 
-        rts = []
-        if Attribute.CODE.EXTENDED_COMMUNITY in attributes:
-            self.log.debug("type: %s", type(attributes[
-                Attribute.CODE.EXTENDED_COMMUNITY]))
-            rts = [ecom for ecom in attributes[
-                   Attribute.CODE.EXTENDED_COMMUNITY].communities
-                   if isinstance(ecom, RouteTarget)]
-
-            if not rts:
-                raise Exception("Unable to find any Route Targets"
-                                "in the received route")
+#         rts = []
+#         if Attribute.CODE.EXTENDED_COMMUNITY in attributes:
+#             self.log.debug("type: %s", type(attributes[
+#                 Attribute.CODE.EXTENDED_COMMUNITY]))
+#             rts = [ecom for ecom in attributes[
+#                    Attribute.CODE.EXTENDED_COMMUNITY].communities
+#                    if isinstance(ecom, RouteTarget)]
+# 
+#             if not rts:
+#                 raise Exception("Unable to find any Route Targets"
+#                                 "in the received route")
 
         routeEntry = RouteEntry(nlri.afi, nlri.safi,
-                                nlri, rts, attributes)
+                                nlri, None, attributes)
 
-        self._pushEvent(RouteEvent(action, routeEntry))
+        if action == IN.ANNOUNCED:
+            self._advertiseRoute(routeEntry)
+        else: # IN.WITHDRAWN
+            self._withdrawRoute(routeEntry)
 
         # TODO(tmmorin): move RTC code out-of the peer-specific code
         if (nlri.afi, nlri.safi) == (AFI(AFI.ipv4),

@@ -104,14 +104,13 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
     Partially abstract class for a Worker implementing the BGP protocol.
     '''
 
-    def __init__(self, bgpManager, name, peerAddress):
+    def __init__(self, routeTableManager, name, peerAddress):
         # call super
         Thread.__init__(self)
         self.setDaemon(True)
         self.name = "BGP-%s" % peerAddress
-        Worker.__init__(self, bgpManager, self.name)
+        Worker.__init__(self, routeTableManager, self.name)
 
-        self.bgpManager = bgpManager
         self.peerAddress = peerAddress
 
         # its up to subclasses to call setHoldTime again to set holdtime based

@@ -24,14 +24,17 @@ from Queue import Queue
 
 from threading import Event
 
-from bagpipe.bgp.engine import RouteEntry, RouteEvent, \
-    Subscription, Unsubscription
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.engine import EventSource
+from bagpipe.bgp.engine import Subscription
+from bagpipe.bgp.engine import Unsubscription
+from bagpipe.bgp.engine import WorkerCleanupEvent
+
+from bagpipe.bgp.common.looking_glass import LookingGlass
 
 log = logging.getLogger(__name__)
 
 
-class Worker(LookingGlass):
+class Worker(EventSource, LookingGlass):
 
     """This is the base class for objects that interact with the route table
     manager to produce and consume events related to BGP routes.
@@ -47,6 +50,7 @@ class Worker(LookingGlass):
 
     def __init__(self, bgpManager, workerName):
         self.bgpManager = bgpManager
+        self.routeTableManager = bgpManager.routeTableManager
         self._queue = Queue()
         self._pleaseStop = Event()
 
@@ -64,10 +68,14 @@ class Worker(LookingGlass):
         and indicate to the route table manager that this worker is stopped.
         Then call _stopped() to let a subclass implement any further work.
         """
+        log.info("Stop worker %s", self)
         self._pleaseStop.set()
         self._queue.put(Worker.stopEvent)
-        self.bgpManager.cleanup(self)
+        self._cleanup()
         self._stopped()
+
+    def _cleanup(self):
+        self.routeTableManager.enqueue(WorkerCleanupEvent(self))
 
     def _stopped(self):
         """
@@ -116,18 +124,19 @@ class Worker(LookingGlass):
     def _subscribe(self, afi, safi, rt=None):
         subobj = Subscription(afi, safi, rt, self)
         log.info("Subscribe: %s ", subobj)
-        self.bgpManager.routeEventSubUnsub(subobj)
+        self.routeTableManager.enqueue(subobj)
 
     def _unsubscribe(self, afi, safi, rt=None):
         subobj = Unsubscription(afi, safi, rt, self)
         log.info("Unsubscribe: %s ", subobj)
-        self.bgpManager.routeEventSubUnsub(subobj)
+        self.routeTableManager.enqueue(subobj)
 
-    def getWorkerSubscriptions(self):
-        return self.bgpManager.routeTableManager.getWorkerSubscriptions(self)
-
-    def getWorkerRouteEntries(self):
-        return self.bgpManager.routeTableManager.getWorkerRouteEntries(self)
+    def getSubscriptions(self):
+        # self._rtm_matches is private info maintained by RouteTableManager
+        if '_rtm_matches' not in self.__dict__:
+            return None
+        else:
+            return sorted(self._rtm_matches)
 
     def __repr__(self):
         return "Worker %s" % (self.name)
@@ -140,15 +149,7 @@ class Worker(LookingGlass):
             "internals": {
                 "event queue length": self._queue.qsize(),
                 "subscriptions":
-                    [repr(sub) for sub in self.getWorkerSubscriptions()],
+                    [repr(sub) for sub in self.getSubscriptions()],
             }
         }
 
-    def getLGMap(self):
-        return {
-            "routes": (LGMap.SUBTREE, self.getLGRoutes)
-        }
-
-    def getLGRoutes(self, pathPrefix):
-        return [route.getLookingGlassInfo(pathPrefix) for route in
-                self.getWorkerRouteEntries()]

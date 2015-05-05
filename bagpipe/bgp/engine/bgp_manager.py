@@ -18,13 +18,18 @@
 
 import logging
 
-from bagpipe.bgp.engine.route_table_manager import RouteTableManager, \
-    WorkerCleanupEvent
+from bagpipe.bgp.common.looking_glass import LookingGlass
+
+from bagpipe.bgp.engine.route_table_manager import RouteTableManager
+from bagpipe.bgp.engine.route_table_manager import WorkerCleanupEvent
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.upstream_exabgp_peer_worker \
     import UpstreamExaBGPPeerWorker as BGPWorker
-from bagpipe.bgp.engine import RouteEvent, RouteEntry, \
-    Subscription, Unsubscription
+from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine import RouteEntry
+from bagpipe.bgp.engine import EventSource
+from bagpipe.bgp.engine import Subscription
+from bagpipe.bgp.engine import Unsubscription
 
 from bagpipe.bgp.common.looking_glass import LGMap
 from bagpipe.bgp.common.utils import getBoolean
@@ -40,9 +45,10 @@ from exabgp.bgp.message import OUT
 log = logging.getLogger(__name__)
 
 
-class Manager(LookingGlass):
+class Manager(EventSource, LookingGlass):
 
     def __init__(self, _config):
+
         log.debug("Instantiating Manager")
 
         self.config = _config
@@ -51,7 +57,16 @@ class Manager(LookingGlass):
         self.config['enable_rtc'] = getBoolean(self.config.get('enable_rtc',
                                                                True))
 
-        self.routeTableManager = RouteTableManager()
+        if self.config['enable_rtc']:
+            firstLocalSubscriberCallback = self.rtcAdvertisementForSub
+            lastLocalSubscriberCallback = self.rtcWithdrawalForSub
+        else:
+            firstLocalSubscriberCallback = None
+            lastLocalSubscriberCallback = None
+
+        self.routeTableManager = RouteTableManager(
+            firstLocalSubscriberCallback, lastLocalSubscriberCallback)
+
         self.routeTableManager.start()
 
         if 'local_address' not in self.config:
@@ -92,19 +107,6 @@ class Manager(LookingGlass):
             peer.join()
         self.routeTableManager.join()
 
-    def _pushEvent(self, routeEvent):
-        log.debug("push event to RouteTableManager")
-        self.routeTableManager.enqueue(routeEvent)
-
-    def cleanup(self, worker):
-        log.debug("push cleanup event for worker %s to RouteTableManager",
-                  worker.name)
-        self.routeTableManager.enqueue(WorkerCleanupEvent(worker))
-
-        # TODO(tmmorin): withdraw RTC routes corresponding to worker
-        # subscriptions -- currently ok since VPNInstance._stop() calls
-        # unsubscribe
-
     def getLocalAddress(self):
         try:
             return self.config['local_address']
@@ -112,97 +114,24 @@ class Manager(LookingGlass):
             log.error("BGPManager config has no localAddress defined")
             return "0.0.0.0"
 
-    def routeEventSubUnsub(self, subobj):
-        if isinstance(subobj, Subscription):
-            self._routeEventSubscribe(subobj)
-        elif isinstance(subobj, Unsubscription):
-            self._routeEventUnsubscribe(subobj)
-        else:
-            assert(False)
+    @logDecorator.log
+    def rtcAdvertisementForSub(self, sub):
+        if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
+            event = RouteEvent(RouteEvent.ADVERTISE,
+                               self._subscription2RTCRouteEntry(sub),
+                               self)
+            log.debug("Based on subscription => synthesized RTC %s", event)
+            return event
 
     @logDecorator.log
-    def _routeEventSubscribe(self, subscription):
-
-        self.routeTableManager.enqueue(subscription)
-
-        # synthesize a RouteEvent for a RouteTarget constraint route
-        if (self.config['enable_rtc'] and not isinstance(subscription.worker,
-                                                         BGPPeerWorker)):
-
-            firstWorkerForSubscription = self._trackedSubscriptionsAddWorker(
-                subscription)
-
-            # FIXME: not excellent to hardcode this here
-            if ((subscription.safi in (SAFI.mpls_vpn, SAFI.evpn))
-                    and firstWorkerForSubscription):
-                routeEvent = RouteEvent(
-                    RouteEvent.ADVERTISE,
-                    self._subscription2RTCRouteEntry(subscription,
-                                                     OUT.ANNOUNCE),
-                    self)
-                log.debug(
-                    "Based on subscription => synthesized RTC %s", routeEvent)
-                self.routeTableManager.enqueue(routeEvent)
-            else:
-                log.debug("No need to synthesize an RTC route "
-                          "(firstWorkerForSubscription:%s) ",
-                          firstWorkerForSubscription)
-
-    @logDecorator.log
-    def _routeEventUnsubscribe(self, unsubscription):
-
-        self.routeTableManager.enqueue(unsubscription)
-
-        if (self.config['enable_rtc'] and not isinstance(unsubscription.worker,
-                                                         BGPPeerWorker)):
-
-            wasLastWorkerForSubscription = \
-                self._trackedSubscriptionsRemoveWorker(unsubscription)
-
-            # FIXME: not excellent to hardcode this here
-            if ((unsubscription.safi in (SAFI.mpls_vpn, SAFI.evpn))
-                    and wasLastWorkerForSubscription):
-                # synthesize a withdraw RouteEvent for a RouteTarget constraint
-                # route
-                routeEvent = RouteEvent(
-                    RouteEvent.WITHDRAW,
-                    self._subscription2RTCRouteEntry(unsubscription,
-                                                     OUT.WITHDRAW),
-                    self)
-                log.debug("Based on unsubscription => synthesized withdraw"
-                          " for RTC %s", routeEvent)
-                self.routeTableManager.enqueue(routeEvent)
-            else:
-                log.debug("No need to synthesize an RTC route "
-                          "(wasLastWorkerForSubscription:%s) ",
-                          wasLastWorkerForSubscription)
-
-    # FIXME: this can be subject to races
-    def _trackedSubscriptionsAddWorker(self, subs):
-        '''returns 1 if this is the first worker subscribed'''
-
-        result = 0
-        if (subs.afi, subs.safi, subs.routeTarget) not in self.trackedSubs:
-            self.trackedSubs[(subs.afi, subs.safi, subs.routeTarget)] = set()
-            result = 1
-
-        self.trackedSubs[
-            (subs.afi, subs.safi, subs.routeTarget)].add(subs.worker)
-
-        return result
-
-    # FIXME: this can be subject to races
-    def _trackedSubscriptionsRemoveWorker(self, subs):
-        '''returns 1 if this was the last worker subscribed'''
-
-        self.trackedSubs[(subs.afi, subs.safi, subs.routeTarget)
-                         ].remove(subs.worker)
-
-        if len(self.trackedSubs[(subs.afi, subs.safi, subs.routeTarget)]) == 0:
-            del self.trackedSubs[(subs.afi, subs.safi, subs.routeTarget)]
-            return 1
-        else:
-            return 0
+    def rtcWithdrawalForSub(self, sub):
+        if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
+            event = RouteEvent(RouteEvent.WITHDRAW,
+                               self._subscription2RTCRouteEntry(sub),
+                               self)
+            log.debug("Based on unsubscription => synthesized withdraw"
+                      " for RTC %s", event)
+            return event
 
     def _subscription2RTCRouteEntry(self, subscription, action):
 

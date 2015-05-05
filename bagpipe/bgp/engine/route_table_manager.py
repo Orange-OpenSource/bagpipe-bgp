@@ -21,7 +21,11 @@ import traceback
 from threading import Thread
 from Queue import Queue
 
-from bagpipe.bgp.engine import RouteEvent, Subscription, Unsubscription
+from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine import Subscription
+from bagpipe.bgp.engine import Unsubscription
+from bagpipe.bgp.engine import WorkerCleanupEvent
+
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 
@@ -32,15 +36,6 @@ from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update.attribute.community.extended import RouteTargetASN2Number as RouteTarget
 
 log = logging.getLogger(__name__)
-
-
-class WorkerCleanupEvent(object):
-
-    def __init__(self, worker):
-        self.worker = worker
-
-    def __repr__(self):
-        return "WorkerCleanupEvent:%s" % (self.worker.name)
 
 
 class Match(object):
@@ -96,23 +91,40 @@ class RouteTableManager(Thread, LookingGlass):
         def __init__(self):
             self.workers = set()
             self.entries = set()
+            self.nLocalWorkers = 0
 
         def __repr__(self):
             return "workers: %s\nentries: %s" % (self.workers,
                                                  self.entries)
 
-    def __init__(self):
+        def addWorker(self, worker):
+            self.workers.add(worker)
+            if not isinstance(worker, BGPPeerWorker):
+                self.nLocalWorkers += 1
+                return (self.nLocalWorkers == 1)
+
+        def delWorker(self, worker):
+            self.workers.remove(worker)
+            if not isinstance(worker, BGPPeerWorker):
+                self.nLocalWorkers -= 1
+                return (self.nLocalWorkers == 0)
+
+    def __init__(self, firstLocalSubscriberCB, lastLocalSubscriberCB):
         Thread.__init__(self, name="RouteTableManager")
         self.setDaemon(True)
 
+        # keys are Matches, values are WorkersAndEntries objects:
         self._match2workersAndEntries = {}
-        # keys are Matches, values are WorkersAndEntries objects
-        self._worker2matches = {}  # keys are Workers, values are Match objects
+
+        # workers known to us
+        # name -> worker dict
+        self._workers = {}
+
+        # keys are (source,nlri) tuples, values are Entry objects:
         self._source_nlri2entry = {}
-        # keys are (source,nlri) tuples, values are Entry objects
-        self._source2entries = {}
-        # dict: keys are event sources, each value is a set() of Entry
-        # objects
+
+        self.firstLocalSubscriberCallback = firstLocalSubscriberCB
+        self.lastLocalSubscriberCallback = lastLocalSubscriberCB
 
         self._queue = Queue()
 
@@ -179,9 +191,7 @@ class RouteTableManager(Thread, LookingGlass):
             else:
                 raise
 
-    def _match2workers(self, match, createIfNone=False, emptyListIfNone=True):
-        if createIfNone:
-            return self._match2workersAndEntriesLookupCreate(match).workers
+    def _match2workers(self, match, emptyListIfNone=True):
         try:
             return self._match2workersAndEntries[match].workers
         except KeyError:
@@ -190,58 +200,27 @@ class RouteTableManager(Thread, LookingGlass):
             else:
                 raise
 
-    def _source2entriesAddEntry(self, entry):
-        try:
-            entries = self._source2entries[entry.source]
-        except KeyError:
-            entries = set()
-            self._source2entries[entry.source] = entries
-        entries.add(entry)
+    def _matchAddWorker(self, match, worker):
+        '''
+        Add the worker from the list of workers subscribed to match.
+        returns true if this is the first local one
+        '''
+        wa = self._match2workersAndEntriesLookupCreate(match)
+        return wa.addWorker(worker)
 
-    def _source2entriesRemoveEntry(self, entry):
-        try:
-            entries = self._source2entries[entry.source]
-            log.debug("_source2entries[ entry.worker ] = %s ", entries)
-            entries.discard(entry)
-        except KeyError:
-            log.debug("(attempt at removing a non existing entry from "
-                      "self._source2entries[ entry.source ] : %s)", entry)
-            pass
-
-    def getWorkerSubscriptions(self, worker):
-        """
-        the returned entries should *not* be modified by caller
-        (TODO: protect worker object by making their variables private)
-        """
-
-        if worker not in self._worker2matches:
-            return []
-        else:
-            matches = self._worker2matches[worker]
-            if matches is None:
-                return []
-            else:
-                return sorted(matches)
-
-    def getWorkerRouteEntries(self, worker):
-        """
-        the returned entries should *not* be modified by caller
-        (TODO: protect Entry objects by making their variables private)
-        """
-        if worker not in self._source2entries:
-            return []
-        else:
-            entries = self._source2entries[worker]
-            if entries is None:
-                return []
-            else:
-                return entries
+    def _matchDelWorker(self, match, worker):
+        '''
+        Delete the worker from the list of workers subscribed to match
+        returns true if this was the last local one
+        '''
+        wa = self._match2workersAndEntries[match]
+        return wa.delWorker(worker)
 
     def _workerSubscribes(self, sub):
         # TODO: this function currently will not consider whether or not
         # is already subscribed to set of route events, before considering
         # a subscription.  In particular, multiple identical subscriptions
-        # will lead to this code resyntethizing events at each call.
+        # will lead to this code re-synthesizing events at each call.
         #
         # Ideally, the code should detect that the worker is already subscribed
         # and skip the subscription. *But* such a change should not be done
@@ -252,16 +231,17 @@ class RouteTableManager(Thread, LookingGlass):
 
         worker = sub.worker
 
-        # self._dumpState()
+        self._workers[worker.name] = worker
 
         match = Match(sub.afi, sub.safi, sub.routeTarget)
 
         # update match2worker
-        self._match2workers(match, createIfNone=True).add(worker)
+        if self._matchAddWorker(match, worker):
+            self.callbackFirstLocalSubscriber(sub)
 
-        # update worker2matches
-        if worker not in self._worker2matches:
-            self._worker2matches[worker] = set()
+        # create worker matches private info if needed
+        if '_rtm_matches' not in worker.__dict__:
+            worker._rtm_matches = set()
 
         # re-synthesize events
         for entry in self._match2entries(match):
@@ -275,7 +255,7 @@ class RouteTableManager(Thread, LookingGlass):
                 for rt in entry.routeTargets:
                     if Match(entry.afi,
                              entry.safi,
-                             rt) in self._worker2matches[worker]:
+                             rt) in worker._rtm_matches:
                         (shouldDispatch, reason) = (
                             False,
                             "worker already had a subscription for this route")
@@ -288,8 +268,8 @@ class RouteTableManager(Thread, LookingGlass):
                 log.info("%s => not dispatching re-synthesized event for %s",
                          reason, entry)
 
-        # update worker2matches
-        self._worker2matches[worker].add(match)
+        # update worker matches
+        worker._rtm_matches.add(match)
 
         # self._dumpState()
 
@@ -300,13 +280,13 @@ class RouteTableManager(Thread, LookingGlass):
 
         match = Match(sub.afi, sub.safi, sub.routeTarget)
 
-        # update _worker2matches
-        if sub.worker not in self._worker2matches:
+        # update worker matches
+        if '_rtm_matches' not in sub.worker.__dict__:
             log.warning("worker %s unsubs'd from %s but wasn't tracked yet",
                         sub.worker, match)
         else:
             try:
-                self._worker2matches[sub.worker].remove(match)
+                sub.worker._rtm_matches.remove(match)
             except KeyError:
                 log.warning("worker %s unsubs' from %s but this match was"
                             "not tracked for this worker (should not happen,"
@@ -337,9 +317,12 @@ class RouteTableManager(Thread, LookingGlass):
         if match not in self._match2workersAndEntries:
             log.warning("worker %s unsubscribed from %s but we had no such"
                         " subscription yet", sub.worker, match)
+
         else:
             try:
-                self._match2workers(match).remove(sub.worker)
+                if self._matchDelWorker(match, sub.worker):
+                    log.debug("see if need to callback on last local worker")
+                    self.callbackLastLocalSubscriber(sub)
             except KeyError:
                 log.warning("worker %s unsubscribed from %s but was not"
                             " subscribed yet", sub.worker, match)
@@ -453,8 +436,7 @@ class RouteTableManager(Thread, LookingGlass):
 
             self._propagateRouteEvent(removalEvent, workersAlreadyNotified)
 
-            # Update match2entries and source2entries for the
-            # replacedRoute
+            # Update match2entries for the replacedRoute
             for match in self._matchesFor(replacedEntry.afi,
                                           replacedEntry.safi,
                                           replacedEntry.routeTargets):
@@ -466,7 +448,8 @@ class RouteTableManager(Thread, LookingGlass):
                               " (route: %s)", match, replacedEntry)
                 self._checkMatch2workersAndEntriesCleanup(match)
 
-            self._source2entriesRemoveEntry(replacedEntry)
+            # update the route entries for this source
+            replacedEntry.source._rtm_routeEntries.discard(replacedEntry)
 
         if routeEvent.type == RouteEvent.ADVERTISE:
             # Update match2entries and source2entries for the newly
@@ -476,7 +459,10 @@ class RouteTableManager(Thread, LookingGlass):
                                           entry.routeTargets):
                 self._match2entries(match, createIfNone=True).add(entry)
 
-            self._source2entriesAddEntry(entry)
+            if '_rtm_routeEntries' not in entry.source.__dict__:
+                entry.source._rtm_routeEntries = set()
+
+            entry.source._rtm_routeEntries.add(entry)
 
             # Update _source_nlri2entry
             self._source_nlri2entry[(entry.source, entry.nlri)] = entry
@@ -535,18 +521,12 @@ class RouteTableManager(Thread, LookingGlass):
         dump = []
 
         dump.append("~~~ Worker -> Matches ~~~")
-        for worker in self._worker2matches.keys():
+        for worker in self._workers.values():
             dump.append("  %s" % worker)
-            matches = list(self._worker2matches[worker])
+            matches = list(worker._rtm_matches)
             matches.sort()
             for match in matches:
                 dump.append("    %s" % match)
-
-        dump.append("\n~~~ Source -> Entries ~~~")
-        for source in self._source2entries.keys():
-            dump.append("  %s" % source)
-            for entry in self._source2entries[source]:
-                dump.append("    %s" % entry)
 
         match2workerDump = []
         match2entriesDump = []
@@ -598,13 +578,10 @@ class RouteTableManager(Thread, LookingGlass):
         return result
 
     def getLGWorkerList(self):
-        return [{"id": worker.name} for worker in self._worker2matches.keys()]
+        return [{"id": worker.name} for worker in self._workers.values()]
 
     def getLGWorkerFromPathItem(self, pathItem):
-        # TODO(tmmorin): do a hash-lookup instead of looping the list
-        for worker in self._source2entries.keys():
-            if worker.name == pathItem:
-                return worker
+        return self._workers.get(pathItem, None)
 
     def getAllRoutesButRTC(self):
         try:

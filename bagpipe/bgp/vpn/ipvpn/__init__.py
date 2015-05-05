@@ -84,7 +84,6 @@ class VRF(VPNInstance, LookingGlass):
         # Generate BGP route and advertise it...
         rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
                                              self.instanceId)
-        self.log.debug("rd: %s", rd)
         nlri = self._nlriFrom("%s/%s" % (ipPrefix, prefixLen), label,
                               rd, OUT.ANNOUNCE)
         # FIXME: action is set to ANNOUNCE, need be able to override it

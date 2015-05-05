@@ -187,7 +187,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         # Re-advertise all routes with new export RTs
         if set(newExportRTs) != set(self.exportRTs):
             self.exportRTs = newExportRTs
-            for routeEntry in self.getWorkerRouteEntries():
+            for routeEntry in self.getRouteEntries():
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
                               routeEntry.nlri, newExportRTs)
 
@@ -222,7 +222,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                                 type(encap))
 
             if encap != Encapsulation(Encapsulation.Type.DEFAULT):
-                ecommunities.add(encap)
+                ecommunities.communities.append(encap)
         # FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
 
