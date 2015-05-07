@@ -37,7 +37,6 @@ from exabgp.bgp.message.update.nlri.mpls import VPNLabelledPrefix
 from exabgp.reactor.protocol import AFI, SAFI
 
 from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.nexthop import NextHop
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
 
@@ -111,15 +110,13 @@ class VRF(VPNInstance, LookingGlass):
 
             attributes = Attributes()
 
-            attributes.add(NextHop(self.dataplane.driver.getLocalAddress()))
-
             attributes.add(ExtendedCommunities(self.readvertiseToRTs))
 
             routeEntry = RouteEntry(self.afi, self.safi, nlri,
                                     self.readvertiseToRTs, attributes)
             self._advertiseRoute(routeEntry)
 
-        self.readvertised.add(nlri.prefix)
+        self.readvertised.add(nlri.prefix())
 
     @logDecorator.log
     def _readvertiseStop(self, nlri):
@@ -130,7 +127,7 @@ class VRF(VPNInstance, LookingGlass):
             routeEntry = RouteEntry(self.afi, self.safi, nlri)
             self._withdrawRoute(routeEntry)
 
-        self.readvertised.remove(nlri.prefix)
+        self.readvertised.remove(nlri.prefix())
 
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
                    advertiseSubnet):
@@ -160,7 +157,7 @@ class VRF(VPNInstance, LookingGlass):
 
     def _route2trackedEntry(self, route):
         if isinstance(route.nlri, VPNLabelledPrefix):
-            return route.nlri.prefix
+            return route.nlri.prefix()
         else:
             self.log.error("We should not receive routes of type %s",
                            type(route.nlri))
@@ -195,9 +192,11 @@ class VRF(VPNInstance, LookingGlass):
         if not encaps:
             return
 
+        assert(len(newRoute.nlri.labels) == 1)
+
         self.dataplane.setupDataplaneForRemoteEndpoint(
-            prefix, newRoute.attributes.get(NextHop.ID).ip,
-            newRoute.nlri.labelStack[0].labelValue, newRoute.nlri, encaps)
+            prefix, newRoute.nexthop,
+            newRoute.nlri.labels[0], newRoute.nlri, encaps)
 
     @utils.synchronized
     @logDecorator.log
@@ -220,11 +219,11 @@ class VRF(VPNInstance, LookingGlass):
             return
 
         self.dataplane.removeDataplaneForRemoteEndpoint(
-            prefix, oldRoute.attributes.get(NextHop.ID).ip,
-            oldRoute.nlri.labelStack[0].labelValue, oldRoute.nlri)
+            prefix, oldRoute.nexthop,
+            oldRoute.nlri.labels[0], oldRoute.nlri)
 
     def getLGMap(self):
         return {
-            "readvertised":  (LGMap.VALUE, [repr(prefix) for prefix in
+            "readvertised":  (LGMap.VALUE, [prefix for prefix in
                                             self.readvertised])
         }

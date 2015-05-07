@@ -39,8 +39,10 @@ from exabgp.bgp.message.update.nlri.rtc import RouteTargetConstraint
 from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.attribute.nexthop import NextHop
-
 from exabgp.bgp.message import OUT
+
+from exabgp.protocol.ip import IP
+
 
 log = logging.getLogger(__name__)
 
@@ -118,7 +120,8 @@ class Manager(EventSource, LookingGlass):
     def rtcAdvertisementForSub(self, sub):
         if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
             event = RouteEvent(RouteEvent.ADVERTISE,
-                               self._subscription2RTCRouteEntry(sub),
+                               self._subscription2RTCRouteEntry(sub,
+                                                                OUT.ANNOUNCE),
                                self)
             log.debug("Based on subscription => synthesized RTC %s", event)
             return event
@@ -127,7 +130,8 @@ class Manager(EventSource, LookingGlass):
     def rtcWithdrawalForSub(self, sub):
         if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
             event = RouteEvent(RouteEvent.WITHDRAW,
-                               self._subscription2RTCRouteEntry(sub),
+                               self._subscription2RTCRouteEntry(sub,
+                                                                OUT.WITHDRAW),
                                self)
             log.debug("Based on unsubscription => synthesized withdraw"
                       " for RTC %s", event)
@@ -135,15 +139,12 @@ class Manager(EventSource, LookingGlass):
 
     def _subscription2RTCRouteEntry(self, subscription, action):
 
-        nlri = RouteTargetConstraint(AFI(AFI.ipv4), SAFI(
-            SAFI.rtc), action, self.config['my_as'],
-            subscription.routeTarget)
+        nlri = RouteTargetConstraint(
+            AFI(AFI.ipv4), SAFI(SAFI.rtc), action,
+            IP.pton(self.getLocalAddress()),
+            self.config['my_as'], subscription.routeTarget)
 
-        attributes = Attributes()
-        attributes.add(NextHop(self.config['local_address']))
-
-        routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.rtc),
-                                nlri, attributes)
+        routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.rtc), nlri)
 
         return routeEntry
 

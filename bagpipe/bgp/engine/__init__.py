@@ -65,13 +65,16 @@ class RouteEntry(LookingGlass):
   that advertizes the route)
 """
 
-
-    def __init__(self, afi, safi, nlri, RTs=None, attributes=None, source=None):
+    def __init__(self, afi, safi, nlri, RTs=None, attributes=None,
+                 source=None):
         assert(isinstance(afi, AFI))
         assert(isinstance(safi, SAFI))
         if attributes is None:
             attributes = Attributes()
         assert(isinstance(attributes, Attributes))
+        if RTs is not None:
+            assert(isinstance(RTs, list))
+            assert(len(RTs) == 0 or isinstance(RTs[0], RouteTarget))
 
         self.source = source
         self.afi = afi
@@ -94,15 +97,11 @@ class RouteEntry(LookingGlass):
         return self._routeTargets
 
     def setRouteTargets(self, routeTargets):
-        log.debug("attributes before srt: %s", self.attributes)
-
         # first build a list of ecoms without any RT
         newEComs = ExtendedCommunities()
         if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
             ecoms = self.attributes[
                 Attribute.CODE.EXTENDED_COMMUNITY].communities
-            log.debug("ecoms: %s", ecoms)
-            log.debug("ecoms type: %s", type(ecoms))
             for ecom in ecoms:
                 if not isinstance(ecom, RouteTarget):
                     newEComs.communities.append(ecom)
@@ -114,7 +113,15 @@ class RouteEntry(LookingGlass):
         self._routeTargets = routeTargets
         self.attributes[Attribute.CODE.EXTENDED_COMMUNITY] = newEComs
 
-        log.debug("attributes after srt: %s", self.attributes)
+    @property
+    def nexthop(self):
+        try:
+            return self.nlri.nexthop.ip
+        except AttributeError:
+            try:
+                return self.attributes[Attribute.CODE.NEXT_HOP].ip
+            except AttributeError:
+                raise Exception("route has no nexthop: %s", self)
 
     def __cmp__(self, other):
         if other is None:
@@ -125,11 +132,11 @@ class RouteEntry(LookingGlass):
                 self.source == other.source and
                 self.nlri == other.nlri and
                 self.attributes.sameValuesAs(other.attributes)):
-            return 0
+            res = 0
         else:
-            log.debug("attributes comparison: %s",
-                      self.attributes.sameValuesAs(other.attributes))
-            return -1
+            res = -1
+        #log.debug("RouteEntry cmp: %s =?= %s : %d", self, other, res)
+        return res
 
     def __hash__(self):  # FIXME: improve for better performance ?
         return hash("%d/%d %s %d %s" % (self.afi, self.safi, self.source,
@@ -138,28 +145,26 @@ class RouteEntry(LookingGlass):
 
     def __repr__(self):
         fromString = " from:%s" % self.source if self.source else ""
-        return "[RouteEntry: %s %s %s %s RT:%s%s]" % (self.afi, self.safi,
-                                                      self.nlri,
-                                                      self.attributes,
-                                                      self._routeTargets,
-                                                      fromString)
+        return "[RouteEntry: %s %s %s nh:%s %s%s]" % (
+            self.afi, self.safi, self.nlri, self.nexthop,
+            self.attributes, fromString)
 
     def getLookingGlassLocalInfo(self, pathPrefix):
 
-        attributesDict = {}
+        attDict = {}
 
-        for (attributeId, value) in self.attributes.iteritems():
+        for attribute in self.attributes.itervalues():
 
             # skip some attributes that we care less about
-            if (attributeId == Attribute.CODE.AS_PATH or
-               attributeId == Attribute.CODE.ORIGIN or
-               attributeId == Attribute.CODE.LOCAL_PREF):
+            if (attribute.ID == Attribute.CODE.AS_PATH or
+               attribute.ID == Attribute.CODE.ORIGIN or
+               attribute.ID == Attribute.CODE.LOCAL_PREF):
                 continue
 
-            attributesDict[str(attributeId)] = repr(value)
+            attDict[repr(Attribute.CODE(attribute.ID))] = repr(attribute)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
-               "attributes": attributesDict
+               "attributes": attDict
                }
 
         if self.source:
@@ -200,7 +205,7 @@ class RouteEvent(object):
             self.source = routeEntry.source
         assert(self.source is not None)
         self.replacedRoute = None
-        # FIXME: check consistency of eventType and nlri.action
+        # TODO: check consistency of eventType and nlri.action
 
     def setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a
@@ -282,12 +287,12 @@ class EventSource(LookingGlass):
         return self._rtm_routeEntries
 
     def _advertiseRoute(self, routeEntry):
-        log.debug("Publish withdraw route event")
+        log.debug("Publish advertise route event")
         self.routeTableManager.enqueue(RouteEvent(RouteEvent.ADVERTISE,
                                                   routeEntry, self))
 
     def _withdrawRoute(self, routeEntry):
-        log.debug("Publish advertise route event")
+        log.debug("Publish withdraw route event")
         self.routeTableManager.enqueue(RouteEvent(RouteEvent.WITHDRAW,
                                                   routeEntry, self))
 

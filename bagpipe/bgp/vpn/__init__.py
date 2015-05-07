@@ -33,7 +33,8 @@ from bagpipe.bgp.common.run_command import runCommand
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 
-from exabgp.bgp.message.update.attribute.community.extended import RouteTargetASN2Number as RouteTarget
+from exabgp.bgp.message.update.attribute.community.extended \
+    import RouteTargetASN2Number as RouteTarget
 
 
 log = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ def convertRouteTargets(orig_list):
             continue
         try:
             asn, nn = rt.split(':')
-            list_.append(RouteTarget(int(asn), int(nn)))
+            list_.append(RouteTarget(int(asn), int(nn), False))
         except Exception:
             raise Exception("Malformed route target: '%s'" % rt)
     return list_

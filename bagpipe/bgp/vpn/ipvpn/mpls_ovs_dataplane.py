@@ -500,8 +500,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
                                         encaps):
         dec_ttl_action = ""
-        if IPNetwork(repr(prefix)) not in IPNetwork("%s/%s" % (self.gatewayIP,
-                                                               self.mask)):
+        if IPNetwork(prefix) not in IPNetwork("%s/%s" % (self.gatewayIP,
+                                                         self.mask)):
             dec_ttl_action = "dec_ttl,"
 
         mpls_action = "%spush_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" % (

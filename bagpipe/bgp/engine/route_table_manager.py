@@ -151,8 +151,8 @@ class RouteTableManager(Thread, LookingGlass):
                     break
             except Exception as e:
                 log.error("Exception during processing of event: %s", repr(e))
-                log.error("    event was: %s", event)
                 log.error("%s", traceback.format_exc())
+                log.error("    event was: %s", event)
 
             log.debug("RouteTableManager queue size: %d", self._queue.qsize())
 
@@ -192,9 +192,11 @@ class RouteTableManager(Thread, LookingGlass):
                 raise
 
     def _match2workers(self, match, emptyListIfNone=True):
+        log.debug("_match2workers: %s", match)
         try:
             return self._match2workersAndEntries[match].workers
         except KeyError:
+            log.debug("match2workers: except!")
             if emptyListIfNone:
                 return []
             else:
@@ -215,6 +217,20 @@ class RouteTableManager(Thread, LookingGlass):
         '''
         wa = self._match2workersAndEntries[match]
         return wa.delWorker(worker)
+
+    def callbackFirstLocalSubscriber(self, sub):
+        if self.firstLocalSubscriberCallback:
+            event = self.firstLocalSubscriberCallback(sub)
+            log.debug("first local subscriber callback for %s: %s", sub, event)
+            if event:
+                self.enqueue(event)
+
+    def callbackLastLocalSubscriber(self, sub):
+        if self.lastLocalSubscriberCallback:
+            event = self.lastLocalSubscriberCallback(sub)
+            log.debug("last local subscriber callback for %s: %s", sub, event)
+            if event:
+                self.enqueue(event)
 
     def _workerSubscribes(self, sub):
         # TODO: this function currently will not consider whether or not
@@ -239,13 +255,15 @@ class RouteTableManager(Thread, LookingGlass):
         if self._matchAddWorker(match, worker):
             self.callbackFirstLocalSubscriber(sub)
 
+        log.debug("match2workers: %s", self._match2workers(match))
+
         # create worker matches private info if needed
         if '_rtm_matches' not in worker.__dict__:
             worker._rtm_matches = set()
 
         # re-synthesize events
         for entry in self._match2entries(match):
-            log.debug("Found a entry for this match: %s", entry)
+            log.debug("Found an entry for this match: %s", entry)
             event = RouteEvent(RouteEvent.ADVERTISE, entry)
             (shouldDispatch, reason) = self._shouldDispatch(event, worker)
 
@@ -276,38 +294,41 @@ class RouteTableManager(Thread, LookingGlass):
     def _workerUnsubscribes(self, sub):
         assert(isinstance(sub.worker, Worker))
 
+        worker = sub.worker
+
         # self._dumpState()
 
         match = Match(sub.afi, sub.safi, sub.routeTarget)
 
         # update worker matches
-        if '_rtm_matches' not in sub.worker.__dict__:
+        if '_rtm_matches' not in worker.__dict__:
             log.warning("worker %s unsubs'd from %s but wasn't tracked yet",
-                        sub.worker, match)
+                        worker, match)
+            worker._rtm_matches = set()
         else:
             try:
-                sub.worker._rtm_matches.remove(match)
+                worker._rtm_matches.remove(match)
             except KeyError:
                 log.warning("worker %s unsubs' from %s but this match was"
                             "not tracked for this worker (should not happen,"
-                            " this is a bug)", sub.worker, match)
+                            " this is a bug)", worker, match)
 
         # synthesize withdraw events
         for entry in self._match2entries(match, emptyListIfNone=True):
             intersect = set(
                 self._matchesFor(entry.afi, entry.safi, entry.routeTargets)
-                ).intersection(self._worker2matches[sub.worker])
+                ).intersection(worker._rtm_matches)
             if len(intersect) > 0:
                 log.debug("Will not synthesize withdraw event for %s, because"
                           " worker subscribed to %s", entry, intersect)
             else:
-                log.debug("Found a entry for this match: %s", entry)
+                log.debug("Found an entry for this match: %s", entry)
                 event = RouteEvent(RouteEvent.WITHDRAW, entry)
                 (shouldDispatch, reason) = self._shouldDispatch(event,
-                                                                sub.worker)
+                                                                worker)
                 if shouldDispatch:
                     log.info("Dispatching re-synthesized event for %s", entry)
-                    sub.worker.enqueue(event)
+                    worker.enqueue(event)
                 else:
                     log.info(
                         "%s => not dispatching re-synthesized event for %s",
@@ -316,22 +337,21 @@ class RouteTableManager(Thread, LookingGlass):
         # update _match2workersAndEntries
         if match not in self._match2workersAndEntries:
             log.warning("worker %s unsubscribed from %s but we had no such"
-                        " subscription yet", sub.worker, match)
-
+                        " subscription yet", worker, match)
         else:
             try:
-                if self._matchDelWorker(match, sub.worker):
+                if self._matchDelWorker(match, worker):
                     log.debug("see if need to callback on last local worker")
                     self.callbackLastLocalSubscriber(sub)
             except KeyError:
                 log.warning("worker %s unsubscribed from %s but was not"
-                            " subscribed yet", sub.worker, match)
+                            " subscribed yet", worker, match)
 
         self._checkMatch2workersAndEntriesCleanup(match)
 
-        if ('_rtm_matches' not in sub.worker.__dict__ or
-                not sub.worker._rtm_matches):
-            self._workers.pop(sub.worker.name, None)
+        if ('_rtm_matches' not in worker.__dict__ or
+                not worker._rtm_matches):
+            self._workers.pop(worker.name, None)
 
         # self._dumpState()
 
@@ -393,7 +413,7 @@ class RouteTableManager(Thread, LookingGlass):
 
         entry = routeEvent.routeEntry
 
-        log.debug("Try to find a entry from same peer with same nlri")
+        log.debug("Try to find an entry from same peer with same nlri")
         try:
             replacedEntry = self._source_nlri2entry[(entry.source, entry.nlri)]
         except KeyError:

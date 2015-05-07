@@ -87,7 +87,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def setUp(self):
         super(TestRouteTableManager, self).setUp()
-        self.routeTableManager = RouteTableManager()
+        self.routeTableManager = RouteTableManager(mock.Mock(), mock.Mock())
         self.routeTableManager.start()
         self.setEventTargetWorker(self.routeTableManager)
 
@@ -97,7 +97,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self.routeTableManager.join()
 
     def _newworker(self, workerName, workerType):
-        worker = mock.Mock(spec=workerType)
+        worker = mock.Mock(spec=workerType, name=workerName)
         worker.name = workerName
         worker.enqueue = mock.Mock()
         return worker
@@ -116,23 +116,15 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def _checkSubscriptions(self, worker, matches):
         for match in matches:
-            subs = self.routeTableManager.getWorkerSubscriptions(worker)
-            self.assertIn(match, subs, "Subscription not found")
+            self.assertIn(match, worker._rtm_matches,
+                          "Subscription not found")
 
     def _checkUnsubscriptions(self, worker, matches):
+        if '_rtm_matches' not in worker.__dict__:
+            return
         for match in matches:
-            subs = self.routeTableManager.getWorkerSubscriptions(worker)
-            self.assertNotIn(match, subs, "Subscription not found")
-
-    def _checkCalls(self, worker, entry):
-        self.assertTrue(
-            entry in self.routeTableManager.getWorkerRouteEntries(worker),
-            "Route entry not found")
-
-    def _checkNoRouteEntry(self, worker, entry):
-        self.assertTrue(
-            entry not in self.routeTableManager.getWorkerRouteEntries(worker),
-            "Route entry found")
+            self.assertNotIn(match, worker._rtm_matches,
+                             "Subscription found while it should not")
 
     def _checkEventsCalls(self, events, advertisedRoutes, withdrawnNLRIs):
         '''
@@ -163,10 +155,58 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # check subscriptions
         self._checkSubscriptions(worker1, [MATCH1, MATCH2])
 
+    def testA1_checkFirstLastLocalWorkerCallback(self):
+        bgpWorker1 = self._newworker("Worker-1", BGPPeerWorker)
+        self._workerSubscriptions(bgpWorker1, [RT1])
+        self._wait()
+        self.assertEqual(
+            0,
+            self.routeTableManager.firstLocalSubscriberCallback.call_count,
+            "firstLocalSubscriberCallback should not have been called "
+            " (non local worker)")
+
+        worker1 = self._newworker("Worker-1", Worker)
+        self._workerSubscriptions(worker1, [RT1])
+        self._wait()
+        self.assertEqual(
+            1,
+            self.routeTableManager.firstLocalSubscriberCallback.call_count,
+            "firstLocalSubscriberCallback should have been called")
+
+        worker2 = self._newworker("Worker-2", Worker)
+        self._workerSubscriptions(worker2, [RT1])
+        self._wait()
+        self.assertEqual(
+            1,
+            self.routeTableManager.firstLocalSubscriberCallback.call_count,
+            "firstLocalSubscriberCallback should not have been called a "
+            "second time")
+
+        self._workerUnsubscriptions(worker2, [RT1])
+        self._wait()
+        self.assertEqual(
+            0,
+            self.routeTableManager.lastLocalSubscriberCallback.call_count,
+            "lastLocalSubscriberCallback should not have been called")
+
+        self._workerUnsubscriptions(worker1, [RT1])
+        self._wait()
+        self.assertEqual(
+            1,
+            self.routeTableManager.lastLocalSubscriberCallback.call_count,
+            "lastLocalSubscriberCallback should have been called")
+
+        self._workerUnsubscriptions(bgpWorker1, [RT1])
+        self._wait()
+        self.assertEqual(
+            1,
+            self.routeTableManager.lastLocalSubscriberCallback.call_count,
+            "lastLocalSubscriberCallback should not have been called "
+            " (non local worker)")
+
     def testA2_SubscriptionsWithRouteTosynthesize(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         evt1 = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1,
                                    [RT1, RT2], bgpPeerWorker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
@@ -326,7 +366,8 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         routeEvent = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1,
                                          [RT1, RT2], worker1, NH1)
         # check route entry has been inserted
-        self._checkCalls(worker1, routeEvent.routeEntry)
+        self.assertIn(routeEvent.routeEntry, worker1._rtm_routeEntries,
+                      "Route entry not found")
 
     def testC2_routeWithdrawByWorkerWithoutPropagation(self):
         # Worker1 advertises then withdraws a route
@@ -336,7 +377,8 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         routeEvent = self._newRouteEvent(RouteEvent.WITHDRAW, NLRI1,
                                          [RT1], worker1, NH1)
         # check route entry has been removed
-        self._checkNoRouteEntry(worker1, routeEvent.routeEntry)
+        self.assertNotIn(routeEvent.routeEntry, worker1._rtm_routeEntries,
+                         "Route entry found")
 
     def testC3_routeAdvertiseByBGPPeerWithPropagation(self):
         # Worker1 subscribes to RT1
@@ -417,8 +459,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         worker3 = self._newworker("Worker-3", Worker)
         self._workerSubscriptions(worker3, [RT3])
         # BGPPeerWorker1 advertises a route for RT1, RT2 and RT3
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         evt1 = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1,
                                    [RT1, RT2, RT3], bgpPeerWorker1, NH1)
         # BGPPeerWorker1 advertises the same nlri with attributes NH and RTs
@@ -438,7 +479,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._checkEventsCalls(worker2.enqueue.call_args_list,
                                [evt1.routeEntry, evt2.routeEntry], [])
         self.assertEqual(2, worker3.enqueue.call_count,
-                         "2 routes should be advert/withdraw to Worker3")
+                         "2 routes should be advertised/withdrawn to Worker3")
         self._checkEventsCalls(worker3.enqueue.call_args_list,
                                [evt1.routeEntry], [evt1.routeEntry.nlri])
 
@@ -466,8 +507,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         worker1 = self._newworker("Worker-1", Worker)
         self._workerSubscriptions(worker1, [RT1, RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         evt1 = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
                                    bgpPeerWorker1, NH1)
         # BGPPeerWorker1 withdraw a not registered route (without RT
@@ -491,8 +531,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         worker2 = self._newworker("Worker-2", Worker)
         self._workerSubscriptions(worker2, [RT2])
         # BGPPeerWorker1 subscribes to RT1 and RT2
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         self._workerSubscriptions(bgpPeerWorker1, [RT1, RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         evt1 = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
@@ -505,6 +544,13 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # Waiting for RouteTableManager thread finishes to process the
         # subscriptions
         self._wait()
+
+        self.assertEqual(
+            0,
+            self.routeTableManager.lastLocalSubscriberCallback.call_count,
+            "lastLocalSubscriberCallback should not have been called "
+            " (non local worker)")
+
         # check unsubscriptions
         self._checkUnsubscriptions(bgpPeerWorker1, [MATCH1, MATCH2])
         # Check route synthesize to Worker1 and Worker2
@@ -518,8 +564,10 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
                                [evt1.routeEntry, evt2.routeEntry],
                                [evt1.routeEntry.nlri, evt2.routeEntry.nlri])
         # Check route entries have been removed for BGPPeerWorker1
-        self._checkNoRouteEntry(bgpPeerWorker1, evt1.routeEntry)
-        self._checkNoRouteEntry(bgpPeerWorker1, evt2.routeEntry)
+        self.assertNotIn(evt1.routeEntry, bgpPeerWorker1._rtm_routeEntries,
+                         "Route entry found")
+        self.assertNotIn(evt2.routeEntry, bgpPeerWorker1._rtm_routeEntries,
+                         "Route entry found")
 
     def testE1_DumpState(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2

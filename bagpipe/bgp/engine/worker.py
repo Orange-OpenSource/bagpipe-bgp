@@ -54,9 +54,10 @@ class Worker(EventSource, LookingGlass):
         self._queue = Queue()
         self._pleaseStop = Event()
 
-        log.debug("Setting worker name to %s", workerName)
         self.name = workerName
         assert(self.name is not None)
+
+        EventSource.__init__(self, self.routeTableManager)
 
         log.debug("Instantiated %s worker", self.name)
 
@@ -134,7 +135,7 @@ class Worker(EventSource, LookingGlass):
     def getSubscriptions(self):
         # self._rtm_matches is private info maintained by RouteTableManager
         if '_rtm_matches' not in self.__dict__:
-            return None
+            return []
         else:
             return sorted(self._rtm_matches)
 

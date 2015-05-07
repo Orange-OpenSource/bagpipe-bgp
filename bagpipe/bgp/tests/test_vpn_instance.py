@@ -112,9 +112,8 @@ class TestVPNInstance(TestCase):
 
     def tearDown(self):
         super(TestVPNInstance, self).tearDown()
-        with mock.patch.object(self.vpnInstance.bgpManager, 'cleanup'):
-            self.vpnInstance.stop()
-            self.vpnInstance.join()
+        self.vpnInstance.stop()
+        self.vpnInstance.join()
 
     def _get_ipAddress(self, ipAddressPrefix):
         return ipAddressPrefix[0:ipAddressPrefix.find('/')]

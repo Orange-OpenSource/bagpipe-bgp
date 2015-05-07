@@ -41,7 +41,6 @@ from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 from exabgp.bgp.message.update.attribute.attribute import Attribute
-from exabgp.bgp.message.update.attribute.nexthop import NextHop
 
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
@@ -239,8 +238,6 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                                               label)
         assert(isinstance(routeEntry, RouteEntry))
 
-        routeEntry.attributes.add(
-            NextHop(self.dataplane.driver.getLocalAddress()))
         routeEntry.attributes.add(self._genExtendedCommunities())
         routeEntry.setRouteTargets(self.exportRTs)
 

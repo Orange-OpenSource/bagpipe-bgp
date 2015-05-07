@@ -139,7 +139,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                 bestRoutes = self.trackedEntry2bestRoutes[entry]
 
                 if routeEvent.replacedRoute is not None:
-                    self.log.debug("Removing replaced route from allRoutes"
+                    self.log.debug("Will remove replaced route from allRoutes"
                                    " and bestRoutes: %s",
                                    routeEvent.replacedRoute)
                     try:
@@ -156,6 +156,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                         withdrawnBestRoutes.append(routeEvent.replacedRoute)
                     else:
                         self.log.debug("replacedRoute is not in bestRoutes")
+                        self.log.debug("bestRoutes: %s", bestRoutes)
                 else:
                     self.log.debug("No replaced route to remove")
 
@@ -408,14 +409,20 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
         """
         pass
 
-    # FIXME: need to document the behavior of these callbacks
-
     @abstractmethod
     def _newBestRoute(self, entry, newRoute):
+        '''
+        A new best route has been advertized for this tracked entry
+        '''
         pass
 
     @abstractmethod
     def _bestRouteRemoved(self, entry, oldRoute, last):
+        '''
+        A route that was a best route for this tracked entry has been
+        removed. The 'last' flag indicates if this was the last route 
+        for this tracked entry.
+        '''
         pass
 
     # Debug support methods #########

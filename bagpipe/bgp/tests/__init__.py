@@ -21,12 +21,17 @@ import socket
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
+from bagpipe.bgp.engine.upstream_exabgp_peer_worker import setupExaBGPEnv
+
+setupExaBGPEnv()
+
 from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update.attribute.community.extended import \
     RouteTargetASN2Number as RouteTarget
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.attribute.nexthop import NextHop
 from exabgp.bgp.message.update.attribute.localpref import LocalPreference
+
 
 WAIT_TIME = 0.05
 

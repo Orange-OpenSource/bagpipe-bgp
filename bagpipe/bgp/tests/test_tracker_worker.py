@@ -71,13 +71,13 @@ def _test_compareRoutes(self, routeA, routeB):
             return 0
         else:
             lpA = routeA.attributes[Attribute.CODE.LOCAL_PREF].localpref
-            nhA = routeA.attributes[Attribute.CODE.NEXT_HOP].next_hop
+            nhA = routeA.attributes[Attribute.CODE.NEXT_HOP].ip
 
             lpB = routeB.attributes[Attribute.CODE.LOCAL_PREF].localpref
-            nhB = routeB.attributes[Attribute.CODE.NEXT_HOP].next_hop
+            nhB = routeB.attributes[Attribute.CODE.NEXT_HOP].ip
 
             if nhA != nhB and lpA == lpB:
-                    # ECMP routes
+                # ECMP routes
                 return 0
             else:
                 return cmp(lpA, lpB)
@@ -89,7 +89,7 @@ class TrackerWorkerThread(TrackerWorker, Thread):
         Thread.__init__(self, name='TrackerWorkerThread')
         self.setDaemon(True)
         TrackerWorker.__init__(
-            self, 'BGPManager', 'TrackerWorker', _test_compareRoutes)
+            self, mock.Mock(), 'TrackerWorker', _test_compareRoutes)
 
     def stop(self):
         self._pleaseStop.set()
@@ -104,7 +104,7 @@ class TrackerWorkerThread(TrackerWorker, Thread):
     def _newBestRoute(self, entry, route):
         pass
 
-    def _bestRouteRemoved(self, entry, route):
+    def _bestRouteRemoved(self, entry, route, last):
         pass
 
 
@@ -122,19 +122,43 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self.trackerWorker.stop()
         self.trackerWorker.join()
 
-    def _checkCalls(self, call_args_list, expected_list):
-        for ((callArgs, _), expected) in zip(call_args_list, expected_list):
+    def _checkCalls(self, call_args_list, expected_list, ordered=True):
+        '''
+        use to check the calls to newBestRoute and bestRouteRemoved
+        against a list of expected calls
+        '''
+        expected_list_copy = []
+        # clear source field in the routes in expected calls
+        # because the newBestRoute and bestRouteRemoved do not receive
+        # routes with this field set
+        for expected in expected_list:
+            route = copy(expected[1])
+            route.source = None
+            if len(expected) == 2:
+                expected_list_copy.append((expected[0], route))
+            elif len(expected) == 3:
+                expected_list_copy.append((expected[0], route, expected[2]))
+            else:
+                assert(False)
+
+        if not ordered:
+            expected_list_copy = sorted(expected_list_copy,
+                                        lambda a, b: cmp(repr(a), repr(b)))
+            call_args_list = sorted(call_args_list,
+                                    lambda a, b: cmp(repr(a[0]), repr(b[0])))
+
+        for ((callArgs, _), expected) in zip(call_args_list,
+                                             expected_list_copy):
             self.assertEquals(expected[0], callArgs[0], 'Bad prefix')
 
-            observedRouteEntry = copy(callArgs[1])
-            observedRouteEntry.source = None
-            expectedRouteEntry = copy(expected[1])
-            expectedRouteEntry.source = None
+            observedRouteEntry = callArgs[1]
+            expectedRouteEntry = expected[1]
             self.assertEquals(expectedRouteEntry, observedRouteEntry,
                               "bad route Entry")
 
             if len(expected) >= 3:
-                self.assertEquals(expected[2], callArgs[2], 'wrong last flag')
+                self.assertEquals(expected[2], callArgs[2],
+                                  "wrong 'last' flag")
 
     def _callList(self, method):
         def side_effect(*args, **kwargs):
@@ -148,7 +172,7 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self.trackerWorker._bestRouteRemoved = mock.Mock()
 
         # Only 1 source A
-        workerA = Worker('BGPManager', 'Worker-A')
+        workerA = Worker(mock.Mock(), 'Worker-A')
         # Source A advertises a route for NLRI1
         routeNlri1A = self._newRouteEvent(
             RouteEvent.ADVERTISE, NLRI1, [RT1, RT2], workerA, NH1, 100)
@@ -182,8 +206,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self.trackerWorker._bestRouteRemoved = mock.Mock()
 
         # 2 sources: A and B
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
         # Source A advertises a route for NLRI1
         routeNlri1A = self._newRouteEvent(
             RouteEvent.ADVERTISE, NLRI1, [RT1, RT2], workerA, NH1, 100)
@@ -218,7 +242,7 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self.trackerWorker._bestRouteRemoved = mock.Mock()
 
         # 1 source: A
-        workerA = Worker('BGPManager', 'Worker-A')
+        workerA = Worker(mock.Mock(), 'Worker-A')
         # Source A advertises a route for NLRI1
         routeNlri1A = self._newRouteEvent(
             RouteEvent.ADVERTISE, NLRI1, [RT1, RT2], workerA, NH1, 100)
@@ -239,7 +263,7 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self.trackerWorker._bestRouteRemoved = mock.Mock()
 
         # 1 source: A
-        workerA = Worker('BGPManager', 'Worker-A')
+        workerA = Worker(mock.Mock(), 'Worker-A')
         # Source A withdraws a route for NLRI1 which is not known by
         # trackerWorker
         self._newRouteEvent(
@@ -260,8 +284,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 2 sources: A and B
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
 
         # Source A advertises a route for NLRI1
         self._append_call("RE1")
@@ -306,9 +330,9 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 3 sources: A, B and C
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
-        workerC = Worker('BGPManager', 'Worker-C')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
+        workerC = Worker(mock.Mock(), 'Worker-C')
 
         # Source A advertises route1 for NLRI1
         self._append_call("RE1")
@@ -353,8 +377,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 2 sources : A and B
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -401,8 +425,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 2 sources: A and B
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -443,9 +467,9 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 3 sources: A, B and C
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
-        workerC = Worker('BGPManager', 'Worker-C')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
+        workerC = Worker(mock.Mock(), 'Worker-C')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -502,7 +526,7 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 1 source: A
-        workerA = Worker('BGPManager', 'Worker-A')
+        workerA = Worker(mock.Mock(), 'Worker-A')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -549,7 +573,7 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 1 source: A
-        workerA = Worker('BGPManager', 'Worker-A')
+        workerA = Worker(mock.Mock(), 'Worker-A')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -588,8 +612,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 2 sources : A and B
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -638,9 +662,9 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 3 sources: A, B and C
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
-        workerC = Worker('BGPManager', 'Worker-C')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
+        workerC = Worker(mock.Mock(), 'Worker-C')
 
         # Source A advertises route1 for NLRI1
         self._append_call("RE1")
@@ -685,8 +709,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 2 sources : A and B
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
 
         # Source A advertises a route1 for NLRI1
         self._append_call("RE1")
@@ -734,14 +758,18 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             side_effect=self._callList(BRR))
 
         # 3 sources: A, B and C
-        workerA = Worker('BGPManager', 'Worker-A')
-        workerB = Worker('BGPManager', 'Worker-B')
-        workerC = Worker('BGPManager', 'Worker-C')
+        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerB = Worker(mock.Mock(), 'Worker-B')
+        workerC = Worker(mock.Mock(), 'Worker-C')
 
         # Source A advertises route1 for NLRI1
-        self._append_call("RE1")
         route1 = self._newRouteEvent(
             RouteEvent.ADVERTISE, NLRI1, [RT1, RT2], workerA, NH1, 300)
+
+        # We will only check events after this first one
+        # to allow for a order-independent test after RE4
+        del self.trackerWorker._newBestRoute.call_args_list[:]
+
         # Source B advertises route2 for NLRI1 : route1 is better than route2
         self._append_call("RE2")
         route2 = self._newRouteEvent(
@@ -756,16 +784,13 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
                                      workerA, NH3, 200, route1.routeEntry)
 
         # Check calls and arguments list to _newBestRoute and _bestRouteRemoved
-        expectedCalls = ["RE1", NBR, "RE2", "RE3", "RE4", NBR, NBR, NBR, BRR]
+        expectedCalls = [NBR, "RE2", "RE3", "RE4", NBR, NBR, NBR, BRR]
         self.assertEqual(expectedCalls, self._calls, 'Wrong call sequence')
 
         self._checkCalls(self.trackerWorker._newBestRoute.call_args_list,
-                         [(NLRI1, route1.routeEntry),
-                          (NLRI1, route2.routeEntry),
-                             (NLRI1, route3.routeEntry),
-                             (NLRI1, route4.routeEntry)])
-        # FIXME: the order of route2, route3, route4 is not important in the
-        # test above, we should test independently of the order
+                         [(NLRI1, route2.routeEntry),
+                          (NLRI1, route3.routeEntry),
+                          (NLRI1, route4.routeEntry)], False)
 
         self._checkCalls(
             self.trackerWorker._bestRouteRemoved.call_args_list,

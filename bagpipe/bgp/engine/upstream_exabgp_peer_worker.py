@@ -42,8 +42,6 @@ from exabgp.protocol.ip import IP
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
 
-from exabgp.bgp.message.update.attribute.community.extended.rt \
-    import RouteTarget
 from exabgp.bgp.message.open import RouterID
 from exabgp.bgp.message.open.capability.capability import Capability
 
@@ -54,22 +52,29 @@ from exabgp.bgp.message import KeepAlive
 
 from exabgp.bgp.message import IN
 
-from exabgp.bgp.message.update.attribute.attribute import Attribute
-
 from exabgp.bgp.message import STATE
 
+import logging
 
-# initialize ExaBGP config
-from exabgp.configuration.environment import environment
-import exabgp.configuration.setup  # initialises environment.configuration
-environment.application = 'bagpipe-bgp'
-conf = environment.setup(None)
-# tell exabgp to parse routes:
-conf.log.routes = True
-conf.log.destination="/var/log/bagpipe-bgp/bagpipe-bgp.log"
-conf.log.level="DEBUG"
-conf.log.all=True
-conf.log.packets=True
+log = logging.getLogger(__name__)
+
+
+def setupExaBGPEnv():
+    # initialize ExaBGP config
+    from exabgp.configuration.environment import environment
+    import exabgp.configuration.setup  # initialises environment.configuration
+    environment.application = 'bagpipe-bgp'
+    conf = environment.setup(None)
+    # tell exabgp to parse routes:
+    conf.log.routes = True
+    # FIXME: find a way to redirect exabgp logs into bagpipe's
+    conf.log.destination = "stderr"
+    conf.log.level = repr(log.getEffectiveLevel())
+    conf.log.all = True
+    conf.log.packets = True
+
+setupExaBGPEnv()
+
 
 class FakeReactor(object):
     '''
@@ -131,7 +136,8 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             neighbor.add_family((AFI(AFI.ipv4), SAFI(SAFI.rtc)))
 
         self.log.debug("Instantiate ExaBGP Peer")
-        self.peer = Peer(neighbor, FakeReactor())
+        #self.peer = Peer(neighbor, FakeReactor())
+        self.peer = Peer(neighbor, None)
 
         # FIXME: enclose in try/except to catch Exception during
         # session init
@@ -189,17 +195,16 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 self.log.warning(
                     "enable_rtc True but peer not configured for RTC")
 
-####FIXME Totremove        # create message generator
-#####        self.incoming_messages = self.protocol.read_messages()
-
     def _toEstablished(self):
         BGPPeerWorker._toEstablished(self)
 
         if self.rtc_active:
+            self.log.debug("RTC active, subscribing to all RTC routes")
             # subscribe to RTC routes, to be able to propagate them from
             # internal workers to this peer
             self._subscribe(AFI(AFI.ipv4), SAFI(SAFI.rtc))
         else:
+            self.log.debug("RTC inactive, subscribing to all active families")
             # if we don't use RTC with our peer, then we need to see events for
             # all routes of all active families, to be able to send them to him
             for (afi, safi) in self._activeFamilies:
@@ -232,8 +237,6 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 raise Exception("Update received but not in Established state")
             pass  # see below
         elif message.ID == KeepAlive.ID:
-            if (self.fsm.state == FSM.OpenConfirm):
-                self._toEstablished()
             self.enqueue(KeepAliveReceived)
             self.log.debug("Received message: %s", message)
         else:
@@ -263,7 +266,7 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 #             rts = [ecom for ecom in attributes[
 #                    Attribute.CODE.EXTENDED_COMMUNITY].communities
 #                    if isinstance(ecom, RouteTarget)]
-# 
+#
 #             if not rts:
 #                 raise Exception("Unable to find any Route Targets"
 #                                 "in the received route")
@@ -273,8 +276,10 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
         if action == IN.ANNOUNCED:
             self._advertiseRoute(routeEntry)
-        else: # IN.WITHDRAWN
+        elif action == IN.WITHDRAWN:
             self._withdrawRoute(routeEntry)
+        else:
+            assert(False)
 
         # TODO(tmmorin): move RTC code out-of the peer-specific code
         if (nlri.afi, nlri.safi) == (AFI(AFI.ipv4),
@@ -289,17 +294,20 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             # to send him all routes of any AFI/SAFI carrying this RouteTarget.
             for (afi, safi) in self._activeFamilies:
                 if (afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc)):
-                    if action == RouteEvent.ADVERTISE:
+                    if action == IN.ANNOUNCED:
                         self._subscribe(afi, safi, nlri.rt)
-                    else:  # withdraw
+                    elif action == IN.WITHDRAWN:
                         self._unsubscribe(afi, safi, nlri.rt)
+                    else:
+                        assert(False)
 
     def _send(self, data):
         # (error if state not the right one for sending updates)
         self.log.debug("Sending %d bytes on socket to peer %s",
                        len(data), self.peerAddress)
         try:
-            self.protocol.write(data)
+            for _ in self.protocol.write(data):
+                pass
         except Exception as e:
             self.log.error("Was not able to send data: %s", e)
 
@@ -309,7 +317,7 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     def _updateForRouteEvent(self, event):
         # FIXME: the action is now in the NLRI !
         try:
-            r = Update(event.routeEntry.nlri, event.routeEntry.attributes)
+            r = Update([event.routeEntry.nlri], event.routeEntry.attributes)
             return ''.join(r.messages(self.protocol.negotiated))
         except Exception as e:
             self.log.error("Exception while generating message for "
@@ -333,5 +341,4 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             "rtc": {"active": self.rtc_active,
                     "enabled": self.config['enable_rtc']},
             "active_families": [repr(f) for f in self._activeFamilies],
-            "peer_state": self.peer._['out']['state'],
         }

@@ -218,6 +218,8 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
                                     name="%s:receiveLoop" % self.name)
         self.receiveThread.start()
 
+        self._toEstablished()
+
     def _toEstablished(self):
         self.fsm.state = FSM.Established
 

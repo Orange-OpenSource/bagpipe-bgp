@@ -43,7 +43,6 @@ from bagpipe.exabgp.structure.mpls import LabelStackEntry
 from exabgp.reactor.protocol import AFI, SAFI
 from bagpipe.exabgp.structure.ip import Inet
 from bagpipe.exabgp.message.update.route import Route
-from exabgp.bgp.message.update.attribute.nexthop import NextHop
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 from bagpipe.exabgp.message.update.attribute.pmsi_tunnel import PMSITunnel, \
@@ -162,7 +161,6 @@ class EVI(VPNInstance, LookingGlass):
 
         nh = Inet(1, socket.inet_pton(
             socket.AF_INET, self.dataplaneDriver.getLocalAddress()))
-        route.attributes.add(NextHop(nh))
 
         self.multicastRouteEntry = RouteEntry(self.afi, self.safi,
                                               route.nlri, route.attributes,
@@ -237,8 +235,7 @@ class EVI(VPNInstance, LookingGlass):
         if entryClass == EVPNMACAdvertisement:
             prefix = info
 
-            nh = newRoute.attributes.get(NextHop.ID)
-            remotePE = nh.ip
+            remotePE = newRoute.nexthop
             label = newRoute.nlri.label.labelValue
 
             self.dataplane.setupDataplaneForRemoteEndpoint(
@@ -278,8 +275,7 @@ class EVI(VPNInstance, LookingGlass):
 
             prefix = info
 
-            nh = oldRoute.attributes.get(NextHop.ID)
-            remotePE = nh.ip
+            remotePE = oldRoute.nexthop
             label = oldRoute.nlri.label.labelValue
 
             self.dataplane.removeDataplaneForRemoteEndpoint(
