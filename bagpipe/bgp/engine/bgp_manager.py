@@ -28,8 +28,6 @@ from bagpipe.bgp.engine.upstream_exabgp_peer_worker \
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import EventSource
-from bagpipe.bgp.engine import Subscription
-from bagpipe.bgp.engine import Unsubscription
 
 from bagpipe.bgp.common.looking_glass import LGMap
 from bagpipe.bgp.common.utils import getBoolean
@@ -37,8 +35,6 @@ from bagpipe.bgp.common import logDecorator
 
 from exabgp.bgp.message.update.nlri.rtc import RouteTargetConstraint
 from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.nexthop import NextHop
 from exabgp.bgp.message import OUT
 
 from exabgp.protocol.ip import IP
