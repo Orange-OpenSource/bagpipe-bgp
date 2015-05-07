@@ -43,8 +43,6 @@ from bagpipe.bgp.tests import RT1, NLRI1
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
-from exabgp.bgp.message.update import Attributes
-
 from bagpipe.bgp.engine import RouteEntry
 
 from exabgp.reactor.protocol import AFI, SAFI

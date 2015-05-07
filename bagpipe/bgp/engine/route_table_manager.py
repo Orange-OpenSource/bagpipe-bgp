@@ -48,13 +48,15 @@ class Match(object):
         self.safi = safi
         self.routeTarget = routeTarget
 
-    # FIXME: use a better hash if needed for performances
     def __hash__(self):
-        return hash(repr(self))
+        return hash((self.afi, self.safi, self.routeTarget))
 
     def __repr__(self):
-        return "match:%s/%s,%s" % (self.afi or "*", self.safi or "*",
-                                   self.routeTarget or "*")
+        return "match:%s" % str(self)
+
+    def __str__(self):
+        return "%s/%s,%s" % (self.afi or "*", self.safi or "*",
+                             self.routeTarget or "*")
 
     def __cmp__(self, other):
         assert isinstance(other, Match)
@@ -257,10 +259,6 @@ class RouteTableManager(Thread, LookingGlass):
 
         log.debug("match2workers: %s", self._match2workers(match))
 
-        # create worker matches private info if needed
-        if '_rtm_matches' not in worker.__dict__:
-            worker._rtm_matches = set()
-
         # re-synthesize events
         for entry in self._match2entries(match):
             log.debug("Found an entry for this match: %s", entry)
@@ -301,17 +299,12 @@ class RouteTableManager(Thread, LookingGlass):
         match = Match(sub.afi, sub.safi, sub.routeTarget)
 
         # update worker matches
-        if '_rtm_matches' not in worker.__dict__:
-            log.warning("worker %s unsubs'd from %s but wasn't tracked yet",
-                        worker, match)
-            worker._rtm_matches = set()
-        else:
-            try:
-                worker._rtm_matches.remove(match)
-            except KeyError:
-                log.warning("worker %s unsubs' from %s but this match was"
-                            "not tracked for this worker (should not happen,"
-                            " this is a bug)", worker, match)
+        try:
+            worker._rtm_matches.remove(match)
+        except KeyError:
+            log.warning("worker %s unsubs' from %s but this match was"
+                        "not tracked for this worker (should not happen,"
+                        " this is a bug)", worker, match)
 
         # synthesize withdraw events
         for entry in self._match2entries(match, emptyListIfNone=True):
@@ -349,8 +342,7 @@ class RouteTableManager(Thread, LookingGlass):
 
         self._checkMatch2workersAndEntriesCleanup(match)
 
-        if ('_rtm_matches' not in worker.__dict__ or
-                not worker._rtm_matches):
+        if (len(worker._rtm_matches) == 0):
             self._workers.pop(worker.name, None)
 
         # self._dumpState()
@@ -479,14 +471,14 @@ class RouteTableManager(Thread, LookingGlass):
                                           entry.routeTargets):
                 self._match2entries(match, createIfNone=True).add(entry)
 
-            if '_rtm_routeEntries' not in entry.source.__dict__:
-                entry.source._rtm_routeEntries = set()
-
             entry.source._rtm_routeEntries.add(entry)
 
             # Update _source_nlri2entry
             self._source_nlri2entry[(entry.source, entry.nlri)] = entry
         else:  # WITHDRAW
+            # Update source2entries
+            entry.source._rtm_routeEntries.delete(entry)
+
             # Update _source_nlri2entry
             try:
                 del self._source_nlri2entry[(entry.source, entry.nlri)]
@@ -516,21 +508,20 @@ class RouteTableManager(Thread, LookingGlass):
         Consider this worker unsubscribed from all of its current
         subscriptions.
         '''
+        assert(isinstance(worker, Worker))
         log.info("Cleanup for worker %s", worker.name)
         # synthesize withdraw events for all routes from this worker
-        if '_rtm_routeEntries' in worker.__dict__:
-            log.info("  Preparing to withdraw %d routes that were advertised "
-                     "by worker", len(worker._rtm_routeEntries))
-            for entry in worker._rtm_routeEntries:
-                log.info("  Enqueue event to Withdraw route %s", entry)
-                self.enqueue(RouteEvent(RouteEvent.WITHDRAW, entry))
+        log.info("  Preparing to withdraw %d routes that were advertised "
+                 "by worker", len(worker._rtm_routeEntries))
+        for entry in worker._rtm_routeEntries:
+            log.info("  Enqueue event to Withdraw route %s", entry)
+            self.enqueue(RouteEvent(RouteEvent.WITHDRAW, entry))
 
         # remove worker from all of its subscriptions
-        if '_rtm_matches' in worker.__dict__:
-            for match in worker._rtm_matches:
-                wa = self._match2workersAndEntries[match]
-                wa.delWorker(worker)
-            del worker._rtm_matches
+        for match in worker._rtm_matches:
+            wa = self._match2workersAndEntries[match]
+            wa.delWorker(worker)
+        del worker._rtm_matches
 
         # self._dumpState()
 
@@ -594,7 +585,7 @@ class RouteTableManager(Thread, LookingGlass):
                 for entry in self._match2entries(match):
                     matchResult.append(
                         entry.getLookingGlassInfo(pathPrefix))
-            result[repr(match)] = matchResult
+            result[str(match)] = matchResult
         return result
 
     def getLGWorkerList(self):

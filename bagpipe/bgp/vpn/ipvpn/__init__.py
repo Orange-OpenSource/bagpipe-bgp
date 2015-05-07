@@ -24,7 +24,8 @@ from bagpipe.bgp.common import logDecorator
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
-from bagpipe.bgp.engine import RouteEvent, RouteEntry
+from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine import RouteEntry
 
 from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver
 
@@ -34,7 +35,8 @@ from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
 from exabgp.bgp.message.update.nlri.mpls import VPNLabelledPrefix
-from exabgp.reactor.protocol import AFI, SAFI
+from exabgp.reactor.protocol import AFI
+from exabgp.reactor.protocol import SAFI
 
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.attribute.community.extended.communities \

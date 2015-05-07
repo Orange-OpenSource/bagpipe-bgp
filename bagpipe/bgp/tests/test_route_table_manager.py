@@ -100,6 +100,8 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         worker = mock.Mock(spec=workerType, name=workerName)
         worker.name = workerName
         worker.enqueue = mock.Mock()
+        worker._rtm_matches = set()
+        worker._rtm_routeEntries = set()
         return worker
 
     def _workerSubscriptions(self, worker, rts,

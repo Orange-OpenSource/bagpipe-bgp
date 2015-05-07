@@ -59,6 +59,9 @@ class Worker(EventSource, LookingGlass):
 
         EventSource.__init__(self, self.routeTableManager)
 
+        # private data for RouteTableManager
+        self._rtm_matches = set()
+
         log.debug("Instantiated %s worker", self.name)
 
     def stop(self):
@@ -133,11 +136,7 @@ class Worker(EventSource, LookingGlass):
         self.routeTableManager.enqueue(subobj)
 
     def getSubscriptions(self):
-        # self._rtm_matches is private info maintained by RouteTableManager
-        if '_rtm_matches' not in self.__dict__:
-            return []
-        else:
-            return sorted(self._rtm_matches)
+        return sorted(self._rtm_matches)
 
     def __repr__(self):
         return "Worker %s" % (self.name)

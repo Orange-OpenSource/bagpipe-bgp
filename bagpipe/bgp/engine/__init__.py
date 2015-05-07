@@ -135,13 +135,24 @@ class RouteEntry(LookingGlass):
             res = 0
         else:
             res = -1
-        #log.debug("RouteEntry cmp: %s =?= %s : %d", self, other, res)
+        log.debug("RouteEntry cmp: %s =?= %s : %d", self, other, res)
         return res
 
-    def __hash__(self):  # FIXME: improve for better performance ?
-        return hash("%d/%d %s %d %s" % (self.afi, self.safi, self.source,
-                                        hash(self.nlri), hash(self.attributes)
-                                        ))
+    def __hash__(self):
+        val = hash((self.afi, self.safi, str(self.source),
+                     str(self.nexthop), hash(self.nlri),
+                     hash(self.attributes)))
+        s = "%d/%d %s %s %d %s" % (self.afi, self.safi, str(self.source),
+                                str(self.nexthop), hash(self.nlri),
+                                hash(self.attributes)
+                                )
+        # FIXME: not sure what hash(nlri) does...
+        # in particular 'RD:prefix:label 5' may not hash to same value
+        # than 'RD:prefix:label 0'
+        #val = hash(s)
+        log.debug("RouteEntry hash: atts %s", repr(self.attributes))
+        log.debug("RouteEntry hash: %s: '%s' -> %d", self, s, val)
+        return val
 
     def __repr__(self):
         fromString = " from:%s" % self.source if self.source else ""
@@ -161,7 +172,7 @@ class RouteEntry(LookingGlass):
                attribute.ID == Attribute.CODE.LOCAL_PREF):
                 continue
 
-            attDict[repr(Attribute.CODE(attribute.ID))] = repr(attribute)
+            attDict[str(Attribute.CODE(attribute.ID))] = str(attribute)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
                "attributes": attDict
@@ -174,7 +185,7 @@ class RouteEntry(LookingGlass):
                              }
 
         if (self.safi) in [SAFI.mpls_vpn, SAFI.evpn]:
-            res["route_targets"] = [repr(rt) for rt in self.routeTargets]
+            res["route_targets"] = [str(rt) for rt in self.routeTargets]
 
         return {
             repr(self.nlri): res

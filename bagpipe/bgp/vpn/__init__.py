@@ -48,7 +48,7 @@ def convertRouteTargets(orig_list):
             continue
         try:
             asn, nn = rt.split(':')
-            list_.append(RouteTarget(int(asn), int(nn), False))
+            list_.append(RouteTarget(int(asn), int(nn)))
         except Exception:
             raise Exception("Malformed route target: '%s'" % rt)
     return list_
