@@ -74,6 +74,9 @@ from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.route_table_manager import RouteTableManager, Match, \
     WorkerCleanupEvent
 
+from exabgp.bgp.message.update.attribute.community.extended \
+    import RouteTargetASN2Number as RouteTarget
+
 from exabgp.reactor.protocol import AFI, SAFI
 
 log = logging.getLogger()
@@ -132,7 +135,8 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
             return
         for match in matches:
             self.assertNotIn(match, worker._rtm_matches,
-                             "Subscription found while it should not")
+                             "Subscription found while it should not: %s" % 
+                             worker._rtm_matches)
 
     def _checkEventsCalls(self, events, advertisedRoutes, withdrawnNLRIs):
         '''
@@ -247,8 +251,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def testA3_ReSubscription(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         routeEvent = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1,
                                          [RT1, RT2], bgpPeerWorker1, NH1)
         # Worker1 subscribes to RT1 and RT2
@@ -271,6 +274,21 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._checkEventsCalls(worker2.enqueue.call_args_list,
                                [routeEvent.routeEntry], [])
 
+    def testA4_TwoSubscriptions(self):
+        # Worker1 subscribes to RT1
+        worker1 = self._newworker("Worker-1", Worker)
+        self._workerSubscriptions(worker1, [RT1])
+
+        # Worker2 subscribes to RT1
+        worker2 = self._newworker("Worker-2", Worker)
+        self._workerSubscriptions(worker2, [RT1])
+
+        # Worker2 advertises a route to RT1
+        self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1, [RT1], worker2, NH1)
+
+        self.assertEqual(1, worker1.enqueue.call_count,
+                         "1 route advertised should be synthesized to Worker1")
+
     def testB1_UnsubscriptionWithNoRouteTosynthesize(self):
         # Worker1 subscribes to RT1 and RT2
         worker1 = self._newworker("Worker-1", Worker)
@@ -289,8 +307,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def testB2_UnsubscriptionWithRouteTosynthesize(self):
         # BGPPeerWorker1 advertises a route for RT1
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         evt1 = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
                                    bgpPeerWorker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
@@ -581,3 +598,20 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._workerSubscriptions(worker3, [RT3])
 
         self.routeTableManager._dumpState()
+
+    def test7_Matches(self):
+        m1a = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1))
+        m1b = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1))
+        m1c = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1, False))
+        m2 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 2))
+        m3 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64513, 1))
+
+        self.assertEqual(hash(m1a), hash(m1b))
+        self.assertEqual(hash(m1a), hash(m1c))
+        self.assertNotEqual(hash(m1a), hash(m2))
+        self.assertNotEqual(hash(m1a), hash(m3))
+
+        self.assertEqual(m1a, m1b)
+        self.assertEqual(m1a, m1c)
+        self.assertNotEqual(m1a, m2)
+        self.assertNotEqual(m1a, m3)

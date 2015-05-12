@@ -257,6 +257,7 @@ class RESTAPI(LookingGlass):
             lgInfo = self.getLookingGlassInfo(pathPrefix, urlPathElements)
 
             log.debug("lgInfo: %s...", repr(lgInfo)[:40])
+            log.debug("lgInfo: %s", repr(lgInfo))
 
             if lgInfo is None:
                 raise NoSuchLookingGlassObject(pathPrefix, urlPathElements[0])

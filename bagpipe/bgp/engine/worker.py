@@ -139,7 +139,7 @@ class Worker(EventSource, LookingGlass):
         return sorted(self._rtm_matches)
 
     def __repr__(self):
-        return "Worker %s" % (self.name)
+        return "%s" % (self.name)
 
     # Looking glass ###
 

@@ -33,7 +33,8 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 from bagpipe.bgp.common import logDecorator
 
 from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.update.attribute.community.extended import RouteTargetASN2Number as RouteTarget
+from exabgp.bgp.message.update.attribute.community.extended import \
+    RouteTargetASN2Number as RouteTarget
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +50,10 @@ class Match(object):
         self.routeTarget = routeTarget
 
     def __hash__(self):
-        return hash((self.afi, self.safi, self.routeTarget))
+        #FIXME, could use a tuple, but RT not yet hashable
+        #return hash((self.afi, self.safi, self.routeTarget))
+        log.debug("Match.hash: %s -> %s", str(self), hash(str(self)))
+        return hash(str(self))
 
     def __repr__(self):
         return "match:%s" % str(self)
@@ -69,8 +73,14 @@ class Match(object):
         other_safi = other.safi or SAFI(0)
         other_rt = other.routeTarget or RouteTarget(0, 0)
 
-        return cmp((self_afi,  self_safi,  self_rt),
-                   (other_afi, other_safi, other_rt))
+        val = cmp((self_afi,  self_safi,  str(self_rt)),
+                   (other_afi, other_safi, str(other_rt)))
+
+        #log.debug("Match.cmp: repr(selfrt):%s", repr(self_rt))
+        #log.debug("Match.cmp: repr(otherrt):%s", repr(other_rt))
+        #log.debug("Match.cmp: %s  =?=  %s  ? %d", self, other, val)
+
+        return val
 
 StopEvent = "StopEvent"
 
@@ -90,23 +100,29 @@ class RouteTableManager(Thread, LookingGlass):
     """
     class WorkersAndEntries(object):
 
-        def __init__(self):
+        def __init__(self, match):
+            self.match = match
             self.workers = set()
             self.entries = set()
             self.nLocalWorkers = 0
+            log.debug("new workersandentries for match %s", match)
 
         def __repr__(self):
             return "workers: %s\nentries: %s" % (self.workers,
                                                  self.entries)
 
         def addWorker(self, worker):
+            log.debug("match %s, add worker %s",self.match,worker)
+            log.debug("match %s, workers(before) %s",self.match,self.workers)
             self.workers.add(worker)
+            log.debug("match %s, workers(after) %s",self.match,self.workers)
             if not isinstance(worker, BGPPeerWorker):
                 self.nLocalWorkers += 1
                 return (self.nLocalWorkers == 1)
 
         def delWorker(self, worker):
-            self.workers.remove(worker)
+            self.workers.discard(worker)
+            log.debug("match %s, discard worker %s",self.match,worker)
             if not isinstance(worker, BGPPeerWorker):
                 self.nLocalWorkers -= 1
                 return (self.nLocalWorkers == 0)
@@ -175,11 +191,16 @@ class RouteTableManager(Thread, LookingGlass):
             del self._match2workersAndEntries[match]
 
     def _match2workersAndEntriesLookupCreate(self, match):
+        log.debug("workersandentries: %s", self._match2workersAndEntries)
+        self._dumpState()
         try:
             return self._match2workersAndEntries[match]
-        except KeyError:
-            wa = RouteTableManager.WorkersAndEntries()
+        except KeyError as e:
+            log.debug("keyerror %s", e)
+            self._dumpState()
+            wa = RouteTableManager.WorkersAndEntries(match)
             self._match2workersAndEntries[match] = wa
+            self._dumpState()
             return wa
 
     def _match2entries(self, match, createIfNone=False, emptyListIfNone=True):
@@ -194,11 +215,9 @@ class RouteTableManager(Thread, LookingGlass):
                 raise
 
     def _match2workers(self, match, emptyListIfNone=True):
-        log.debug("_match2workers: %s", match)
         try:
             return self._match2workersAndEntries[match].workers
         except KeyError:
-            log.debug("match2workers: except!")
             if emptyListIfNone:
                 return []
             else:
@@ -241,8 +260,7 @@ class RouteTableManager(Thread, LookingGlass):
         # will lead to this code re-synthesizing events at each call.
         #
         # Ideally, the code should detect that the worker is already subscribed
-        # and skip the subscription. *But* such a change should not be done
-        # until the code in ExaBGPPeerWorker is updated to support this.
+        # and skip the subscription.
 
         assert(isinstance(sub.worker, Worker))
         log.info("workerSubscribes: %s", sub)
@@ -477,7 +495,7 @@ class RouteTableManager(Thread, LookingGlass):
             self._source_nlri2entry[(entry.source, entry.nlri)] = entry
         else:  # WITHDRAW
             # Update source2entries
-            entry.source._rtm_routeEntries.delete(entry)
+            entry.source._rtm_routeEntries.discard(entry)
 
             # Update _source_nlri2entry
             try:
@@ -521,7 +539,7 @@ class RouteTableManager(Thread, LookingGlass):
         for match in worker._rtm_matches:
             wa = self._match2workersAndEntries[match]
             wa.delWorker(worker)
-        del worker._rtm_matches
+        worker._rtm_matches.clear()
 
         # self._dumpState()
 

@@ -34,7 +34,7 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
-from exabgp.bgp.message.update.nlri.mpls import VPNLabelledPrefix
+from exabgp.bgp.message.update.nlri.mpls import MPLSVPN
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
 
@@ -75,10 +75,10 @@ class VRF(VPNInstance, LookingGlass):
     def _nlriFrom(self, prefix, label, rd, action):
         assert(rd is not None)
         packedPrefix, mask = prefixToPackedIPMask(prefix)
-        nlri = VPNLabelledPrefix(self.afi, self.safi, packedPrefix, mask,
-                                 Labels([label], True), rd,
-                                 IP.pton(self.bgpManager.getLocalAddress()),
-                                 action)
+        nlri = MPLSVPN(self.afi, self.safi, packedPrefix, mask,
+                       Labels([label], True), rd,
+                       IP.pton(self.bgpManager.getLocalAddress()),
+                       action)
         return nlri
 
     def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label):
@@ -158,7 +158,7 @@ class VRF(VPNInstance, LookingGlass):
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
     def _route2trackedEntry(self, route):
-        if isinstance(route.nlri, VPNLabelledPrefix):
+        if isinstance(route.nlri, MPLSVPN):
             return route.nlri.prefix()
         else:
             self.log.error("We should not receive routes of type %s",
@@ -194,11 +194,11 @@ class VRF(VPNInstance, LookingGlass):
         if not encaps:
             return
 
-        assert(len(newRoute.nlri.labels) == 1)
+        assert(len(newRoute.nlri.labels.labels) == 1)
 
         self.dataplane.setupDataplaneForRemoteEndpoint(
             prefix, newRoute.nexthop,
-            newRoute.nlri.labels[0], newRoute.nlri, encaps)
+            newRoute.nlri.labels.labels[0], newRoute.nlri, encaps)
 
     @utils.synchronized
     @logDecorator.log
@@ -220,9 +220,11 @@ class VRF(VPNInstance, LookingGlass):
                            "dataplane does not want it")
             return
 
+        assert(len(oldRoute.nlri.labels.labels) == 1)
+
         self.dataplane.removeDataplaneForRemoteEndpoint(
             prefix, oldRoute.nexthop,
-            oldRoute.nlri.labels[0], oldRoute.nlri)
+            oldRoute.nlri.labels.labels[0], oldRoute.nlri)
 
     def getLGMap(self):
         return {

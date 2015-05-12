@@ -51,7 +51,7 @@ from bagpipe.bgp.common.looking_glass import LGMap
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
 
-from bagpipe.exabgp.message.update.attribute.communities import ECommunities
+from exabgp.bgp.message import OUT
 
 log = logging.getLogger(__name__)
 
@@ -120,8 +120,8 @@ class RouteEntry(LookingGlass):
         except AttributeError:
             try:
                 return self.attributes[Attribute.CODE.NEXT_HOP].ip
-            except AttributeError:
-                raise Exception("route has no nexthop: %s", self)
+            except KeyError:
+                return None
 
     def __cmp__(self, other):
         if other is None:
@@ -139,25 +139,19 @@ class RouteEntry(LookingGlass):
         return res
 
     def __hash__(self):
-        val = hash((self.afi, self.safi, str(self.source),
-                     str(self.nexthop), hash(self.nlri),
-                     hash(self.attributes)))
-        s = "%d/%d %s %s %d %s" % (self.afi, self.safi, str(self.source),
-                                str(self.nexthop), hash(self.nlri),
-                                hash(self.attributes)
-                                )
-        # FIXME: not sure what hash(nlri) does...
-        # in particular 'RD:prefix:label 5' may not hash to same value
-        # than 'RD:prefix:label 0'
-        #val = hash(s)
-        log.debug("RouteEntry hash: atts %s", repr(self.attributes))
-        log.debug("RouteEntry hash: %s: '%s' -> %d", self, s, val)
-        return val
+        return hash((self.afi, self.safi, str(self.source),
+                     str(self.nexthop), self.nlri,
+                     self.attributes))
 
-    def __repr__(self):
+    def __repr__(self, skipNextHop=False):
         fromString = " from:%s" % self.source if self.source else ""
+
+        nexthop = ""
+        if not skipNextHop:
+            nexthop = str(self.nexthop)
+
         return "[RouteEntry: %s %s %s nh:%s %s%s]" % (
-            self.afi, self.safi, self.nlri, self.nexthop,
+            self.afi, self.safi, self.nlri, nexthop,
             self.attributes, fromString)
 
     def getLookingGlassLocalInfo(self, pathPrefix):
@@ -172,7 +166,7 @@ class RouteEntry(LookingGlass):
                attribute.ID == Attribute.CODE.LOCAL_PREF):
                 continue
 
-            attDict[str(Attribute.CODE(attribute.ID))] = str(attribute)
+            attDict[repr(Attribute.CODE(attribute.ID))] = str(attribute)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
                "attributes": attDict
@@ -216,7 +210,6 @@ class RouteEvent(object):
             self.source = routeEntry.source
         assert(self.source is not None)
         self.replacedRoute = None
-        # TODO: check consistency of eventType and nlri.action
 
     def setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a

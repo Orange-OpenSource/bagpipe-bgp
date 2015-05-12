@@ -96,6 +96,9 @@ class Manager(EventSource, LookingGlass):
 
         EventSource.__init__(self, self.routeTableManager)
 
+    def __repr__(self):
+        return self.__class__.__name__
+
     @logDecorator.log
     def stop(self):
         for peer in self.peers.itervalues():

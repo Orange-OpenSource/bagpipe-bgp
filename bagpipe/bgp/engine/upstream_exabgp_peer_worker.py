@@ -41,6 +41,7 @@ from exabgp.protocol.ip import IP
 
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
+from exabgp.reactor.network.error import LostConnection
 
 from exabgp.bgp.message.open import RouterID
 from exabgp.bgp.message.open.capability.capability import Capability
@@ -139,19 +140,20 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         #self.peer = Peer(neighbor, FakeReactor())
         self.peer = Peer(neighbor, None)
 
-        # FIXME: enclose in try/except to catch Exception during
-        # session init
-        for action in self.peer._connect():
-            self.log.debug("action: %s", action)
-            self.fsm.state = TranslateExaBGPState[self.peer._['out']['state']]
+        try:
+            for action in self.peer._connect():
+                self.log.debug("action: %s", action)
+                self.fsm.state = TranslateExaBGPState[self.peer._['out']['state']]
 
-            if action == ACTION.LATER:
-                time.sleep(2)
-            elif action == ACTION.NOW:
-                time.sleep(0.1)
+                if action == ACTION.LATER:
+                    time.sleep(2)
+                elif action == ACTION.NOW:
+                    time.sleep(0.1)
 
-            if self.shouldStop or action == ACTION.CLOSE:
-                raise StoppedException()
+                if self.shouldStop or action == ACTION.CLOSE:
+                    raise StoppedException()
+        except LostConnection as e:
+            raise
         #FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
 
         # check the capabilities of the session just established...
@@ -215,17 +217,15 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         try:
             select.select([self.protocol.connection.io], [], [], 2)
             message = self.protocol.read_message().next()
+
             if message.ID != NOP.ID:
                 self.log.debug("protocol read message: %s", message)
         except Notification as e:
             self.log.error("Notification: %s", e)
             return 2
-#        except Failure as e:
-#            self.log.warning("Protocol failure: %s", e)
-#            return 2
-#        except socket.error as e:
-#            self.log.warning("Socket error: %s", e)
-#            return 2
+        except LostConnection as e:
+            self.log.warning("Lost connection while waiting for message: %s", e)
+            return 2
         except Exception as e:
             self.log.error("Error while reading BGP message: %s", e)
             raise
@@ -258,18 +258,6 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
     def _processReceivedRoute(self, action, nlri, attributes):
         self.log.info("Received route: %s, %s", nlri, attributes)
-
-#         rts = []
-#         if Attribute.CODE.EXTENDED_COMMUNITY in attributes:
-#             self.log.debug("type: %s", type(attributes[
-#                 Attribute.CODE.EXTENDED_COMMUNITY]))
-#             rts = [ecom for ecom in attributes[
-#                    Attribute.CODE.EXTENDED_COMMUNITY].communities
-#                    if isinstance(ecom, RouteTarget)]
-#
-#             if not rts:
-#                 raise Exception("Unable to find any Route Targets"
-#                                 "in the received route")
 
         routeEntry = RouteEntry(nlri.afi, nlri.safi,
                                 nlri, None, attributes)
@@ -306,16 +294,16 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         self.log.debug("Sending %d bytes on socket to peer %s",
                        len(data), self.peerAddress)
         try:
-            for _ in self.protocol.write(data):
+            for _ in self.protocol.connection.writer(data):
                 pass
         except Exception as e:
             self.log.error("Was not able to send data: %s", e)
+            self.log.warning("%s", traceback.format_exc())
 
     def _keepAliveMessageData(self):
         return KeepAlive().message()
 
     def _updateForRouteEvent(self, event):
-        # FIXME: the action is now in the NLRI !
         try:
             r = Update([event.routeEntry.nlri], event.routeEntry.attributes)
             return ''.join(r.messages(self.protocol.negotiated))

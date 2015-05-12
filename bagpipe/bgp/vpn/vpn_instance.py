@@ -34,7 +34,7 @@ from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
 from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
     compareECMP, compareNoECMP
 
-from bagpipe.bgp.engine import RouteEvent, RouteEntry
+from bagpipe.bgp.engine import RouteEntry
 
 from exabgp.reactor.protocol import AFI, SAFI
 

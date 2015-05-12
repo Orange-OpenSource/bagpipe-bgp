@@ -36,17 +36,27 @@ from bagpipe.bgp.vpn.dataplane_drivers import \
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap, \
     LookingGlassReferences
 
-from bagpipe.exabgp.structure.vpn import RouteDistinguisher
-from bagpipe.exabgp.structure.evpn import EVPNNLRI, EVPNMACAdvertisement, \
-    EVPNMulticast, EthernetSegmentIdentifier, EthernetTag, MAC
-from bagpipe.exabgp.structure.mpls import LabelStackEntry
+from exabgp.bgp.message.update import Attributes
+from exabgp.bgp.message.update.attribute.community.extended.communities \
+    import ExtendedCommunities
+
+from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
+from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
+
+from exabgp.bgp.message.update.nlri.evpn.nlri import EVPN as EVPNNLRI
+from exabgp.bgp.message.update.nlri.evpn.mac import MAC as EVPNMAC
+from exabgp.bgp.message.update.nlri.evpn.multicast import \
+    Multicast as EVPNMulticast
+from exabgp.bgp.message.update.nlri.qualifier.esi import ESI
+from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
+from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
+
 from exabgp.reactor.protocol import AFI, SAFI
-from bagpipe.exabgp.structure.ip import Inet
-from bagpipe.exabgp.message.update.route import Route
+# from bagpipe.exabgp.structure.ip import Inet
+# from bagpipe.exabgp.message.update.route import Route
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
-from bagpipe.exabgp.message.update.attribute.pmsi_tunnel import PMSITunnel, \
-    PMSITunnelIngressReplication
+from exabgp.bgp.message.update.attribute.pmsi import PMSIIngressReplication
 
 
 class VPNInstanceDataplane(_VPNInstanceDataplane):
