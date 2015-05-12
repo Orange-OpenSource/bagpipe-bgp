@@ -104,17 +104,23 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         worker._rtm_routeEntries = set()
         return worker
 
-    def _workerSubscriptions(self, worker, rts,
+    def _workerSubscriptions(self, worker, rts, wait=True,
                              afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
         for rt in rts:
             subscribe = Subscription(afi, safi, rt, worker)
             self.routeTableManager.enqueue(subscribe)
 
-    def _workerUnsubscriptions(self, worker, rts,
+        if wait:
+            self._wait()
+
+    def _workerUnsubscriptions(self, worker, rts, wait=True,
                                afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
         for rt in rts:
             unsubscribe = Unsubscription(afi, safi, rt, worker)
             self.routeTableManager.enqueue(unsubscribe)
+
+        if wait:
+            self._wait()
 
     def _checkSubscriptions(self, worker, matches):
         for match in matches:
@@ -151,9 +157,6 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # Worker1 subscribes to RT1 and RT2
         worker1 = self._newworker("Worker-1", Worker)
         self._workerSubscriptions(worker1, [RT1, RT2])
-        # Waiting for RouteTableManager thread finishes to process the
-        # subscriptions
-        self._wait()
         # check subscriptions
         self._checkSubscriptions(worker1, [MATCH1, MATCH2])
 
@@ -169,7 +172,6 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
         worker1 = self._newworker("Worker-1", Worker)
         self._workerSubscriptions(worker1, [RT1])
-        self._wait()
         self.assertEqual(
             1,
             self.routeTableManager.firstLocalSubscriberCallback.call_count,
@@ -177,7 +179,6 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
         worker2 = self._newworker("Worker-2", Worker)
         self._workerSubscriptions(worker2, [RT1])
-        self._wait()
         self.assertEqual(
             1,
             self.routeTableManager.firstLocalSubscriberCallback.call_count,
@@ -185,21 +186,18 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
             "second time")
 
         self._workerUnsubscriptions(worker2, [RT1])
-        self._wait()
         self.assertEqual(
             0,
             self.routeTableManager.lastLocalSubscriberCallback.call_count,
             "lastLocalSubscriberCallback should not have been called")
 
         self._workerUnsubscriptions(worker1, [RT1])
-        self._wait()
         self.assertEqual(
             1,
             self.routeTableManager.lastLocalSubscriberCallback.call_count,
             "lastLocalSubscriberCallback should have been called")
 
         self._workerUnsubscriptions(bgpWorker1, [RT1])
-        self._wait()
         self.assertEqual(
             1,
             self.routeTableManager.lastLocalSubscriberCallback.call_count,
@@ -263,9 +261,6 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._workerSubscriptions(worker2, [RT1])
         # Worker1 subscribes again to RT2
         self._workerSubscriptions(worker2, [RT2])
-        # Waiting for RouteTableManager thread finishes to process the
-        # subscription
-        self._wait()
         # check route entry synthesized
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route advertised should be synthesized to Worker1")
@@ -287,9 +282,6 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._workerUnsubscriptions(worker1, [RT1])
         # BGPPeerWorker1 unsubscribes to RT1 and RT2
         self._workerUnsubscriptions(bgpPeerWorker1, [RT1, RT2])
-        # Waiting for RouteTableManager thread finishes to process the
-        # subscription
-        self._wait()
         # check subscription/unsubscriptions
         self._checkUnsubscriptions(worker1, [MATCH1])
         self._checkSubscriptions(worker1, [MATCH2])
@@ -319,11 +311,11 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         bgpPeerWorker2 = self._newworker("BGPWorker2", BGPPeerWorker)
         self._workerSubscriptions(bgpPeerWorker2, [RT1])
         # Workers and BGPPeerWorker unsubscriptions
-        self._workerUnsubscriptions(bgpPeerWorker1, [RT1])
-        self._workerUnsubscriptions(worker1, [RT1])
-        self._workerUnsubscriptions(worker2, [RT2])
-        self._workerUnsubscriptions(worker3, [RT3])
-        self._workerUnsubscriptions(bgpPeerWorker2, [RT1])
+        self._workerUnsubscriptions(bgpPeerWorker1, [RT1], False)
+        self._workerUnsubscriptions(worker1, [RT1], False)
+        self._workerUnsubscriptions(worker2, [RT2], False)
+        self._workerUnsubscriptions(worker3, [RT3], False)
+        self._workerUnsubscriptions(bgpPeerWorker2, [RT1], False)
         # Waiting for RouteTableManager thread finishes to process the
         # subscription
         self._wait()
@@ -355,9 +347,6 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 unsubscribes to RT1
         bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         self._workerUnsubscriptions(bgpPeerWorker1, [RT1, RT2])
-        # Waiting for RouteTableManager thread finishes to process the
-        # subscription
-        self._wait()
         # check subscription/unsubscriptions
         self._checkSubscriptions(worker1, [MATCH1])
         self._checkUnsubscriptions(bgpPeerWorker1, [MATCH1, MATCH2])
@@ -590,9 +579,5 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # Worker3 subscribes to RT3
         worker3 = self._newworker("Worker-3", Worker)
         self._workerSubscriptions(worker3, [RT3])
-
-        # Waiting for RouteTableManager thread finishes to process the
-        # subscriptions and route event processing
-        self._wait()
 
         self.routeTableManager._dumpState()
