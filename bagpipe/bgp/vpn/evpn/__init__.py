@@ -175,8 +175,9 @@ class EVI(VPNInstance, LookingGlass):
         rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
                                              self.instanceId)
 
+        # label parameter ignored, we need to use instance label
         nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8, 
-                       Labels([label]),
+                       Labels([self.instanceLabel]),
                        IP.create(ipPrefix), None,
                        IP.pton(self.dataplaneDriver.getLocalAddress()))
 
