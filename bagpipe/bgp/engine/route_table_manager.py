@@ -52,7 +52,6 @@ class Match(object):
     def __hash__(self):
         #FIXME, could use a tuple, but RT not yet hashable
         #return hash((self.afi, self.safi, self.routeTarget))
-        log.debug("Match.hash: %s -> %s", str(self), hash(str(self)))
         return hash(str(self))
 
     def __repr__(self):
@@ -105,24 +104,19 @@ class RouteTableManager(Thread, LookingGlass):
             self.workers = set()
             self.entries = set()
             self.nLocalWorkers = 0
-            log.debug("new workersandentries for match %s", match)
 
         def __repr__(self):
             return "workers: %s\nentries: %s" % (self.workers,
                                                  self.entries)
 
         def addWorker(self, worker):
-            log.debug("match %s, add worker %s",self.match,worker)
-            log.debug("match %s, workers(before) %s",self.match,self.workers)
             self.workers.add(worker)
-            log.debug("match %s, workers(after) %s",self.match,self.workers)
             if not isinstance(worker, BGPPeerWorker):
                 self.nLocalWorkers += 1
                 return (self.nLocalWorkers == 1)
 
         def delWorker(self, worker):
             self.workers.discard(worker)
-            log.debug("match %s, discard worker %s",self.match,worker)
             if not isinstance(worker, BGPPeerWorker):
                 self.nLocalWorkers -= 1
                 return (self.nLocalWorkers == 0)
@@ -191,16 +185,11 @@ class RouteTableManager(Thread, LookingGlass):
             del self._match2workersAndEntries[match]
 
     def _match2workersAndEntriesLookupCreate(self, match):
-        log.debug("workersandentries: %s", self._match2workersAndEntries)
-        self._dumpState()
         try:
             return self._match2workersAndEntries[match]
         except KeyError as e:
-            log.debug("keyerror %s", e)
-            self._dumpState()
             wa = RouteTableManager.WorkersAndEntries(match)
             self._match2workersAndEntries[match] = wa
-            self._dumpState()
             return wa
 
     def _match2entries(self, match, createIfNone=False, emptyListIfNone=True):

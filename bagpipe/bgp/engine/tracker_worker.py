@@ -116,6 +116,11 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
 
         entry = self._route2trackedEntry(newRoute)
 
+        if entry is None:
+            self.log.debug("Route not mapped to a tracked entry, ignoring: %s",
+                           newRoute)
+            return
+
         self.log.debug("trackedEntry for this route: %s (type: %s)",
                        TrackerWorker._displayEntry(entry), type(entry))
 

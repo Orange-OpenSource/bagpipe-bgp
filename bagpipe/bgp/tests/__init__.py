@@ -39,8 +39,25 @@ RT1 = RouteTarget(64512, 10)
 RT2 = RouteTarget(64512, 20)
 RT3 = RouteTarget(64512, 30)
 
-NLRI1 = "NLRI1"
-NLRI2 = "NLRI2"
+
+class TestNLRI(object):
+
+    def __init__(self, desc):
+        self.desc = desc
+        self.action = None
+
+    def __repr__(self):
+        return self.desc
+
+    def __cmp__(self, other):
+        return cmp(self.desc, other.desc)
+
+    def __hash__(self):
+        return hash(self.desc)
+
+
+NLRI1 = TestNLRI("NLRI1")
+NLRI2 = TestNLRI("NLRI2")
 
 NH1 = "1.1.1.1"
 NH2 = "2.2.2.2"

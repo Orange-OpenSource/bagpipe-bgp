@@ -72,23 +72,20 @@ class VRF(VPNInstance, LookingGlass):
         VPNInstance.__init__(self, *args, **kwargs)
         self.readvertised = set()
 
-    def _nlriFrom(self, prefix, label, rd, action):
+    def _nlriFrom(self, prefix, label, rd):
         assert(rd is not None)
         packedPrefix, mask = prefixToPackedIPMask(prefix)
         nlri = MPLSVPN(self.afi, self.safi, packedPrefix, mask,
                        Labels([label], True), rd,
-                       IP.pton(self.bgpManager.getLocalAddress()),
-                       action)
+                       IP.pton(self.bgpManager.getLocalAddress()))
+
         return nlri
 
     def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
         rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
                                              self.instanceId)
-        nlri = self._nlriFrom("%s/%s" % (ipPrefix, prefixLen), label,
-                              rd, OUT.ANNOUNCE)
-        # FIXME: action is set to ANNOUNCE, need be able to override it
-        #        from caller ?
+        nlri = self._nlriFrom("%s/%s" % (ipPrefix, prefixLen), label, rd)
 
         return RouteEntry(self.afi, self.safi, nlri)
 
@@ -107,8 +104,7 @@ class VRF(VPNInstance, LookingGlass):
         for label in self._getLocalLabels():
             # need a distinct RD for each route...
             nlri = self._nlriFrom(prefixFromNLRI(nlri), label,
-                                  self._getRDFromLabel(label),
-                                  OUT.ANNOUNCE)
+                                  self._getRDFromLabel(label))
 
             attributes = Attributes()
 
@@ -124,8 +120,7 @@ class VRF(VPNInstance, LookingGlass):
     def _readvertiseStop(self, nlri):
         for label in self._getLocalLabels():
             nlri = self._nlriFrom(prefixFromNLRI(nlri), label,
-                                  self._getRDFromLabel(label),
-                                  OUT.WITHDRAW)
+                                  self._getRDFromLabel(label))
             routeEntry = RouteEntry(self.afi, self.safi, nlri)
             self._withdrawRoute(routeEntry)
 
@@ -138,8 +133,7 @@ class VRF(VPNInstance, LookingGlass):
 
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
-            nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label),
-                                  OUT.ANNOUNCE)
+            nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label))
             routeEntry = RouteEntry(self.afi, self.safi, nlri,
                                     self.readvertiseToRTs)
             self._advertiseRoute(routeEntry)
@@ -147,8 +141,7 @@ class VRF(VPNInstance, LookingGlass):
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
-            nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label),
-                                  OUT.WITHDRAW)
+            nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label))
             routeEntry = RouteEntry(self.afi, self.safi, nlri)
             self._withdrawRoute(routeEntry)
 

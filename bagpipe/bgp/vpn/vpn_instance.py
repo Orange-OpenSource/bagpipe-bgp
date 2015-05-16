@@ -226,10 +226,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         return ecommunities
 
     @abstractmethod
-    #FIXME: to be changed into a generateVifBGPNLRI
     def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         '''
-        returns a RouteEntry
+        returns an NLRI
         '''
         pass
 

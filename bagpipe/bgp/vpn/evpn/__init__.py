@@ -40,6 +40,8 @@ from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
 
+from exabgp.protocol.ip import IP
+
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
@@ -52,10 +54,10 @@ from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
 from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
 
 from exabgp.reactor.protocol import AFI, SAFI
-# from bagpipe.exabgp.structure.ip import Inet
-# from bagpipe.exabgp.message.update.route import Route
+
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
+from exabgp.bgp.message.update.attribute.pmsi import PMSI
 from exabgp.bgp.message.update.attribute.pmsi import PMSIIngressReplication
 
 
@@ -144,37 +146,31 @@ class EVI(VPNInstance, LookingGlass):
         self.log.info("Generating BGP route for broadcast/multicast traffic")
 
         etag = None
-        label = LabelStackEntry(self.instanceLabel)
+        label = self.instanceLabel
 
         if (Encapsulation(Encapsulation.Type.VXLAN) in
                 self.dataplaneDriver.supportedEncaps()):
+            label = 0
             etag = EthernetTag(self.instanceLabel)
-            label = None
 
-        route = Route(
-            EVPNMulticast(
-                RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC,
-                                   None,
-                                   self.bgpManager.getLocalAddress(),
-                                   self.instanceId),
-                etag,
-                self.bgpManager.getLocalAddress()
-            )
-        )
+        rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
+                                             self.instanceId)
 
-        route.attributes.add(ECommunities(self._genExtendedCommunities()))
+        nlri = EVPNMulticast(rd,
+                             etag,
+                             IP.create(self.bgpManager.getLocalAddress()),
+                             None,
+                             IP.pton(self.bgpManager.getLocalAddress()))
+
+        attributes = Attributes()
 
         # add PMSI Tunnel Attribute route
-        pmsi_tunnel_attribute = PMSITunnelIngressReplication(
+        pmsi_tunnel_attribute = PMSIIngressReplication(
             self.dataplaneDriver.getLocalAddress(), label)
-        route.attributes.add(pmsi_tunnel_attribute)
-
-        nh = Inet(1, socket.inet_pton(
-            socket.AF_INET, self.dataplaneDriver.getLocalAddress()))
+        attributes.add(pmsi_tunnel_attribute)
 
         self.multicastRouteEntry = RouteEntry(self.afi, self.safi,
-                                              route.nlri, route.attributes,
-                                              self.exportRTs)
+                                              nlri, self.exportRTs, attributes)
 
         self._advertiseRoute(self.multicastRouteEntry)
 
@@ -183,26 +179,19 @@ class EVI(VPNInstance, LookingGlass):
 
         assert(prefixLen == 32)
 
-        lse = LabelStackEntry(label, True)
         etag = None
 
         if (Encapsulation(Encapsulation.Type.VXLAN) in
                 self.dataplaneDriver.supportedEncaps()):
-            lse = None
+            label = 0
             etag = EthernetTag(self.instanceLabel)
 
-        route = Route(
-            EVPNMACAdvertisement(
-                RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC, None,
-                                   self.dataplaneDriver.getLocalAddress(),
-                                   self.instanceId),
-                EthernetSegmentIdentifier(),
-                etag,
-                MAC(macAddress),
-                lse,
-                ipPrefix
-            )
-        )
+        rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
+                                             self.instanceId)
+
+        nlri = EVPNMAC(rd, ESI(), etag, MAC(macAddress), 6*8, Labels([label]),
+                       IP.create(ipPrefix), None,
+                       IP.pton(self.bgpManager.getLocalAddress()))
 
         return RouteEntry(self.afi, self.safi, nlri)
 
@@ -222,13 +211,14 @@ class EVI(VPNInstance, LookingGlass):
     # TrackerWorker callbacks for BGP route updates ##########################
 
     def _route2trackedEntry(self, route):
-        if isinstance(route.nlri, EVPNMACAdvertisement):
-            return (EVPNMACAdvertisement, route.nlri.mac)
+        if isinstance(route.nlri, EVPNMAC):
+            return (EVPNMAC, route.nlri.mac)
         elif isinstance(route.nlri, EVPNMulticast):
             return (EVPNMulticast, (route.nlri.ip, route.nlri.rd))
         elif isinstance(route.nlri, EVPNNLRI):
             self.log.warning("Received EVPN route of unsupported subtype: %s",
-                             route.nlri.subtype)
+                             route.nlri.CODE)
+            return None
         else:
             raise Exception("EVI %d should not receive routes of type %s" %
                             (self.instanceId, type(route.nlri)))
@@ -242,11 +232,12 @@ class EVI(VPNInstance, LookingGlass):
         if not encaps:
             return
 
-        if entryClass == EVPNMACAdvertisement:
+        if entryClass == EVPNMAC:
             prefix = info
 
             remotePE = newRoute.nexthop
-            label = newRoute.nlri.label.labelValue
+
+            label = newRoute.nlri.label.labels[0]
 
             self.dataplane.setupDataplaneForRemoteEndpoint(
                 prefix, remotePE, label, newRoute.nlri, encaps)
@@ -256,13 +247,13 @@ class EVI(VPNInstance, LookingGlass):
 
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
-            pmsi_tunnel = newRoute.attributes.get(PMSITunnel.ID)
-            if not isinstance(pmsi_tunnel, PMSITunnelIngressReplication):
+            pmsi_tunnel = newRoute.attributes.get(PMSI.ID)
+            if not isinstance(pmsi_tunnel, PMSIIngressReplication):
                 self.log.warning("Received PMSITunnel of unsupported type: %s",
                                  type(pmsi_tunnel))
             else:
                 remote_endpoint = pmsi_tunnel.ip
-                label = pmsi_tunnel.label.labelValue
+                label = pmsi_tunnel.label
 
                 self.log.info("Setting up dataplane for new ingress "
                               "replication destination %s", remote_endpoint)
@@ -276,7 +267,7 @@ class EVI(VPNInstance, LookingGlass):
     def _bestRouteRemoved(self, entry, oldRoute, last):
         (entryClass, info) = entry
 
-        if entryClass == EVPNMACAdvertisement:
+        if entryClass == EVPNMAC:
 
             if self._skipRouteRemoval(last):
                 self.log.debug("Skipping removal of non-last route because "
@@ -286,7 +277,7 @@ class EVI(VPNInstance, LookingGlass):
             prefix = info
 
             remotePE = oldRoute.nexthop
-            label = oldRoute.nlri.label.labelValue
+            label = oldRoute.nlri.label.labels[0]
 
             self.dataplane.removeDataplaneForRemoteEndpoint(
                 prefix, remotePE, label, oldRoute.nlri)
@@ -296,13 +287,13 @@ class EVI(VPNInstance, LookingGlass):
 
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
-            pmsi_tunnel = oldRoute.attributes.get(PMSITunnel.ID)
-            if not isinstance(pmsi_tunnel, PMSITunnelIngressReplication):
+            pmsi_tunnel = oldRoute.attributes.get(PMSI.ID)
+            if not isinstance(pmsi_tunnel, PMSIIngressReplication):
                 self.log.warning("PMSITunnel of suppressed route is of"
                                  " unsupported type")
             else:
                 remote_endpoint = pmsi_tunnel.ip
-                label = pmsi_tunnel.label.labelValue
+                label = pmsi_tunnel.label
                 self.log.info("Cleaning up dataplane for ingress replication "
                               "destination %s", remote_endpoint)
                 self.dataplane.removeDataplaneForBroadcastEndpoint(

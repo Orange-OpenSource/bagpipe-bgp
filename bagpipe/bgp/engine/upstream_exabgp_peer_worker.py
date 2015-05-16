@@ -77,12 +77,6 @@ def setupExaBGPEnv():
 setupExaBGPEnv()
 
 
-class FakeReactor(object):
-    '''
-    used to mocks exabgp.reactor.loop.Reactor
-    '''
-    pass
-
 TranslateExaBGPState = {STATE.IDLE: FSM.Idle,
                         STATE.ACTIVE: FSM.Active,
                         STATE.CONNECT: FSM.Connect,
@@ -137,13 +131,12 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             neighbor.add_family((AFI(AFI.ipv4), SAFI(SAFI.rtc)))
 
         self.log.debug("Instantiate ExaBGP Peer")
-        #self.peer = Peer(neighbor, FakeReactor())
         self.peer = Peer(neighbor, None)
 
         try:
             for action in self.peer._connect():
-                self.log.debug("action: %s", action)
-                self.fsm.state = TranslateExaBGPState[self.peer._['out']['state']]
+                self.fsm.state = TranslateExaBGPState[
+                    self.peer._['out']['state']]
 
                 if action == ACTION.LATER:
                     time.sleep(2)
@@ -224,7 +217,11 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
             self.log.error("Notification: %s", e)
             return 2
         except LostConnection as e:
-            self.log.warning("Lost connection while waiting for message: %s", e)
+            self.log.warning("Lost connection while waiting for message: %s",
+                             e)
+            return 2
+        except TypeError as e:
+            self.log.error("Error while reading BGP message: %s", e)
             return 2
         except Exception as e:
             self.log.error("Error while reading BGP message: %s", e)
@@ -235,7 +232,7 @@ class UpstreamExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         if message.ID == Update.ID:
             if (self.fsm.state != FSM.Established):
                 raise Exception("Update received but not in Established state")
-            pass  # see below
+            # more below
         elif message.ID == KeepAlive.ID:
             self.enqueue(KeepAliveReceived)
             self.log.debug("Received message: %s", message)

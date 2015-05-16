@@ -47,6 +47,15 @@ from exabgp.bgp.message.update.attribute.community.extended \
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
+from exabgp.bgp.message.update.nlri.evpn.nlri import EVPN as EVPNNLRI
+from exabgp.bgp.message.update.nlri.evpn.mac import MAC as EVPNMAC
+from exabgp.bgp.message.update.nlri.evpn.multicast import \
+    Multicast as EVPNMulticast
+from exabgp.bgp.message.update.nlri.qualifier.esi import ESI
+from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
+from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
+
+
 from exabgp.protocol.ip import IP
 
 from bagpipe.bgp.vpn.ipvpn import prefixToPackedIPMask
@@ -74,16 +83,16 @@ class TestEngineObjects(TestCase):
         packedPrefix, mask = prefixToPackedIPMask("1.1.1.1/32")
 
         nlri1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([42], True), rd,
+                        IP.pton("45.45.45.45"),
+                        OUT.ANNOUNCE)
 
         nlri2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([42], True), rd,
+                        IP.pton("45.45.45.45"),
+                        OUT.ANNOUNCE)
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
@@ -93,21 +102,22 @@ class TestEngineObjects(TestCase):
         Two VPN NLRI distinct only by their *label* should
         hash to the same value, and be equal
         '''
-        rd = RouteDistinguisher.fromElements("42.42.42.42", 5)
 
         packedPrefix, mask = prefixToPackedIPMask("1.1.1.1/32")
 
         nlri1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([42], True), 
+                        RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        IP.pton("45.45.45.45"),
+                        OUT.ANNOUNCE)
 
         nlri2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([0], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([0], True), 
+                        RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        IP.pton("45.45.45.45"),
+                        OUT.ANNOUNCE)
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
@@ -117,21 +127,21 @@ class TestEngineObjects(TestCase):
         Two VPN NLRI distinct only by their *nexthop* should
         hash to the same value, and be equal
         '''
-        rd = RouteDistinguisher.fromElements("42.42.42.42", 5)
-
         packedPrefix, mask = prefixToPackedIPMask("1.1.1.1/32")
 
         nlri1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([42], True),
+                        RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        IP.pton("45.45.45.45"),
+                        OUT.ANNOUNCE)
 
         nlri2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("77.77.77.77"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([42], True),
+                        RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        IP.pton("77.77.77.77"),
+                        OUT.ANNOUNCE)
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
@@ -141,26 +151,125 @@ class TestEngineObjects(TestCase):
         Two VPN NLRI distinct only by their *action* should
         hash to the same value, and be equal
         '''
-        rd = RouteDistinguisher.fromElements("42.42.42.42", 5)
 
         packedPrefix, mask = prefixToPackedIPMask("1.1.1.1/32")
 
         nlri1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.ANNOUNCE)
+                        packedPrefix, mask,
+                        Labels([42], True), 
+                        RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        IP.pton("45.45.45.45"),
+                        OUT.ANNOUNCE)
 
         nlri2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                                  packedPrefix, mask,
-                                  Labels([42], True), rd,
-                                  IP.pton("45.45.45.45"),
-                                  OUT.WITHDRAW)
+                        packedPrefix, mask,
+                        Labels([42], True), 
+                        RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        IP.pton("45.45.45.45"),
+                        OUT.WITHDRAW)
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
 
+    # Tests on EVPN NLRIs
+
+    def test100_EVPNMACHashEqual(self):
+        '''
+        Two indistinct EVPN NLRI should
+        hash to the same value, and be equal
+        '''
+
+        nlri1 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("1.1.1.1"))
+
+        nlri2 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("1.1.1.1"))
+
+        self.assertEqual(hash(nlri1), hash(nlri2))
+        self.assertEqual(nlri1, nlri2)
+
+    def test101_EVPNHashEqual_somefieldsvary(self):
+        '''
+        Two EVPN MAC NLRIs differing by their ESI or label or RD,
+        or nexthop, but otherwise identical should hash to the same value,
+        and be equal
+        '''
+
+        nlri0 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("1.1.1.1"))
+
+        # Esi
+        nlri1 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(1),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("1.1.1.1"))
+
+        # label
+        nlri2 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([4444], True),
+                        IP.create("1.1.1.1"))
+
+        # IP: different IPs, but same MACs: different route
+        nlri3 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("2.2.2.2"))
+
+        # with a next hop...
+        nlri4 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("1.1.1.1"),
+                        IP.pton("10.10.10.10"))
+        nlri5 = EVPNMAC(RouteDistinguisher.fromElements("42.42.42.42", 5),
+                        ESI(0),
+                        EthernetTag(111),
+                        MAC("01:02:03:04:05:06"), 6*8,
+                        Labels([42], True),
+                        IP.create("1.1.1.1"),
+                        IP.pton("11.11.11.11"))
+
+        self.assertEqual(hash(nlri0), hash(nlri1))
+        self.assertEqual(hash(nlri0), hash(nlri2))
+        self.assertEqual(hash(nlri0), hash(nlri4))
+        self.assertEqual(nlri0, nlri1)
+        self.assertEqual(nlri0, nlri2)
+        self.assertEqual(nlri0, nlri4)
+        self.assertEqual(nlri1, nlri2)
+        self.assertEqual(nlri1, nlri4)
+        self.assertEqual(nlri2, nlri4)
+        self.assertEqual(nlri4, nlri5)
+
+        self.assertNotEqual(hash(nlri0), hash(nlri3))
+        self.assertNotEqual(nlri0, nlri3)
+        self.assertNotEqual(nlri1, nlri3)
+        self.assertNotEqual(nlri2, nlri3)
+        self.assertNotEqual(nlri3, nlri4)
+
+
     ### tests on attributes ###
+
     def test4_SameNLRIDistinctAttributes(self):
         '''
         Two routes with same NLRI but distinct attributes should
@@ -261,3 +370,24 @@ class TestEngineObjects(TestCase):
         # check that other communities were preserved
         ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
+
+    def test9_RouteEntryRTsAsInitParam(self):
+        atts = Attributes()
+        eComs = ExtendedCommunities()
+        eComs.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        atts.add(LocalPreference(20))
+        atts.add(eComs)
+
+        rts = [RouteTarget(64512, 1), RouteTarget(64512, 2)]
+
+        entry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), "Foo", rts,
+                           atts)
+
+        ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
+        self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
+        self.assertIn(RouteTarget(64512, 2), entry.routeTargets)
+        # FIXME
+        #self.assertIn(RouteTarget(64512, 1), ecoms)
+        #self.assertIn(RouteTarget(64512, 2), ecoms)
+        self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
+

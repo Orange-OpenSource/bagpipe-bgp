@@ -85,12 +85,19 @@ class RouteEntry(LookingGlass):
         #   extended.RouteTargetASN2Number
         self._routeTargets = []
         if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
-            self._routeTargets = [ecom for ecom in self.attributes[
+            ecoms = self.attributes[
                 Attribute.CODE.EXTENDED_COMMUNITY].communities
-                if isinstance(ecom, RouteTarget)]
-        if RTs:
-            self.attributes.add(ExtendedCommunities(RTs))
-            self._routeTargets += RTs
+            self._routeTargets = [ecom for ecom in ecoms
+                                  if isinstance(ecom, RouteTarget)]
+            if RTs:
+                ecoms += RTs
+                self._routeTargets += RTs
+        else:
+            if RTs:
+                self.attributes.add(ExtendedCommunities(RTs))
+                self._routeTargets += RTs
+
+        #assert(self.nexthop is not None)
 
     @property
     def routeTargets(self):
@@ -150,7 +157,7 @@ class RouteEntry(LookingGlass):
         if not skipNextHop:
             nexthop = str(self.nexthop)
 
-        return "[RouteEntry: %s %s %s nh:%s %s%s]" % (
+        return "[RouteEntry: %s/%s %s nh:%s %s%s]" % (
             self.afi, self.safi, self.nlri, nexthop,
             self.attributes, fromString)
 
@@ -199,7 +206,8 @@ class RouteEvent(object):
                  WITHDRAW: "Withdraw"}
 
     def __init__(self, eventType, routeEntry, source=None):
-        assert(eventType in RouteEvent.type2name.keys())
+        assert(eventType == RouteEvent.ADVERTISE or
+               eventType == RouteEvent.WITHDRAW)
         assert(isinstance(routeEntry, RouteEntry))
         self.type = eventType
         self.routeEntry = routeEntry
@@ -210,6 +218,14 @@ class RouteEvent(object):
             self.source = routeEntry.source
         assert(self.source is not None)
         self.replacedRoute = None
+
+        # this spares us the pain of specifying the action
+        # when creating an nlri
+        if self.routeEntry.nlri.action is None:
+            if eventType == RouteEvent.ADVERTISE:
+                self.routeEntry.nlri.action = OUT.ANNOUNCE
+            else:  # WITHDRAW
+                self.routeEntry.nlri.action = OUT.WITHDRAW
 
     def setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a
