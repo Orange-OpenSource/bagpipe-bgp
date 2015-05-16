@@ -37,8 +37,10 @@
 """
 import mock
 
+import logging
+
 from testtools import TestCase
-from bagpipe.bgp.tests import RT1, NLRI1
+from bagpipe.bgp.tests import RT1, RT2, RT3, NLRI1
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
@@ -46,6 +48,8 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.engine import RouteEntry
 
 from exabgp.reactor.protocol import AFI, SAFI
+
+log = logging.getLogger()
 
 MAC1 = "00:00:de:ad:be:ef"
 IP1 = "10.0.0.2/32"
@@ -564,5 +568,54 @@ class TestVPNInstance(TestCase):
 
         self.vpnInstance.getLGLocalPortData("")
 
+    # tests of updateRouteTargets
 
-    ## FIXME add test of change of rt export list 
+    def _test_updateRTsInit(self):
+        self.vpnInstance._advertiseRoute = mock.Mock()
+
+        route = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
+                           NLRI1, [RT1])
+        self.vpnInstance._rtm_routeEntries = set([route])
+
+    def _extractRTFromAdvertiseCalls(self):
+        calls = self.vpnInstance._advertiseRoute.call_args_list
+        return calls[0][0][0].routeTargets
+
+    def test_updateRTs1(self):
+        self._test_updateRTsInit()
+
+        # no change -> no route update
+        self.vpnInstance.updateRouteTargets([RT1], [RT1])
+
+        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+
+    def test_updateRTs2(self):
+        self._test_updateRTsInit()
+
+        # change imports -> no route update
+        self.vpnInstance.updateRouteTargets([RT2], [RT1])
+
+        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+
+    def test_updateRTs3(self):
+        self._test_updateRTsInit()
+
+        # change exports
+        # check that previously advertised routes are readvertised
+        self.vpnInstance.updateRouteTargets([RT1], [RT2])
+
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+
+        self.assertIn(RT2, self._extractRTFromAdvertiseCalls())
+        self.assertNotIn(RT1, self._extractRTFromAdvertiseCalls())
+
+    def test_updateRTs3bis(self):
+        self._test_updateRTsInit()
+
+        # change exports
+        # check that previously advertised routes are readvertised
+        self.vpnInstance.updateRouteTargets([RT1], [RT1, RT2])
+
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertIn(RT2, self._extractRTFromAdvertiseCalls())
+        self.assertIn(RT1, self._extractRTFromAdvertiseCalls())
