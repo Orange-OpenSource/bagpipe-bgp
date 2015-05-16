@@ -21,7 +21,7 @@ import socket
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
-from bagpipe.bgp.engine.upstream_exabgp_peer_worker import setupExaBGPEnv
+from bagpipe.bgp.engine.exabgp_peer_worker import setupExaBGPEnv
 
 setupExaBGPEnv()
 
