@@ -137,11 +137,6 @@ class EVI(VPNInstance, LookingGlass):
         etag = None
         label = LabelStackEntry(self.instanceLabel)
 
-        if (Encapsulation(Encapsulation.VXLAN) in
-                self.dataplaneDriver.supportedEncaps()):
-            etag = EthernetTag(self.instanceLabel)
-            label = None
-
         route = Route(
             EVPNMulticast(
                 RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC,
@@ -178,13 +173,9 @@ class EVI(VPNInstance, LookingGlass):
 
         assert(prefixLen == 32)
 
-        lse = LabelStackEntry(label, True)
+        # label parameter ignored, we want the instance label
+        lse = LabelStackEntry(self.instanceLabel, True)
         etag = None
-
-        if (Encapsulation(Encapsulation.VXLAN) in
-                self.dataplaneDriver.supportedEncaps()):
-            lse = None
-            etag = EthernetTag(self.instanceLabel)
 
         route = Route(
             EVPNMACAdvertisement(

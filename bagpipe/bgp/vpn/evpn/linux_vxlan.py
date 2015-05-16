@@ -187,7 +187,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         mac = prefix
         ip = nlri.ip
-        vni = nlri.etag
+        vni = label
 
         # populate bridge forwarding db
         self._runCommand("bridge fdb replace %s dev %s dst %s vni %s" %
@@ -209,7 +209,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         mac = prefix
         ip = nlri.ip
-        vni = nlri.etag
+        vni = label
 
         self._fdbDump()
 
@@ -227,7 +227,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
                            " up, do nothing")
             return
 
-        vni = nlri.etag
+        vni = label
 
         # 00:00:00:00:00 usable as default since kernel commit
         # 58e4c767046a35f11a55af6ce946054ddf4a8580 (2013-06-25)
@@ -243,7 +243,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
                            " up, do nothing")
             return
 
-        vni = nlri.etag
+        vni = label
 
         self._fdbDump()
 
