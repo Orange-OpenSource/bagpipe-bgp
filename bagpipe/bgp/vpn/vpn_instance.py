@@ -167,9 +167,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         added_import_rt = set(newImportRTs) - set(self.importRTs)
         removed_import_rt = set(self.importRTs) - set(newImportRTs)
 
-        self.log.debug("%s %d - Added Import RT: %s",
+        self.log.debug("%s %d - Added Import RTs: %s",
                        self.instanceType, self.instanceId, added_import_rt)
-        self.log.debug("%s %d - Removed Import RT: %s",
+        self.log.debug("%s %d - Removed Import RTs: %s",
                        self.instanceType, self.instanceId, removed_import_rt)
 
         # Register to BGP with these route targets
@@ -184,7 +184,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         self.importRTs = newImportRTs
 
         # Re-advertise all routes with new export RTs
-        if set(newExportRTs) != set(self.exportRTs):
+        self.log.debug("Exports RTs: %s -> %s", self.exportRTs, newExportRTs)
+        if frozenset(newExportRTs) != frozenset(self.exportRTs):
+            self.log.debug("Will re-export routes with new RTs")
             self.exportRTs = newExportRTs
             for routeEntry in self.getWorkerRouteEntries():
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
