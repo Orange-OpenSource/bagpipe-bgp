@@ -145,29 +145,22 @@ class EVI(VPNInstance, LookingGlass):
         # Advertise route to receive multi-destination traffic
         self.log.info("Generating BGP route for broadcast/multicast traffic")
 
-        etag = None
-        label = self.instanceLabel
-
-        if (Encapsulation(Encapsulation.Type.VXLAN) in
-                self.dataplaneDriver.supportedEncaps()):
-            label = 0
-            etag = EthernetTag(self.instanceLabel)
-
         rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
                                              self.instanceId)
 
         nlri = EVPNMulticast(rd,
-                             etag,
+                             EthernetTag(),
                              IP.create(self.bgpManager.getLocalAddress()),
                              None,
                              IP.pton(self.bgpManager.getLocalAddress()))
 
         attributes = Attributes()
 
+        attributes.add(self._genExtendedCommunities())
+
         # add PMSI Tunnel Attribute route
-        pmsi_tunnel_attribute = PMSIIngressReplication(
-            self.dataplaneDriver.getLocalAddress(), label)
-        attributes.add(pmsi_tunnel_attribute)
+        attributes.add(PMSIIngressReplication(
+            self.dataplaneDriver.getLocalAddress(), self.instanceLabel))
 
         self.multicastRouteEntry = RouteEntry(self.afi, self.safi,
                                               nlri, self.exportRTs, attributes)
@@ -179,19 +172,13 @@ class EVI(VPNInstance, LookingGlass):
 
         assert(prefixLen == 32)
 
-        etag = None
-
-        if (Encapsulation(Encapsulation.Type.VXLAN) in
-                self.dataplaneDriver.supportedEncaps()):
-            label = 0
-            etag = EthernetTag(self.instanceLabel)
-
         rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
                                              self.instanceId)
 
-        nlri = EVPNMAC(rd, ESI(), etag, MAC(macAddress), 6*8, Labels([label]),
+        nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8, 
+                       Labels([label]),
                        IP.create(ipPrefix), None,
-                       IP.pton(self.bgpManager.getLocalAddress()))
+                       IP.pton(self.dataplaneDriver.getLocalAddress()))
 
         return RouteEntry(self.afi, self.safi, nlri)
 

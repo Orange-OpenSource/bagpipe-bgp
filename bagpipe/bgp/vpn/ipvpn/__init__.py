@@ -77,7 +77,7 @@ class VRF(VPNInstance, LookingGlass):
         packedPrefix, mask = prefixToPackedIPMask(prefix)
         nlri = MPLSVPN(self.afi, self.safi, packedPrefix, mask,
                        Labels([label], True), rd,
-                       IP.pton(self.bgpManager.getLocalAddress()))
+                       IP.pton(self.dataplaneDriver.getLocalAddress()))
 
         return nlri
 

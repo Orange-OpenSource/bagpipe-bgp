@@ -213,7 +213,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         return (ipAddress, mask)
 
     def _genExtendedCommunities(self):
-        ecommunities = ExtendedCommunities(copy(self.exportRTs))
+        ecommunities = ExtendedCommunities()
         for encap in self.dataplaneDriver.supportedEncaps():
             if not isinstance(encap, Encapsulation):
                 raise Exception("dataplaneDriver.supportedEncaps() should "
