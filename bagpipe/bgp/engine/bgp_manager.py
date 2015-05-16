@@ -21,10 +21,8 @@ import logging
 from bagpipe.bgp.common.looking_glass import LookingGlass
 
 from bagpipe.bgp.engine.route_table_manager import RouteTableManager
-from bagpipe.bgp.engine.route_table_manager import WorkerCleanupEvent
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.upstream_exabgp_peer_worker \
-    import UpstreamExaBGPPeerWorker as BGPWorker
+from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import EventSource
@@ -85,7 +83,8 @@ class Manager(EventSource, LookingGlass):
                               self.config['peers'].strip().split(",")]
             for peerAddress in peersAddresses:
                 log.debug("Creating a peer worker for %s", peerAddress)
-                peerWorker = BGPWorker(self, None, peerAddress, self.config)
+                peerWorker = ExaBGPPeerWorker(self, None, peerAddress, 
+                                              self.config)
                 self.peers[peerAddress] = peerWorker
                 peerWorker.start()
 
