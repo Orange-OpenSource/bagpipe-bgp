@@ -118,7 +118,9 @@ class RouteEntry(LookingGlass):
 
         # update
         self._routeTargets = routeTargets
-        self.attributes[Attribute.CODE.EXTENDED_COMMUNITY] = newEComs
+
+        self.attributes.remove(newEComs.ID)
+        self.attributes.add(newEComs)
 
     @property
     def nexthop(self):
@@ -142,7 +144,6 @@ class RouteEntry(LookingGlass):
             res = 0
         else:
             res = -1
-        log.debug("RouteEntry cmp: %s =?= %s : %d", self, other, res)
         return res
 
     def __hash__(self):
