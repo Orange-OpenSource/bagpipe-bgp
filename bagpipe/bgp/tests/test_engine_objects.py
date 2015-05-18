@@ -367,8 +367,13 @@ class TestEngineObjects(TestCase):
         self.assertIn(RouteTarget(64512, 3), entry.routeTargets)
         self.assertNotIn(RouteTarget(64512, 2), entry.routeTargets)
 
-        # check that other communities were preserved
+        # also need to check the RTs in the attributes
         ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
+        self.assertIn(RouteTarget(64512, 1), ecoms)
+        self.assertIn(RouteTarget(64512, 3), ecoms)
+        self.assertNotIn(RouteTarget(64512, 2), ecoms)
+
+        # check that other communities were preserved
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
 
     def test9_RouteEntryRTsAsInitParam(self):
@@ -391,3 +396,40 @@ class TestEngineObjects(TestCase):
         #self.assertIn(RouteTarget(64512, 2), ecoms)
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
 
+    def test10_Ecoms(self):
+        eComs1 = ExtendedCommunities()
+        eComs1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        atts1 = Attributes()
+        atts1.add(eComs1)
+
+        eComs2 = ExtendedCommunities()
+        eComs2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        eComs2.communities.append(RouteTarget(64512, 1))
+        atts2 = Attributes()
+        atts2.add(eComs2)
+
+        self.assertFalse(atts1.sameValuesAs(atts2))
+        self.assertFalse(atts2.sameValuesAs(atts1))
+
+    def test11_RTs(self):
+        rt1a = RouteTarget(64512, 1)
+        rt1b = RouteTarget(64512, 1)
+        rt2 = RouteTarget(64512, 1, False)
+
+        rt3 = RouteTarget(64512, 2)
+        rt4 = RouteTarget(64513, 1)
+
+        self.assertEqual(hash(rt1a), hash(rt1b))
+        self.assertEqual(hash(rt1a), hash(rt2))
+        self.assertNotEqual(hash(rt1a), hash(rt3))
+        self.assertNotEqual(hash(rt1a), hash(rt4))
+
+        self.assertEqual(rt1a, rt1b)
+        self.assertEqual(rt1a, rt2)
+        self.assertNotEqual(rt1a, rt3)
+        self.assertNotEqual(rt1a, rt4)
+
+        self.assertEqual(set([rt1a]), set([rt1b]))
+        self.assertEqual(set([rt1a]), set([rt2]))
+        self.assertEqual(1, len(set([rt1a]).intersection(set([rt1b]))))
+        self.assertEqual(1, len(set([rt2]).intersection(set([rt1b]))))
