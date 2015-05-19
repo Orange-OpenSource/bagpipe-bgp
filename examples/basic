@@ -7,8 +7,7 @@ source $(dirname $0)/generic-functions
 
 clean_start
 
-#for type in ipvpn evpn; do
-for type in evpn; do
+for type in ipvpn evpn; do
 	echo
 	echo "---------------------- $type --------------------"
 	echo
@@ -16,8 +15,8 @@ for type in evpn; do
 	r_b bagpipe-rest-attach --attach --port netns --network-type $type --vpn-instance-id test$type --ip $ip_netns_b 
 	wait_ready
 	r_a ip netns exec test$type ping -c 3 -W 4 $ip_netns_b 
- 	#r_a bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id test$type --ip $ip_netns_a
-	#r_b bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id test$type --ip $ip_netns_b
+ 	r_a bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id test$type --ip $ip_netns_a
+	r_b bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id test$type --ip $ip_netns_b
 done
 
 echo
