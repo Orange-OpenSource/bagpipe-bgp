@@ -25,6 +25,8 @@ Also validates that ExaBGP classes behave as expected by the code in
 bagpipe.bgp.engine.__init__ .
 
 """
+import logging
+
 from testtools import TestCase
 
 from exabgp.bgp.message.update import Attributes
@@ -47,10 +49,7 @@ from exabgp.bgp.message.update.attribute.community.extended \
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
-from exabgp.bgp.message.update.nlri.evpn.nlri import EVPN as EVPNNLRI
 from exabgp.bgp.message.update.nlri.evpn.mac import MAC as EVPNMAC
-from exabgp.bgp.message.update.nlri.evpn.multicast import \
-    Multicast as EVPNMulticast
 from exabgp.bgp.message.update.nlri.qualifier.esi import ESI
 from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
 from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
@@ -61,6 +60,8 @@ from exabgp.protocol.ip import IP
 from bagpipe.bgp.vpn.ipvpn import prefixToPackedIPMask
 
 from exabgp.bgp.message import OUT
+
+log = logging.getLogger(__name__)
 
 
 class TestEngineObjects(TestCase):
@@ -325,6 +326,7 @@ class TestEngineObjects(TestCase):
         atts1 = Attributes()
         eComs1 = ExtendedCommunities()
         eComs1.communities.append(RouteTarget(64512, 1))
+        eComs1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
         eComs1.communities.append(RouteTarget(64512, 2))
         atts1.add(eComs1)
 
@@ -332,6 +334,7 @@ class TestEngineObjects(TestCase):
         eComs2 = ExtendedCommunities()
         eComs2.communities.append(RouteTarget(64512, 2))
         eComs2.communities.append(RouteTarget(64512, 1))
+        eComs2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
         atts2.add(eComs2)
 
         entry1 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
