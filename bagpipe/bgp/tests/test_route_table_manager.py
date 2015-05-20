@@ -68,12 +68,16 @@ from bagpipe.bgp.tests import BaseTestBagPipeBGP, RT1, RT2, RT3, \
     NLRI1, NLRI2, NH1, NH2
 
 from bagpipe.bgp.engine import RouteEvent
-from bagpipe.bgp.engine import Subscription, Unsubscription
+from bagpipe.bgp.engine import RouteEntry
+from bagpipe.bgp.engine import Subscription
+from bagpipe.bgp.engine import Unsubscription
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.route_table_manager import RouteTableManager, Match, \
-    WorkerCleanupEvent
+from bagpipe.bgp.engine.route_table_manager import RouteTableManager
+from bagpipe.bgp.engine.route_table_manager import Match
+from bagpipe.bgp.engine.route_table_manager import WorkerCleanupEvent
 
+from bagpipe.exabgp.message.update.attributes import Attributes
 from bagpipe.exabgp.structure.address import AFI, SAFI
 
 log = logging.getLogger()
@@ -165,8 +169,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def testA2_SubscriptionsWithRouteTosynthesize(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgpPeerWorker1 = self._newworker(
-            "BGPWorker1", BGPPeerWorker)
+        bgpPeerWorker1 = self._newworker("BGPWorker1", BGPPeerWorker)
         evt1 = self._newRouteEvent(RouteEvent.ADVERTISE, NLRI1,
                                    [RT1, RT2], bgpPeerWorker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
@@ -546,3 +549,25 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._wait()
 
         self.routeTableManager._dumpState()
+
+    def testF1_testEmptyRT(self):
+        # worker advertises a route with no RT
+
+        w1 = self._newworker("Worker1", Worker)
+
+        subscribe = Subscription(AFI(AFI.ipv4),
+                                 SAFI(SAFI.mpls_vpn),
+                                 None, w1)
+        self.routeTableManager.enqueue(subscribe)
+
+        w2 = self._newworker("Worker2", Worker)
+
+        routeEvent = RouteEvent(RouteEvent.ADVERTISE, RouteEntry(
+            AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), None, NLRI1, Attributes(), w2), w2)
+
+        self.routeTableManager.enqueue(routeEvent)
+
+        self._wait()
+
+        self.assertEqual(1, w1.enqueue.call_count,
+                         "1 route advertised should be synthesized to Worker1")
