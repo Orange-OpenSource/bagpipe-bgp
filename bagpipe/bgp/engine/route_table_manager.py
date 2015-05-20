@@ -362,8 +362,9 @@ class RouteTableManager(Thread, LookingGlass):
         for _afi in (Subscription.ANY_AFI, afi):
             for _safi in (Subscription.ANY_SAFI, safi):
                 yield Match(_afi, _safi, None)
-                for rt in routeTargets:
-                    yield Match(_afi, _safi, rt)
+                if routeTargets is not None:
+                    for rt in routeTargets:
+                        yield Match(_afi, _safi, rt)
 
     def _propagateRouteEvent(self, routeEvent, exceptWorkers=None):
         '''Propagate routeEvent to workers subscribed to the route RTs
