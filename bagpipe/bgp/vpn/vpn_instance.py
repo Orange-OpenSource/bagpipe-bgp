@@ -188,6 +188,10 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         if frozenset(newExportRTs) != frozenset(self.exportRTs):
             self.log.debug("Will re-export routes with new RTs")
             self.exportRTs = newExportRTs
+            # FIXME: we should only update the routes that
+            # are routes of ports plugged to the VPN instance,
+            # not all routes which would wrongly include
+            # routes that we re-advertise between RTs
             for routeEntry in self.getRouteEntries():
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
                               routeEntry.nlri, newExportRTs)
@@ -311,6 +315,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
             self.localPort2Endpoints[localPort['linuxif']].append(
                 {'mac': macAddress, 'ip': ipAddressPrefix,
+                 # FIXME: maybe add prefix len for the LG
                  }
             )
             self.macAddress2LocalPortData[macAddress] = portData
