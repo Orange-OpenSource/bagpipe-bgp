@@ -174,7 +174,7 @@ class RESTAPI(LookingGlass):
             if local_port is not a list, it is assumed to be a name of a linux
             interface (string)
         'readvertise': {  # optional, used to re-advertise addresses...
-            'from_rt': [list of RTs]  # ...received on these RTs
+            'from_rt': [list of RTs]  # ...received on these RTs
             'to_rt': [list of RTs] # ...toward these RTs
         }
 
