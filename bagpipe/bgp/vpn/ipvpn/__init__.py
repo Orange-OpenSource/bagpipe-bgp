@@ -99,29 +99,36 @@ class VRF(VPNInstance, LookingGlass):
             self.bgpManager.getLocalAddress(),
             10000+label)
 
+    def _routeForReAdvertisement(self, prefix, label):
+        nlri = self._nlriFrom(prefix, label,
+                              self._getRDFromLabel(label))
+
+        attributes = Attributes()
+
+        return RouteEntry(self.afi, self.safi, nlri,
+                          self.readvertiseToRTs, attributes)
+
     @logDecorator.log
     def _readvertise(self, nlri):
+        self.log.debug("Start re-advertising %s from VRF", nlri.prefix)
         for label in self._getLocalLabels():
+            self.log.debug("Start re-advertising %s from VRF, with label %s",
+                           nlri.prefix, label)
             # need a distinct RD for each route...
-            nlri = self._nlriFrom(prefixFromNLRI(nlri), label,
-                                  self._getRDFromLabel(label))
-
-            attributes = Attributes()
-
-            attributes.add(ExtendedCommunities(self.readvertiseToRTs))
-
-            routeEntry = RouteEntry(self.afi, self.safi, nlri,
-                                    self.readvertiseToRTs, attributes)
+            routeEntry = self._routeForReAdvertisement(prefixFromNLRI(nlri),
+                                                       label)
             self._advertiseRoute(routeEntry)
 
         self.readvertised.add(nlri.prefix())
 
     @logDecorator.log
     def _readvertiseStop(self, nlri):
+        self.log.debug("Stop re-advertising %s from VRF", nlri.prefix)
         for label in self._getLocalLabels():
-            nlri = self._nlriFrom(prefixFromNLRI(nlri), label,
-                                  self._getRDFromLabel(label))
-            routeEntry = RouteEntry(self.afi, self.safi, nlri)
+            self.log.debug("Stop re-advertising %s from VRF, with label %s",
+                           nlri.prefix, label)
+            routeEntry = self._routeForReAdvertisement(prefixFromNLRI(nlri),
+                                                       label)
             self._withdrawRoute(routeEntry)
 
         self.readvertised.remove(nlri.prefix())
@@ -133,16 +140,17 @@ class VRF(VPNInstance, LookingGlass):
 
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
-            nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label))
-            routeEntry = RouteEntry(self.afi, self.safi, nlri,
-                                    self.readvertiseToRTs)
+            self.log.debug("Re-advertising %s with this port as next hop",
+                           prefix)
+            routeEntry = self._routeForReAdvertisement(ipAddressPrefix, label)
             self._advertiseRoute(routeEntry)
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
-            nlri = self._nlriFrom(prefix, label, self._getRDFromLabel(label))
-            routeEntry = RouteEntry(self.afi, self.safi, nlri)
+            self.log.debug("Stop re-advertising %s with this port as next hop",
+                           prefix)
+            routeEntry = self._routeForReAdvertisement(ipAddressPrefix, label)
             self._withdrawRoute(routeEntry)
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
