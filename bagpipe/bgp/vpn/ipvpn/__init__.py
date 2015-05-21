@@ -89,34 +89,41 @@ class VRF(VPNInstance, LookingGlass):
                                   self.bgpManager.getLocalAddress(),
                                   10000+label)
 
+    def _routeForReAdvertisement(self, prefix, label):
+        route = self._routeFrom(prefix, label,
+                                self._getRDFromLabel(label))
+
+        nh = Inet(1, socket.inet_pton(socket.AF_INET,
+                  self.dataplane.driver.getLocalAddress()))
+
+        route.attributes.add(NextHop(nh))
+
+        route.attributes.add(ECommunities(self.readvertiseToRTs))
+
+        routeEntry = self._newRouteEntry(self.afi, self.safi,
+                                         self.readvertiseToRTs,
+                                         route.nlri, route.attributes)
+        return routeEntry
+
     @logDecorator.log
     def _readvertise(self, nlri):
+        self.log.debug("Start re-advertising %s from VRF", nlri.prefix)
         for label in self._getLocalLabels():
+            self.log.debug("Start re-advertising %s from VRF, with label %s",
+                           nlri.prefix, label)
             # need a distinct RD for each route...
-            route = self._routeFrom(nlri.prefix, label,
-                                    self._getRDFromLabel(label))
-
-            nh = Inet(1, socket.inet_pton(socket.AF_INET,
-                      self.dataplane.driver.getLocalAddress()))
-
-            route.attributes.add(NextHop(nh))
-
-            route.attributes.add(ECommunities(self.readvertiseToRTs))
-
-            routeEntry = self._newRouteEntry(self.afi, self.safi,
-                                             self.readvertiseToRTs,
-                                             route.nlri, route.attributes)
+            routeEntry = self._routeForReAdvertisement(nlri.prefix, label)
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
 
         self.readvertised.add(nlri.prefix)
 
     @logDecorator.log
     def _readvertiseStop(self, nlri):
+        self.log.debug("Stop re-advertising %s from VRF", nlri.prefix)
         for label in self._getLocalLabels():
-            route = self._routeFrom(nlri.prefix, label,
-                                    self._getRDFromLabel(label))
-            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
-                                             route.nlri, route.attributes)
+            self.log.debug("Stop re-advertising %s from VRF, with label %s",
+                           nlri.prefix, label)
+            routeEntry = self._routeForReAdvertisement(nlri.prefix, label)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
         self.readvertised.remove(nlri.prefix)
@@ -128,17 +135,17 @@ class VRF(VPNInstance, LookingGlass):
 
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
-            route = self._routeFrom(prefix, label, self._getRDFromLabel(label))
-            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
-                                             route.nlri, route.attributes)
+            self.log.debug("Re-advertising %s with this port as next hop",
+                           prefix)
+            routeEntry = self._routeForReAdvertisement(ipAddressPrefix, label)
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
         for prefix in self.readvertised:
-            route = self._routeFrom(prefix, label, self._getRDFromLabel(label))
-            routeEntry = self._newRouteEntry(self.afi, self.safi, None,
-                                             route.nlri, route.attributes)
+            self.log.debug("Stop re-advertising %s with this port as next hop",
+                           prefix)
+            routeEntry = self._routeForReAdvertisement(ipAddressPrefix, label)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
