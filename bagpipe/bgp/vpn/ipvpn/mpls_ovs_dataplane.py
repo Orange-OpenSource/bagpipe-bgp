@@ -536,16 +536,26 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                     self.mplsIfMacAddress, remotePE_mac_address,
                     self.driver.ovsMplsIfPortNumber)
 
+        # Check if prefix is a default route
+        nw_dst_match = ""
+        if IPNetwork(repr(prefix)).prefixlen != 0:
+            nw_dst_match = ',nw_dst=%s' % prefix
+
         self._ovs_flow_add(
-            'ip,in_port=%s,nw_dst=%s' % (self.patchPortInNumber, prefix),
+            'ip,in_port=%s%s' % (self.patchPortInNumber, nw_dst_match),
             '%s,%s' % (mpls_action, output_action),
             self.driver.ovs_table_vrfs)
 
     @logDecorator.logInfo
     def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
+        # Check if prefix is a default route
+        nw_dst_match = ""
+        if IPNetwork(repr(prefix)).prefixlen != 0:
+            nw_dst_match = ',nw_dst=%s' % prefix
+
         # Unmap traffic to remote IP address
-        self._ovs_flow_del('ip,in_port=%s,nw_dst=%s' % (self.patchPortInNumber,
-                                                        prefix),
+        self._ovs_flow_del('ip,in_port=%s%s' % (self.patchPortInNumber,
+                                                nw_dst_match),
                            self.driver.ovs_table_vrfs)
         # since multiple routes to the same prefix cannot co-exist in OVS
         # a delete action cannot selectively delete one next-hop
