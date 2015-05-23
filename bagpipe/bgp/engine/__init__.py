@@ -97,8 +97,6 @@ class RouteEntry(LookingGlass):
                 self.attributes.add(ExtendedCommunities(RTs))
                 self._routeTargets += RTs
 
-        #assert(self.nexthop is not None)
-
     @property
     def routeTargets(self):
         return self._routeTargets

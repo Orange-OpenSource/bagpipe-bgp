@@ -147,7 +147,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                     raise StoppedException()
         except LostConnection as e:
             raise
-        #FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
+        # FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
 
         # check the capabilities of the session just established...
 

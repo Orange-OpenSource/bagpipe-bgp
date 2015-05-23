@@ -83,7 +83,7 @@ class Manager(EventSource, LookingGlass):
                               self.config['peers'].strip().split(",")]
             for peerAddress in peersAddresses:
                 log.debug("Creating a peer worker for %s", peerAddress)
-                peerWorker = ExaBGPPeerWorker(self, None, peerAddress, 
+                peerWorker = ExaBGPPeerWorker(self, None, peerAddress,
                                               self.config)
                 self.peers[peerAddress] = peerWorker
                 peerWorker.start()

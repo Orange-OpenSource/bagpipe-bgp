@@ -50,8 +50,8 @@ class Match(object):
         self.routeTarget = routeTarget
 
     def __hash__(self):
-        #FIXME, could use a tuple, but RT not yet hashable
-        #return hash((self.afi, self.safi, self.routeTarget))
+        # FIXME, could use a tuple, but RT not yet hashable
+        # return hash((self.afi, self.safi, self.routeTarget))
         return hash(str(self))
 
     def __repr__(self):
@@ -73,11 +73,7 @@ class Match(object):
         other_rt = other.routeTarget or RouteTarget(0, 0)
 
         val = cmp((self_afi,  self_safi,  str(self_rt)),
-                   (other_afi, other_safi, str(other_rt)))
-
-        #log.debug("Match.cmp: repr(selfrt):%s", repr(self_rt))
-        #log.debug("Match.cmp: repr(otherrt):%s", repr(other_rt))
-        #log.debug("Match.cmp: %s  =?=  %s  ? %d", self, other, val)
+                  (other_afi, other_safi, str(other_rt)))
 
         return val
 
@@ -187,7 +183,7 @@ class RouteTableManager(Thread, LookingGlass):
     def _match2workersAndEntriesLookupCreate(self, match):
         try:
             return self._match2workersAndEntries[match]
-        except KeyError as e:
+        except KeyError:
             wa = RouteTableManager.WorkersAndEntries(match)
             self._match2workersAndEntries[match] = wa
             return wa

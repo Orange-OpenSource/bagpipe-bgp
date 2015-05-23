@@ -176,7 +176,7 @@ class EVI(VPNInstance, LookingGlass):
                                              self.instanceId)
 
         # label parameter ignored, we need to use instance label
-        nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8, 
+        nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8,
                        Labels([self.instanceLabel]),
                        IP.create(ipPrefix), None,
                        IP.pton(self.dataplaneDriver.getLocalAddress()))

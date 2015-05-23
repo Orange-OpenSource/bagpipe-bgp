@@ -425,7 +425,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
     def _bestRouteRemoved(self, entry, oldRoute, last):
         '''
         A route that was a best route for this tracked entry has been
-        removed. The 'last' flag indicates if this was the last route 
+        removed. The 'last' flag indicates if this was the last route
         for this tracked entry.
         '''
         pass

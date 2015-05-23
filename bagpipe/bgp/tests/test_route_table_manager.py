@@ -140,7 +140,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
             return
         for match in matches:
             self.assertNotIn(match, worker._rtm_matches,
-                             "Subscription found while it should not: %s" % 
+                             "Subscription found while it should not: %s" %
                              worker._rtm_matches)
 
     def _checkEventsCalls(self, events, advertisedRoutes, withdrawnNLRIs):
@@ -607,7 +607,8 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
     def test7_Matches(self):
         m1a = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1))
         m1b = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1))
-        m1c = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1, False))
+        m1c = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1,
+                                                                    False))
         m2 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 2))
         m3 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64513, 1))
 

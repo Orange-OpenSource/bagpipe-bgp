@@ -73,7 +73,7 @@ class TestEngineObjects(TestCase):
     def tearDown(self):
         super(TestEngineObjects, self).tearDown()
 
-    ### tests on MPLS VPN NLRIs ###
+    # tests on MPLS VPN NLRIs
 
     def test0_MPLSVPNHashEqual(self):
         '''
@@ -109,14 +109,14 @@ class TestEngineObjects(TestCase):
 
         nlri1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                         packedPrefix, mask,
-                        Labels([42], True), 
+                        Labels([42], True),
                         RouteDistinguisher.fromElements("42.42.42.42", 5),
                         IP.pton("45.45.45.45"),
                         OUT.ANNOUNCE)
 
         nlri2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                         packedPrefix, mask,
-                        Labels([0], True), 
+                        Labels([0], True),
                         RouteDistinguisher.fromElements("42.42.42.42", 5),
                         IP.pton("45.45.45.45"),
                         OUT.ANNOUNCE)
@@ -158,14 +158,14 @@ class TestEngineObjects(TestCase):
 
         nlri1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                         packedPrefix, mask,
-                        Labels([42], True), 
+                        Labels([42], True),
                         RouteDistinguisher.fromElements("42.42.42.42", 5),
                         IP.pton("45.45.45.45"),
                         OUT.ANNOUNCE)
 
         nlri2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                         packedPrefix, mask,
-                        Labels([42], True), 
+                        Labels([42], True),
                         RouteDistinguisher.fromElements("42.42.42.42", 5),
                         IP.pton("45.45.45.45"),
                         OUT.WITHDRAW)
@@ -269,8 +269,7 @@ class TestEngineObjects(TestCase):
         self.assertNotEqual(nlri2, nlri3)
         self.assertNotEqual(nlri3, nlri4)
 
-
-    ### tests on attributes ###
+    # tests on attributes
 
     def test4_SameNLRIDistinctAttributes(self):
         '''
@@ -396,8 +395,8 @@ class TestEngineObjects(TestCase):
         self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
         self.assertIn(RouteTarget(64512, 2), entry.routeTargets)
         # FIXME
-        #self.assertIn(RouteTarget(64512, 1), ecoms)
-        #self.assertIn(RouteTarget(64512, 2), ecoms)
+        # self.assertIn(RouteTarget(64512, 1), ecoms)
+        # self.assertIn(RouteTarget(64512, 2), ecoms)
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
 
     def test10_Ecoms(self):

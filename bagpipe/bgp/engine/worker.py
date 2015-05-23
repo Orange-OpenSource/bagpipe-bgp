@@ -152,4 +152,3 @@ class Worker(EventSource, LookingGlass):
                     [repr(sub) for sub in self.getSubscriptions()],
             }
         }
-
