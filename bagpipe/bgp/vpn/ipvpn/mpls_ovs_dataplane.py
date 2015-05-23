@@ -538,7 +538,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
         # Check if prefix is a default route
         nw_dst_match = ""
-        if IPNetwork(repr(prefix)).prefixlen != 0:
+        if IPNetwork(prefix).prefixlen != 0:
             nw_dst_match = ',nw_dst=%s' % prefix
 
         self._ovs_flow_add(
@@ -550,7 +550,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
     def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
         # Check if prefix is a default route
         nw_dst_match = ""
-        if IPNetwork(repr(prefix)).prefixlen != 0:
+        if IPNetwork(prefix).prefixlen != 0:
             nw_dst_match = ',nw_dst=%s' % prefix
 
         # Unmap traffic to remote IP address
