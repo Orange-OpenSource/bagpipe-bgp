@@ -391,12 +391,12 @@ class TestEngineObjects(TestCase):
         entry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), "Foo", rts,
                            atts)
 
-        ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
         self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
         self.assertIn(RouteTarget(64512, 2), entry.routeTargets)
-        # FIXME
-        # self.assertIn(RouteTarget(64512, 1), ecoms)
-        # self.assertIn(RouteTarget(64512, 2), ecoms)
+
+        ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
+        self.assertIn(RouteTarget(64512, 1), ecoms)
+        self.assertIn(RouteTarget(64512, 2), ecoms)
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
 
     def test10_Ecoms(self):
