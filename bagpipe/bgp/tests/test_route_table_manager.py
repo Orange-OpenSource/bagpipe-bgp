@@ -77,8 +77,12 @@ from bagpipe.bgp.engine.route_table_manager import RouteTableManager
 from bagpipe.bgp.engine.route_table_manager import Match
 from bagpipe.bgp.engine.route_table_manager import WorkerCleanupEvent
 
-from bagpipe.exabgp.message.update.attributes import Attributes
-from bagpipe.exabgp.structure.address import AFI, SAFI
+from exabgp.bgp.message.update.attribute.community.extended \
+    import RouteTargetASN2Number as RouteTarget
+
+from exabgp.reactor.protocol import AFI, SAFI
+
+from exabgp.bgp.message.update import Attributes
 
 log = logging.getLogger()
 
@@ -629,8 +633,11 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
         w2 = self._newworker("Worker2", Worker)
 
-        routeEvent = RouteEvent(RouteEvent.ADVERTISE, RouteEntry(
-            AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), None, NLRI1, Attributes(), w2), w2)
+        routeEvent = RouteEvent(RouteEvent.ADVERTISE,
+                                RouteEntry(AFI(AFI.ipv4),
+                                           SAFI(SAFI.mpls_vpn),
+                                           NLRI1, None, Attributes()),
+                                w2)
 
         self.routeTableManager.enqueue(routeEvent)
 

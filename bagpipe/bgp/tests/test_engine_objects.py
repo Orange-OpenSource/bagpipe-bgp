@@ -29,13 +29,14 @@ import logging
 
 from testtools import TestCase
 
-from exabgp.bgp.message.update import Attributes
-
 from bagpipe.bgp.engine import RouteEntry
+
 
 from exabgp.reactor.protocol import AFI, SAFI
 
 from exabgp.bgp.message.update.nlri.mpls import MPLSVPN
+
+from exabgp.bgp.message.update import Attributes
 
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
