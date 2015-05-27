@@ -38,6 +38,7 @@ WAIT_TIME = 0.05
 RT1 = RouteTarget(64512, 10)
 RT2 = RouteTarget(64512, 20)
 RT3 = RouteTarget(64512, 30)
+RT4 = RouteTarget(64512, 40)
 
 
 class TestNLRI(object):

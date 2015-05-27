@@ -40,14 +40,37 @@ import mock
 import logging
 
 from testtools import TestCase
-from bagpipe.bgp.tests import RT1, RT2, RT3, NLRI1
+
+from bagpipe.bgp.tests import RT1
+from bagpipe.bgp.tests import RT2
+from bagpipe.bgp.tests import RT3
+from bagpipe.bgp.tests import RT4
+from bagpipe.bgp.tests import NLRI1
+from bagpipe.bgp.tests import NLRI2
+from bagpipe.bgp.tests import NH1
+from bagpipe.bgp.tests import BaseTestBagPipeBGP
+
+from bagpipe.bgp.engine import RouteEntry
+from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine.worker import Worker
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
-from bagpipe.bgp.engine import RouteEntry
+from bagpipe.bgp.vpn.ipvpn import VRF
+from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver
 
 from exabgp.reactor.protocol import AFI, SAFI
+from exabgp.bgp.message.update.nlri.mpls import MPLSVPN
+from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
+from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
+
+from exabgp.protocol.ip import IP
+
+from bagpipe.bgp.vpn.ipvpn import prefixToPackedIPMask
+
+from exabgp.bgp.message import OUT
+
 
 log = logging.getLogger()
 
@@ -66,6 +89,11 @@ LOCAL_PORT3 = {'linuxif': 'tap3'}
 MAC4 = "00:00:fe:ed:f0:0d"
 IP4 = "10.0.0.5/32"
 LOCAL_PORT4 = {'linuxif': 'tap4'}
+
+
+def _extractRTFromAdvertiseCall(vpnInstance, callIndex=0):
+    calls = vpnInstance._advertiseRoute.call_args_list
+    return calls[callIndex][0][0].routeTargets
 
 
 class TestableVPNInstance(VPNInstance):
@@ -94,7 +122,7 @@ class TestVPNInstance(TestCase):
         self.mockDataplane.vifUnplugged = mock.Mock()
 
         self.mockDPDriver = mock.Mock()
-        self.mockDPDriver.initializeDataplaneInstance.returnValue = \
+        self.mockDPDriver.initializeDataplaneInstance.return_value = \
             self.mockDataplane
 
         VPNInstance.afi = AFI(AFI.ipv4)
@@ -161,8 +189,8 @@ class TestVPNInstance(TestCase):
         '''
         Plug one endpoint with same MAC and IP addresses twice on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Port must be plugged only once on dataplane")
@@ -179,7 +207,7 @@ class TestVPNInstance(TestCase):
         Plug multiple enpoints with different MAC addresses and same IP
         address on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         # An IP address correspond to only one MAC address, exception must be
         # raised
@@ -202,8 +230,8 @@ class TestVPNInstance(TestCase):
         Plug multiple endpoints with same MAC address and different IP
         addresses on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC1, IP2, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC1, IP2, LOCAL_PORT1, False)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Port different IP addresses must be plugged on "
@@ -220,8 +248,8 @@ class TestVPNInstance(TestCase):
         '''
         Plug multiple endpoints with different MAC and IP addresses on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "Port different endpoints must be plugged on "
@@ -241,7 +269,7 @@ class TestVPNInstance(TestCase):
         Plug one endpoint with same MAC and IP addresses twice on different
         ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         # A port correspond to only one MAC address, exception must be raised
         self.assertRaises(Exception,
@@ -264,7 +292,7 @@ class TestVPNInstance(TestCase):
         Plug multiple endpoints with different MAC addresses and same IP
         address on different port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         # An IP address correspond to only one MAC address, exception must be
         # raised
@@ -288,7 +316,7 @@ class TestVPNInstance(TestCase):
         Plug multiple endpoints with same MAC address and different IP
         addresses on different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         # A port correspond to only one MAC address, exception must be raised
         self.assertRaises(Exception,
@@ -311,8 +339,8 @@ class TestVPNInstance(TestCase):
         Plug multiple endpoints with different MAC and IP addresses on
         different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
                          "All ports must be plugged on dataplane")
@@ -334,11 +362,11 @@ class TestVPNInstance(TestCase):
         Unplug one endpoint with same MAC and IP addresses as the one plugged
         on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
+        self.vpnInstance.vifUnplugged(MAC1, IP1, False)
 
         self.assertEqual(1, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "Endpoint could be unplugged from dataplane")
@@ -359,7 +387,7 @@ class TestVPNInstance(TestCase):
         Unplug one endpoint with different MAC addresses and same IP address as
         the one plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         self.assertRaises(Exception,
                           self.vpnInstance.vifUnplugged,
@@ -380,7 +408,7 @@ class TestVPNInstance(TestCase):
         Unplug one endpoint with same MAC address and different IP addresses
         as the one plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
 
         self.assertRaises(Exception,
                           self.vpnInstance.vifUnplugged,
@@ -403,8 +431,8 @@ class TestVPNInstance(TestCase):
         Unplug only one endpoint with same MAC and IP addresses
         corresponding to one plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False)
 
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
 
@@ -432,14 +460,14 @@ class TestVPNInstance(TestCase):
         Unplug all endpoints with same MAC and IP addresses
         corresponding to those plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False)
 
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
         label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
-        self.vpnInstance.vifUnplugged(MAC2, IP2)
+        self.vpnInstance.vifUnplugged(MAC1, IP1, False)
+        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "All port endpoints must be unplugged from dataplane")
@@ -463,14 +491,14 @@ class TestVPNInstance(TestCase):
         Unplug the endpoints with different MAC and IP addresses corresponding
         to those plugged on different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
 
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
         label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
-        self.vpnInstance.vifUnplugged(MAC2, IP2)
+        self.vpnInstance.vifUnplugged(MAC1, IP1, False)
+        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
 
         self.assertEqual(2, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "All different ports endpoints must be unplugged "
@@ -495,8 +523,8 @@ class TestVPNInstance(TestCase):
         Unplug one endpoint with different MAC or IP address corresponding to
         one plugged on another port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
 
         self.assertRaises(Exception,
                           self.vpnInstance.vifUnplugged,
@@ -523,20 +551,20 @@ class TestVPNInstance(TestCase):
         Unplug multiple endpoints with same MAC and IP addresses corresponding
         to those plugged on different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2)
-        self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2, False)
+        self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2, False)
 
         label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
         label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
         label3 = self.vpnInstance.macAddress2LocalPortData[MAC3]['label']
         label4 = self.vpnInstance.macAddress2LocalPortData[MAC4]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
-        self.vpnInstance.vifUnplugged(MAC2, IP2)
-        self.vpnInstance.vifUnplugged(MAC3, IP3)
-        self.vpnInstance.vifUnplugged(MAC4, IP4)
+        self.vpnInstance.vifUnplugged(MAC1, IP1, False)
+        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
+        self.vpnInstance.vifUnplugged(MAC3, IP3, False)
+        self.vpnInstance.vifUnplugged(MAC4, IP4, False)
 
         self.assertEqual(4, self.vpnInstance.dataplane.vifUnplugged.call_count,
                          "All different ports endpoints must be unplugged "
@@ -561,10 +589,10 @@ class TestVPNInstance(TestCase):
         self.assertEqual({}, self.vpnInstance.localPort2Endpoints)
 
     def test_getLGLocalPortData(self):
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2)
-        self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2)
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False)
+        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2, False)
+        self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2, False)
 
         self.vpnInstance.getLGLocalPortData("")
 
@@ -576,10 +604,6 @@ class TestVPNInstance(TestCase):
         route = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                            NLRI1, [RT1])
         self.vpnInstance._rtm_routeEntries = set([route])
-
-    def _extractRTFromAdvertiseCalls(self):
-        calls = self.vpnInstance._advertiseRoute.call_args_list
-        return calls[0][0][0].routeTargets
 
     def test_updateRTs1(self):
         self._test_updateRTsInit()
@@ -606,8 +630,8 @@ class TestVPNInstance(TestCase):
 
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
 
-        self.assertIn(RT2, self._extractRTFromAdvertiseCalls())
-        self.assertNotIn(RT1, self._extractRTFromAdvertiseCalls())
+        self.assertIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance))
+        self.assertNotIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance))
 
     def test_updateRTs3bis(self):
         self._test_updateRTsInit()
@@ -617,5 +641,114 @@ class TestVPNInstance(TestCase):
         self.vpnInstance.updateRouteTargets([RT1], [RT1, RT2])
 
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-        self.assertIn(RT2, self._extractRTFromAdvertiseCalls())
-        self.assertIn(RT1, self._extractRTFromAdvertiseCalls())
+        self.assertIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance))
+        self.assertIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance))
+
+
+packedPrefix1, mask = prefixToPackedIPMask("1.1.1.1/32")
+packedPrefix2, mask = prefixToPackedIPMask("2.2.2.2/32")
+
+
+vpnNLRI1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
+                   packedPrefix1, mask,
+                   Labels([42], True), 
+                   RouteDistinguisher.fromElements("42.42.42.42", 5),
+                   IP.pton("45.45.45.45"),
+                   OUT.ANNOUNCE)
+
+vpnNLRI2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
+                   packedPrefix2, mask,
+                   Labels([50], True),
+                   RouteDistinguisher.fromElements("42.42.42.42", 5),
+                   IP.pton("45.45.45.45"),
+                   OUT.ANNOUNCE)
+
+
+class TestVRF(BaseTestBagPipeBGP, TestCase):
+
+    def setUp(self):
+        super(TestVRF, self).setUp()
+        labelAllocator = LabelAllocator()
+
+        mockDataplane = mock.Mock()
+        mockDataplane.vifPlugged = mock.Mock()
+        mockDataplane.vifUnplugged = mock.Mock()
+
+        mockDPDriver = DummyDataplaneDriver({"dataplane_local_address":
+                                             "4.5.6.7"})
+
+        bgpManager = mock.Mock()
+        bgpManager.getLocalAddress.return_value = "4.5.6.7"
+
+        VPNInstance.afi = AFI(AFI.ipv4)
+        VPNInstance.safi = SAFI(SAFI.mpls_vpn)
+        self.vpnInstance = VRF(
+            bgpManager,
+            labelAllocator,
+            mockDPDriver, 1, 1,
+            [RT1], [RT1], '10.0.0.1', 24,
+            {'from_rt': [RT3],
+             'to_rt': [RT4]
+             })
+        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._withdrawRoute = mock.Mock()
+        self.vpnInstance.start()
+
+        self.eventTargetWorker = self.vpnInstance
+
+    def tearDown(self):
+        super(TestVRF, self).tearDown()
+        self.vpnInstance.stop()
+        self.vpnInstance.join()
+
+    _extractRTFromAdvertiseCall
+
+    # unit test for IPVPN re-advertisement
+    def test_ReAdvertisement1(self):
+
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+        # self.vpnInstance._advertiseRoute.call_count -> 1
+
+        workerA = Worker(mock.Mock(), 'Worker-A')
+
+        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2],
+                            workerA, NH1, 200)
+        # no re-advertisement supposed to happen
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.vpnInstance._advertiseRoute = mock.Mock()
+
+        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
+                            workerA, NH1, 200)
+        # re-advertisement supposed to happen, to RT4
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
+        self.assertNotIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance))
+        self.assertNotIn(RT3, _extractRTFromAdvertiseCall(self.vpnInstance))
+        self.vpnInstance._advertiseRoute = mock.Mock()
+
+        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
+                            workerA, NH1, 200)
+        # withdraw of re-adv route supposed to happen
+        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count)
+        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._withdrawRoute = mock.Mock()
+
+        # RTs of route NLRI1 now include a re-advertiseed RT
+        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2, RT3],
+                            workerA, NH1, 200)
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
+        self.vpnInstance._advertiseRoute = mock.Mock()
+
+        # new interface plugged in
+        # a route should be advertized for this new next hop
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
+        # advertised route count should increment by 2:
+        # - vif route itself
+        # - re-adv of NLRI1 with this new port as next-hop
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        self.assertNotIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
+        self.assertNotIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 1))

@@ -75,11 +75,9 @@ class VRF(VPNInstance, LookingGlass):
     def _nlriFrom(self, prefix, label, rd):
         assert(rd is not None)
         packedPrefix, mask = prefixToPackedIPMask(prefix)
-        nlri = MPLSVPN(self.afi, self.safi, packedPrefix, mask,
+        return MPLSVPN(self.afi, self.safi, packedPrefix, mask,
                        Labels([label], True), rd,
                        IP.pton(self.dataplaneDriver.getLocalAddress()))
-
-        return nlri
 
     def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
