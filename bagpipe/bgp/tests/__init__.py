@@ -92,7 +92,7 @@ class BaseTestBagPipeBGP():
 
         self.eventTargetWorker.enqueue(routeEvent)
 
-        log.info("Emitting event to %s: %s",
+        log.info("*** Emitting event to %s: %s",
                  self.eventTargetWorker, routeEvent)
 
         self._wait()

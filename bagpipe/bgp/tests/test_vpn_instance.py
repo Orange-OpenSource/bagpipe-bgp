@@ -40,6 +40,7 @@ import mock
 import logging
 
 from testtools import TestCase
+from mock import Mock
 
 from bagpipe.bgp.tests import RT1
 from bagpipe.bgp.tests import RT2
@@ -66,6 +67,9 @@ from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
 from exabgp.protocol.ip import IP
+
+from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
+    import Encapsulation
 
 from bagpipe.bgp.vpn.ipvpn import prefixToPackedIPMask
 
@@ -115,29 +119,28 @@ class TestVPNInstance(TestCase):
 
     def setUp(self):
         super(TestVPNInstance, self).setUp()
-        self.labelAllocator = LabelAllocator()
+        labelAllocator = LabelAllocator()
 
-        self.mockDataplane = mock.Mock()
-        self.mockDataplane.vifPlugged = mock.Mock()
-        self.mockDataplane.vifUnplugged = mock.Mock()
+        mockDataplane = Mock()
+        mockDataplane.vifPlugged = Mock()
+        mockDataplane.vifUnplugged = Mock()
 
-        self.mockDPDriver = mock.Mock()
-        self.mockDPDriver.initializeDataplaneInstance.return_value = \
-            self.mockDataplane
+        mockDPDriver = Mock()
+        mockDPDriver.initializeDataplaneInstance.return_value = mockDataplane
 
         VPNInstance.afi = AFI(AFI.ipv4)
         VPNInstance.safi = SAFI(SAFI.mpls_vpn)
-        self.vpnInstance = TestableVPNInstance(mock.Mock(name='BGPManager'),
-                                               self.labelAllocator,
-                                               self.mockDPDriver, 1, 1,
+        self.vpnInstance = TestableVPNInstance(Mock(name='BGPManager'),
+                                               labelAllocator,
+                                               mockDPDriver, 1, 1,
                                                [RT1], [RT1], '10.0.0.1', 24,
                                                None)
-        self.vpnInstance.synthesizeVifBGPRoute = mock.Mock(
+        self.vpnInstance.synthesizeVifBGPRoute = Mock(
             return_value=RouteEntry(self.vpnInstance.afi,
                                     self.vpnInstance.safi, NLRI1, [RT1]))
-        self.vpnInstance._advertiseRoute = mock.Mock()
-        self.vpnInstance._withdrawRoute = mock.Mock()
-        self.vpnInstance._postFirstPlug = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
+        self.vpnInstance._withdrawRoute = Mock()
+        self.vpnInstance._postFirstPlug = Mock()
         self.vpnInstance.start()
 
     def tearDown(self):
@@ -599,7 +602,7 @@ class TestVPNInstance(TestCase):
     # tests of updateRouteTargets
 
     def _test_updateRTsInit(self):
-        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
 
         route = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                            NLRI1, [RT1])
@@ -670,14 +673,19 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         super(TestVRF, self).setUp()
         labelAllocator = LabelAllocator()
 
-        mockDataplane = mock.Mock()
-        mockDataplane.vifPlugged = mock.Mock()
-        mockDataplane.vifUnplugged = mock.Mock()
+        self.mockDataplane = Mock()
+        self.mockDataplane.vifPlugged = Mock()
+        self.mockDataplane.vifUnplugged = Mock()
+        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
-        mockDPDriver = DummyDataplaneDriver({"dataplane_local_address":
-                                             "4.5.6.7"})
+        mockDPDriver = Mock()
+        mockDPDriver.initializeDataplaneInstance.return_value = \
+            self.mockDataplane
+        mockDPDriver.getLocalAddress.return_value = "4.5.6.7"
+        mockDPDriver.supportedEncaps.return_value = \
+            [Encapsulation(Encapsulation.Type.DEFAULT)]
 
-        bgpManager = mock.Mock()
+        bgpManager = Mock()
         bgpManager.getLocalAddress.return_value = "4.5.6.7"
 
         VPNInstance.afi = AFI(AFI.ipv4)
@@ -690,8 +698,8 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
             {'from_rt': [RT3],
              'to_rt': [RT4]
              })
-        self.vpnInstance._advertiseRoute = mock.Mock()
-        self.vpnInstance._withdrawRoute = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
+        self.vpnInstance._withdrawRoute = Mock()
         self.vpnInstance.start()
 
         self.eventTargetWorker = self.vpnInstance
@@ -709,37 +717,57 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
         # self.vpnInstance._advertiseRoute.call_count -> 1
 
-        workerA = Worker(mock.Mock(), 'Worker-A')
+        workerA = Worker(Mock(), 'Worker-A')
 
         self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2],
                             workerA, NH1, 200)
         # no re-advertisement supposed to happen
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
+        # dataplane supposed to be updated for this route
+        self.assertEqual(
+            1,
+            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
         self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
                             workerA, NH1, 200)
-        # re-advertisement supposed to happen, to RT4
+        # re-advertisement of VPN NLRI2 supposed to happen, to RT4
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
         self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
         self.assertNotIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance))
         self.assertNotIn(RT3, _extractRTFromAdvertiseCall(self.vpnInstance))
-        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
+        # dataplane *not* supposed to be updated for this route
+        self.assertEqual(
+            0,
+            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
         self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
                             workerA, NH1, 200)
         # withdraw of re-adv route supposed to happen
         self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count)
         self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
-        self.vpnInstance._advertiseRoute = mock.Mock()
-        self.vpnInstance._withdrawRoute = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
+        self.vpnInstance._withdrawRoute = Mock()
+        # dataplane *not* supposed to be updated for this route
+        self.assertEqual(
+            0,
+            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
         # RTs of route NLRI1 now include a re-advertiseed RT
         self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2, RT3],
                             workerA, NH1, 200)
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
         self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
-        self.vpnInstance._advertiseRoute = mock.Mock()
+        self.vpnInstance._advertiseRoute = Mock()
+        # dataplane supposed to be updated for this route
+        self.assertEqual(
+            1,
+            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
         # new interface plugged in
         # a route should be advertized for this new next hop
@@ -752,3 +780,9 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.assertNotIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
         self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
         self.assertNotIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
+        self.vpnInstance._advertiseRoute = Mock()
+
+        # vif unplugged, routes VPN NLRI1 and VPN NLRI1 with next-hops
+        # corresponding to this ports should now be withdrawn
+        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
+        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count)
