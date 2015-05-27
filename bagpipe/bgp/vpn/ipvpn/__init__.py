@@ -170,7 +170,7 @@ class VRF(VPNInstance, LookingGlass):
 
     def _imported(self, route):
         return (len(set(route.routeTargets).intersection(
-                    set(self.readvertiseFromRTs))) > 0)
+                    set(self.importRTs))) > 0)
 
     @utils.synchronized
     @logDecorator.log
