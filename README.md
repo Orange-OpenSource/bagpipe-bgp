@@ -351,7 +351,7 @@ Unit Tests
 
 Unit tests can be run with:
 
-        nostests
+        nosetests
 
 A report of unit tests coverage can be produced with:
 
