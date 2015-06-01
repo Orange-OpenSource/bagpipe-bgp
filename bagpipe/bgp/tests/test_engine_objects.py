@@ -418,22 +418,23 @@ class TestEngineObjects(TestCase):
     def test11_RTs(self):
         rt1a = RouteTarget(64512, 1)
         rt1b = RouteTarget(64512, 1)
-        rt2 = RouteTarget(64512, 1, False)
+        #rt2 = RouteTarget(64512, 1, False)  # required for
+                                             # compat with old bagpipe
 
         rt3 = RouteTarget(64512, 2)
         rt4 = RouteTarget(64513, 1)
 
         self.assertEqual(hash(rt1a), hash(rt1b))
-        self.assertEqual(hash(rt1a), hash(rt2))
+        #self.assertEqual(hash(rt1a), hash(rt2))
         self.assertNotEqual(hash(rt1a), hash(rt3))
         self.assertNotEqual(hash(rt1a), hash(rt4))
 
         self.assertEqual(rt1a, rt1b)
-        self.assertEqual(rt1a, rt2)
+        #self.assertEqual(rt1a, rt2)
         self.assertNotEqual(rt1a, rt3)
         self.assertNotEqual(rt1a, rt4)
 
         self.assertEqual(set([rt1a]), set([rt1b]))
-        self.assertEqual(set([rt1a]), set([rt2]))
+        #self.assertEqual(set([rt1a]), set([rt2]))
         self.assertEqual(1, len(set([rt1a]).intersection(set([rt1b]))))
-        self.assertEqual(1, len(set([rt2]).intersection(set([rt1b]))))
+        #self.assertEqual(1, len(set([rt2]).intersection(set([rt1b]))))
