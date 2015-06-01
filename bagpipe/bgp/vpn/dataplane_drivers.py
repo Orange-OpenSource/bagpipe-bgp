@@ -21,7 +21,8 @@ import socket
 
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
+from bagpipe.bgp.common.looking_glass import \
+    LookingGlassLocalLogger, LGMap, LookingGlassReferences
 
 from bagpipe.bgp.common.run_command import runCommand
 
@@ -33,7 +34,6 @@ class DataplaneDriver(LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     dataplaneInstanceClass = None
-
     encaps = [Encapsulation(Encapsulation.Type.DEFAULT)]
     makeB4BreakSupport = False
     ecmpSupport = False
@@ -171,9 +171,12 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
 
     # Looking glass info ####
 
-    def getLGMap(self):
+    def getLookingGlassLocalInfo(self, pathPrefix):
+        driver = {"id": self.driver.type,
+                  "href": LookingGlassReferences.getAbsolutePath(
+                      "DATAPLANE_DRIVERS", pathPrefix, [self.driver.type])}
         return {
-            "driver": (LGMap.DELEGATE, self.driver),
+            "driver": driver,
         }
 
 

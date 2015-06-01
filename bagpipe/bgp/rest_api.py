@@ -73,6 +73,8 @@ class RESTAPI(LookingGlass):
             "BGP_WORKERS", ["bgp", "workers"])
         LookingGlassReferences.setReferencePath(
             "VPN_INSTANCES", ["vpns", "instances"])
+        LookingGlassReferences.setReferencePath(
+            "DATAPLANE_DRIVERS", ["vpns", "dataplane", "drivers"])
 
     def ping(self):
         log.debug(
