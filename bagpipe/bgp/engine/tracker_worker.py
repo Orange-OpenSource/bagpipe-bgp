@@ -478,6 +478,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
         '''
         routes = {}
         for entry in routeDict.iterkeys():
-            routes[repr(entry)] = [route.getLookingGlassInfo(pathPrefix)
-                                   for route in routeDict[entry]]
+            entryRepr = self._displayEntry(entry)
+            routes[entryRepr] = [route.getLookingGlassInfo(pathPrefix)
+                                 for route in routeDict[entry]]
         return routes
