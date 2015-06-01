@@ -47,9 +47,9 @@ from exabgp.bgp.message.open import RouterID
 from exabgp.bgp.message.open.capability.capability import Capability
 
 from exabgp.bgp.message.nop import NOP
-from exabgp.bgp.message import Notification
-from exabgp.bgp.message import Update
-from exabgp.bgp.message import KeepAlive
+from exabgp.bgp.message.notification import Notification
+from exabgp.bgp.message.update import Update
+from exabgp.bgp.message.keepalive import KeepAlive
 
 from exabgp.bgp.message import IN
 
