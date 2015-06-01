@@ -654,7 +654,7 @@ packedPrefix2, mask = prefixToPackedIPMask("2.2.2.2/32")
 
 vpnNLRI1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
                    packedPrefix1, mask,
-                   Labels([42], True), 
+                   Labels([42], True),
                    RouteDistinguisher.fromElements("42.42.42.42", 5),
                    IP.pton("45.45.45.45"),
                    OUT.ANNOUNCE)
@@ -774,7 +774,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
         # advertised route count should increment by 2:
         # - vif route itself
-        # - re-adv of NLRI1 with this new port as next-hop
+        # - re-adv of NLRI1 with this new port as next-hop
         self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
         self.assertIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
         self.assertNotIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
