@@ -27,7 +27,8 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 
-from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver
+from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver \
+    as _DummyDataplaneDriver
 
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 
@@ -46,6 +47,8 @@ from exabgp.bgp.message import OUT
 
 from exabgp.protocol.ip import IP
 
+IPVPN = "ipvpn"
+
 
 def prefixFromNLRI(nlri):
     return "%s/%s" % (nlri.ip, nlri.mask)
@@ -56,6 +59,11 @@ def prefixToPackedIPMask(prefix):
     return (IP.pton(ipString), int(mask))
 
 
+class DummyDataplaneDriver(_DummyDataplaneDriver):
+
+    type = IPVPN
+
+
 class VRF(VPNInstance, LookingGlass):
     # component managing a VRF:
     # - calling a driver to instantiate the dataplane
@@ -63,7 +71,7 @@ class VRF(VPNInstance, LookingGlass):
     # - calling the driver to setup/update/remove routes in the dataplane
     # - cleanup: calling the driver, unregistering for BGP routes
 
-    type = "ipvpn"
+    type = IPVPN
     afi = AFI(AFI.ipv4)
     safi = SAFI(SAFI.mpls_vpn)
 

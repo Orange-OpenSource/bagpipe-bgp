@@ -60,6 +60,8 @@ from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
 from exabgp.bgp.message.update.attribute.pmsi import PMSI
 from exabgp.bgp.message.update.attribute.pmsi import PMSIIngressReplication
 
+EVPN = "evpn"
+
 
 class VPNInstanceDataplane(_VPNInstanceDataplane):
     __metaclass__ = ABCMeta
@@ -115,6 +117,8 @@ class DummyVPNInstanceDataplane(_DummyVPNInstanceDataplane,
 
 class DummyDataplaneDriver(_DummyDataplaneDriver):
 
+    type = EVPN
+
     dataplaneInstanceClass = DummyVPNInstanceDataplane
     encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 
@@ -131,7 +135,7 @@ class EVI(VPNInstance, LookingGlass):
     draft-ietf-bess-evpn-overlay.
     '''
 
-    type = "evpn"
+    type = EVPN
     afi = AFI(AFI.l2vpn)
     safi = SAFI(SAFI.evpn)
 

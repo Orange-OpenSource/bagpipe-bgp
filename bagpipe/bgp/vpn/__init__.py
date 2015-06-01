@@ -21,7 +21,9 @@ from threading import Lock
 import re
 import logging
 
+from bagpipe.bgp.vpn.ipvpn import IPVPN
 from bagpipe.bgp.vpn.ipvpn import VRF
+from bagpipe.bgp.vpn.evpn import EVPN
 from bagpipe.bgp.vpn.evpn import EVI
 
 import bagpipe.bgp.common.exceptions as exc
@@ -61,8 +63,8 @@ class VPNManager(LookingGlass):
     plug/unplug calls to the right VPN instance.
     """
 
-    type2class = {"ipvpn": VRF,
-                  "evpn": EVI
+    type2class = {IPVPN: VRF,
+                  EVPN: EVI
                   }
 
     @logDecorator.log
@@ -132,8 +134,8 @@ class VPNManager(LookingGlass):
             raise Exception("The specified evpn instance does not exist (%s)"
                             % localPort['evpn'])
 
-        if (evpn.type != "evpn"):
-            raise Exception("The specified instance to plug is not an epnv"
+        if (evpn.type != EVPN):
+            raise Exception("The specified instance to plug is not an evpn"
                             "instance (is %s instead)" % evpn.type)
 
         if ipvpnInstance in self._evpn_ipvpn_ifs:
@@ -281,7 +283,7 @@ class VPNManager(LookingGlass):
                 raise Exception("No dataplane driver for VPN type %s" %
                                 instanceType)
 
-            if instanceType == "evpn" and linuxbr:
+            if instanceType == EVPN and linuxbr:
                 kwargs = {'linuxbr': linuxbr}
             else:
                 kwargs = {}
@@ -301,7 +303,7 @@ class VPNManager(LookingGlass):
                 (set(vpnInstance.exportRTs) == set(exportRTs))):
             vpnInstance.updateRouteTargets(importRTs, exportRTs)
 
-        if instanceType == "ipvpn" and 'evpn' in localPort:
+        if instanceType == IPVPN and 'evpn' in localPort:
             # special processing for the case where what we plug into
             # the ipvpn is not an existing interface but an interface
             # to create, connected to an existing evpn instance
@@ -332,7 +334,7 @@ class VPNManager(LookingGlass):
         # Unplug VIF from VPN instance
         vpnInstance.vifUnplugged(macAddress, ipAddressPrefix, readvertise)
 
-        if vpnInstance.type == "ipvpn" and 'evpn' in localPort:
+        if vpnInstance.type == IPVPN and 'evpn' in localPort:
             self._detach_evpn2ipvpn(vpnInstance)
 
         if vpnInstance.stopIfEmpty():
@@ -343,7 +345,7 @@ class VPNManager(LookingGlass):
         for vpnInstance in self.vpnInstances.itervalues():
             vpnInstance.stop()
             # Cleanup veth pair
-            if (vpnInstance.type == "ipvpn" and
+            if (vpnInstance.type == IPVPN and
                     self._evpn_ipvpn_ifs.get(vpnInstance)):
                 self._cleanup_evpn2ipvpn(vpnInstance)
         for vpnInstance in self.vpnInstances.itervalues():

@@ -23,6 +23,7 @@ from distutils.version import StrictVersion
 
 from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
+from bagpipe.bgp.vpn.ipvpn import IPVPN
 from bagpipe.bgp.common.looking_glass import LookingGlass, \
     LookingGlassLocalLogger, LGMap
 
@@ -627,6 +628,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     """
 
     dataplaneInstanceClass = MPLSOVSVRFDataplane
+    type = IPVPN
 
     def __init__(self, config, init=True):
         LookingGlassLocalLogger.__init__(self)

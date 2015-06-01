@@ -42,6 +42,8 @@ from bagpipe.bgp.engine.bgp_manager import Manager
 from bagpipe.bgp.rest_api import RESTAPI
 
 from bagpipe.bgp.vpn import VPNManager
+from bagpipe.bgp.vpn.ipvpn import IPVPN
+from bagpipe.bgp.vpn.evpn import EVPN
 
 
 def findDataplaneDrivers(dpConfigs, bgpConfig, isCleaningUp=False):
@@ -63,10 +65,10 @@ def findDataplaneDrivers(dpConfigs, bgpConfig, isCleaningUp=False):
             dpConfig['dataplane_local_address'] = bgpConfig['local_address']
 
         for tentativeClassName in (driverName,
+                                   'bagpipe.bgp.vpn.%s.%s' % (vpnType,
+                                                              driverName),
                                    'bagpipe.%s' % driverName,
                                    'bagpipe.bgp.%s' % driverName,
-                                   'bagpipe.bgp.vpn.%s.%s' % (
-                                       vpnType, driverName),
                                    ):
             try:
                 if '.' not in tentativeClassName:
@@ -179,13 +181,13 @@ def _loadConfig(configFile):
     bgpConfig = parser.items("BGP")
 
     dataplaneConfig = dict()
-    for vpnType in ['ipvpn', 'evpn']:
+    for vpnType in [IPVPN, EVPN]:
         try:
             dataplaneConfig[vpnType] = dict(
                 parser.items("DATAPLANE_DRIVER_%s" % vpnType.upper()))
         except NoSectionError:
-            if vpnType == "ipvpn":  # backward compat for ipvpn
-                dataplaneConfig['ipvpn'] = dict(
+            if vpnType == IPVPN:  # backward compat for ipvpn
+                dataplaneConfig[IPVPN] = dict(
                     parser.items("DATAPLANE_DRIVER"))
                 logging.warning("Config file is obsolete, should have a "
                                 "DATAPLANE_DRIVER_IPVPN section instead of"

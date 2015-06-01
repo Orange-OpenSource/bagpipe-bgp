@@ -24,6 +24,7 @@ from bagpipe.bgp.common.run_command import runCommand
 from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
 
 from bagpipe.bgp.vpn.evpn import VPNInstanceDataplane
+from bagpipe.bgp.vpn.evpn import EVPN
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
@@ -275,6 +276,7 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     """
 
     dataplaneInstanceClass = LinuxVXLANEVIDataplane
+    type = EVPN
     requiredKernel = "3.11.0"
     encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 

@@ -28,6 +28,9 @@ from netaddr.ip import IPNetwork
 
 from bagpipe.bgp.common.run_command import runCommand
 
+from bagpipe.bgp.vpn.ipvpn import IPVPN
+from bagpipe.bgp.vpn.evpn import EVPN
+
 import logging
 
 DEFAULT_VPN_INSTANCE_ID = "bagpipe-test"
@@ -133,7 +136,7 @@ def main():
 
     parser.add_option("--network-type", dest="network_type",
                       help="network type (ipvpn or evpn)",
-                      choices=["ipvpn", "evpn"])
+                      choices=[IPVPN, EVPN])
     parser.add_option("--vpn-instance-id", dest="vpn_instance_id",
                       help="UUID for the network instance "
                       "(default: %default-(ipvpn|evpn))",
@@ -218,7 +221,7 @@ def main():
     if (len(options.routeTargets) == 0 and
             not (options.importOnlyRouteTargets
                  or options.exportOnlyRouteTargets)):
-        if options.network_type == "ipvpn":
+        if options.network_type == IPVPN:
             options.routeTargets = ["64512:512"]
         else:
             options.routeTargets = ["64512:513"]
@@ -264,7 +267,7 @@ def main():
 
     local_port = {}
     if options.port[:5] == "evpn:":
-        if (options.network_type == "ipvpn"):
+        if (options.network_type == IPVPN):
             print "will plug evpn %s into the IPVPN" % options.port[5:]
             local_port['evpn'] = {'id': options.port[5:]}
         else:
@@ -273,7 +276,7 @@ def main():
         local_port['linuxif'] = options.port
 
         # currently our only the MPLS OVS driver for ipvpn requires preplug
-        if (options.ovs_preplug and options.network_type == "ipvpn"):
+        if (options.ovs_preplug and options.network_type == IPVPN):
             print "pre-plugging %s into %s" % (options.port,
                                                options.bridge)
             runCommand(log, "ovs-vsctl del-port %s %s" %
@@ -289,7 +292,7 @@ def main():
                 local_port['ovs']['vlan'] = options.ovs_vlan
 
     if not(options.mac):
-        if options.network_type == "ipvpn":
+        if options.network_type == IPVPN:
             options.mac = "52:54:00:99:99:22"
         else:
             parser.error("Need to specify --mac for an EVPN network "
