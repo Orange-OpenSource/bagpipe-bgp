@@ -222,10 +222,10 @@ class RouteTarget(ECommunity):
 		if self.asn is not None:
 			# type could also be 0x02 -> FIXME check RFC
 			#return pack( 'BB!H!L', 0x00,0x02, self.asn, self.number)
-			return pack( '!BBHL', 0x00,0x02, self.asn, self.number)
+			return pack( '!BBHL', 0x40,0x02, self.asn, self.number)
 		else:
 			encoded_ip = socket.inet_pton( socket.AF_INET, self.ip )            
-			return pack( '!BB4sH', 0x01,0x02, encoded_ip, self.number)
+			return pack( '!BB4sH', 0x41,0x02, encoded_ip, self.number)
 
 	def __str__(self):
 		if self.asn is not None:
