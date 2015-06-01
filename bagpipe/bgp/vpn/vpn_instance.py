@@ -17,6 +17,8 @@
 
 from abc import ABCMeta, abstractmethod
 
+import socket
+
 from copy import copy
 
 from threading import Thread
