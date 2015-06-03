@@ -31,9 +31,9 @@ from bagpipe.bgp.common.looking_glass import LGMap
 from bagpipe.bgp.common.utils import getBoolean
 from bagpipe.bgp.common import logDecorator
 
-from exabgp.bgp.message.update.nlri.rtc import RouteTargetConstraint
+from exabgp.bgp.message.update.nlri.rtc import RTC
 from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message import OUT
+from exabgp.bgp.message.state import OUT
 
 from exabgp.protocol.ip import IP
 
@@ -137,7 +137,7 @@ class Manager(EventSource, LookingGlass):
 
     def _subscription2RTCRouteEntry(self, subscription, action):
 
-        nlri = RouteTargetConstraint(
+        nlri = RTC(
             AFI(AFI.ipv4), SAFI(SAFI.rtc), action,
             IP.pton(self.getLocalAddress()),
             self.config['my_as'], subscription.routeTarget)

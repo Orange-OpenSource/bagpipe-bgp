@@ -51,7 +51,7 @@ from bagpipe.bgp.common.looking_glass import LGMap
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
 
-from exabgp.bgp.message import OUT
+from exabgp.bgp.message.state import OUT
 
 log = logging.getLogger(__name__)
 

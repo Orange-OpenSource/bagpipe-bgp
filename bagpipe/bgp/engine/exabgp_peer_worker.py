@@ -51,7 +51,7 @@ from exabgp.bgp.message.notification import Notification
 from exabgp.bgp.message.update import Update
 from exabgp.bgp.message.keepalive import KeepAlive
 
-from exabgp.bgp.message import IN
+from exabgp.bgp.message.state import IN
 
 from exabgp.bgp.message import STATE
 
