@@ -218,13 +218,15 @@ class RouteEvent(object):
         assert(self.source is not None)
         self.replacedRoute = None
 
-        # this spares us the pain of specifying the action
+        # this is required to overwrite the action field in an NLRI
+        # in the case where we generate a withdraw from an existing NLRI 
+        # on a replaced route
+        # and this spares us the pain of specifying the action
         # when creating an nlri
-        if self.routeEntry.nlri.action is None:
-            if eventType == RouteEvent.ADVERTISE:
-                self.routeEntry.nlri.action = OUT.ANNOUNCE
-            else:  # WITHDRAW
-                self.routeEntry.nlri.action = OUT.WITHDRAW
+        if eventType == RouteEvent.ADVERTISE:
+            self.routeEntry.nlri.action = OUT.ANNOUNCE
+        else:  # WITHDRAW
+            self.routeEntry.nlri.action = OUT.WITHDRAW
 
     def setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a
