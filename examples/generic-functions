@@ -62,6 +62,19 @@ function wait_ready {
 }
 
 function clean_stop {
+	sleep 2
+	if (test $(r_a bagpipe-looking-glass summary local_routes_count) -ne 0); then
+		echo "warning: $hostA not cleaned up"
+	fi
+	if (test $(r_a bagpipe-looking-glass summary received_routes_count) -ne 0); then
+		echo "warning: $hostA not cleaned up"
+	fi
+	if (test $(r_b bagpipe-looking-glass summary local_routes_count) -ne 0); then
+		echo "warning: $hostB not cleaned up"
+	fi
+	if (test $(r_b bagpipe-looking-glass summary received_routes_count) -ne 0); then
+		echo "warning: $hostB not cleaned up"
+	fi
 	r_both /etc/init.d/bagpipe-bgp stop
 }
 
