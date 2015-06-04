@@ -33,7 +33,8 @@ from bagpipe.bgp.common import logDecorator
 
 from exabgp.bgp.message.update.nlri.rtc import RTC
 from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.state import OUT
+
+from exabgp.bgp.message import OUT
 
 from exabgp.protocol.ip import IP
 
@@ -118,8 +119,7 @@ class Manager(EventSource, LookingGlass):
     def rtcAdvertisementForSub(self, sub):
         if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
             event = RouteEvent(RouteEvent.ADVERTISE,
-                               self._subscription2RTCRouteEntry(sub,
-                                                                OUT.ANNOUNCE),
+                               self._subscription2RTCRouteEntry(sub),
                                self)
             log.debug("Based on subscription => synthesized RTC %s", event)
             return event
@@ -128,17 +128,16 @@ class Manager(EventSource, LookingGlass):
     def rtcWithdrawalForSub(self, sub):
         if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
             event = RouteEvent(RouteEvent.WITHDRAW,
-                               self._subscription2RTCRouteEntry(sub,
-                                                                OUT.WITHDRAW),
+                               self._subscription2RTCRouteEntry(sub),
                                self)
             log.debug("Based on unsubscription => synthesized withdraw"
                       " for RTC %s", event)
             return event
 
-    def _subscription2RTCRouteEntry(self, subscription, action):
+    def _subscription2RTCRouteEntry(self, subscription):
 
         nlri = RTC(
-            AFI(AFI.ipv4), SAFI(SAFI.rtc), action,
+            AFI(AFI.ipv4), SAFI(SAFI.rtc), None,
             IP.pton(self.getLocalAddress()),
             self.config['my_as'], subscription.routeTarget)
 
