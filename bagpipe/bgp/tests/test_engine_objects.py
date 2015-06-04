@@ -438,3 +438,6 @@ class TestEngineObjects(TestCase):
         #self.assertEqual(set([rt1a]), set([rt2]))
         self.assertEqual(1, len(set([rt1a]).intersection(set([rt1b]))))
         #self.assertEqual(1, len(set([rt2]).intersection(set([rt1b]))))
+
+    def test12_RC(self):
+        pass

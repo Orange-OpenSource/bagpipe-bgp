@@ -46,14 +46,14 @@ from exabgp.reactor.network.error import LostConnection
 from exabgp.bgp.message.open import RouterID
 from exabgp.bgp.message.open.capability.capability import Capability
 
-from exabgp.bgp.message.nop import NOP
-from exabgp.bgp.message.notification import Notification
-from exabgp.bgp.message.update import Update
-from exabgp.bgp.message.keepalive import KeepAlive
+from exabgp.bgp.message import NOP
+from exabgp.bgp.message import Notification
+from exabgp.bgp.message import Update
+from exabgp.bgp.message import KeepAlive
 
-from exabgp.bgp.message.state import IN
+from exabgp.bgp.message import IN
 
-from exabgp.bgp.message import STATE
+from exabgp.bgp.fsm import FSM as ExaFSM
 
 import logging
 
@@ -77,12 +77,12 @@ def setupExaBGPEnv():
 setupExaBGPEnv()
 
 
-TranslateExaBGPState = {STATE.IDLE: FSM.Idle,
-                        STATE.ACTIVE: FSM.Active,
-                        STATE.CONNECT: FSM.Connect,
-                        STATE.OPENSENT: FSM.OpenSent,
-                        STATE.OPENCONFIRM: FSM.OpenConfirm,
-                        STATE.ESTABLISHED: FSM.Established,
+TranslateExaBGPState = {ExaFSM.IDLE: FSM.Idle,
+                        ExaFSM.ACTIVE: FSM.Active,
+                        ExaFSM.CONNECT: FSM.Connect,
+                        ExaFSM.OPENSENT: FSM.OpenSent,
+                        ExaFSM.OPENCONFIRM: FSM.OpenConfirm,
+                        ExaFSM.ESTABLISHED: FSM.Established,
                         }
 
 
@@ -118,7 +118,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         self.rtc_active = False
 
         neighbor = Neighbor()
-        neighbor.router_id = RouterID(self.config['local_address'])
+        neighbor.router_id = RouterID(self.localAddress)
         neighbor.local_as = ASN(self.config['my_as'])
         neighbor.peer_as = ASN(self.config['peer_as'])
         neighbor.local_address = IP.create(self.localAddress)
@@ -136,7 +136,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         try:
             for action in self.peer._connect():
                 self.fsm.state = TranslateExaBGPState[
-                    self.peer._['out']['state']]
+                    self.peer._outgoing.fsm.state]
 
                 if action == ACTION.LATER:
                     time.sleep(2)
@@ -151,11 +151,11 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
         # check the capabilities of the session just established...
 
-        self.protocol = self.peer._['out']['proto']
+        self.protocol = self.peer._outgoing.proto
 
         received_open = self.protocol.negotiated.received_open
 
-        self._setHoldTime(received_open.hold_time)
+        self._setHoldTime(self.protocol.negotiated.holdtime)
 
         mp_capabilities = received_open.capabilities.get(
             Capability.CODE.MULTIPROTOCOL, [])

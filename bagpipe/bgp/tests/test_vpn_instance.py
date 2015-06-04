@@ -73,7 +73,7 @@ from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
 
 from bagpipe.bgp.vpn.ipvpn import prefixToPackedIPMask
 
-from exabgp.bgp.message.state import OUT
+from exabgp.bgp.message import OUT
 
 
 log = logging.getLogger()

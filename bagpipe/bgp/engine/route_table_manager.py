@@ -306,7 +306,7 @@ class RouteTableManager(Thread, LookingGlass):
             worker._rtm_matches.remove(match)
         except KeyError:
             log.warning("worker %s unsubs' from %s but this match was"
-                        "not tracked for this worker (should not happen,"
+                        " not tracked for this worker (should not happen,"
                         " this is a bug)", worker, match)
 
         # synthesize withdraw events
@@ -392,8 +392,8 @@ class RouteTableManager(Thread, LookingGlass):
                                   worker, routeEvent)
                         targetWorkers.add(worker)
                     else:
-                        log.debug("Decided not to dispatch to %s, based on "
-                                  "exceptWorkers: %s", worker, routeEvent)
+                        log.debug("Decided not to dispatch to %s, based on"
+                                  " exceptWorkers: %s", worker, routeEvent)
                 else:
                     log.debug("Decided not to dispatch to %s: %s (%s)",
                               worker, reason, routeEvent)
@@ -427,8 +427,8 @@ class RouteTableManager(Thread, LookingGlass):
         if routeEvent.type == RouteEvent.ADVERTISE:
 
             if replacedEntry == routeEvent.routeEntry:
-                log.warning("The route advertized is the same as the one "
-                            "previously advertized by the source, ignoring")
+                log.warning("The route advertized is the same as the one"
+                            " previously advertized by the source, ignoring")
                 return
 
             # propagate event to interested worker

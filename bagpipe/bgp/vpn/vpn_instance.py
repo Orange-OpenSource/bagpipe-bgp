@@ -232,7 +232,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     @abstractmethod
     def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         '''
-        returns an NLRI
+        returns a RouteEntry
         '''
         pass
 
