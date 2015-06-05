@@ -32,6 +32,8 @@ BRIDGE_NAME_PREFIX = "evpn---"
 VXLAN_INTERFACE_PREFIX = "vxlan--"
 LINUX_DEV_LEN = 14
 
+VXLAN_DSTPORT = 4789
+
 
 class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
@@ -92,8 +94,8 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         # Create VXLAN interface
         self._runCommand(
-            "ip link add %s type vxlan id %d nolearning proxy" %
-            (self.vxlan_if_name, self.instanceLabel)
+            "ip link add %s type vxlan id %d nolearning proxy dstport %d" %
+            (self.vxlan_if_name, self.instanceLabel, VXLAN_DSTPORT)
         )
 
         self._runCommand("ip link set %s up" % self.vxlan_if_name)
