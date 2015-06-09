@@ -40,6 +40,11 @@ mpls_interface=*gre*
 #
 # gre_tunnel_options="options:l3port=true"
 
+# Support VXLAN encapsulation of IP VPN traffic with the 
+# MPLSOVSDataplaneDriver.
+# Note well: this is non-standard and aimed at making it easier
+# to test IP VPN until OVS 2.4 is shipping
+#vxlan_encap=True
 
 # IP address that others will us to send us packets
 #   does not need to be specified if different than the BGP local_address
