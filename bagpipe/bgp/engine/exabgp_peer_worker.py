@@ -33,6 +33,7 @@ from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.common.looking_glass import LookingGlass
 
 from exabgp.reactor.peer import Peer
+from exabgp.reactor.peer import Interrupted
 from exabgp.reactor.peer import ACTION
 from exabgp.bgp.neighbor import Neighbor
 from exabgp.bgp.message.open.asn import ASN
@@ -145,6 +146,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
                 if self.shouldStop or action == ACTION.CLOSE:
                     raise StoppedException()
+        except Interrupted:
+            raise StoppedException()
         except LostConnection as e:
             raise
         # FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
