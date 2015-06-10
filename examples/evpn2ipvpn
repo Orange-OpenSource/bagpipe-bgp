@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# This script will setup traffic between E-VPN net1 (to which VM1 is attached)
+# and E-VPN net2 (to which VM2 is attached) goes through an IP-VPN:
+#
+# VM1-------net1  <---- IP-VPN ---->  net2-------VM2
+#  .1      11.0.0.                   12.0.0      .1
+#
+# Route targets:
+#
+# net1:   :1
+# net2:   :2
+# IP-VPN: :10
+
+as=64512
+
+source $(dirname $0)/generic-functions
+
+clean_start
+
+##
+## VM1:  sur A
+##
+
+## attach on E-VPN:
+r_a bagpipe-rest-attach --attach --netns net1vm1 --port netns:to-vm1 --network-type evpn --vpn-instance-id net1vm1_evpn --ip 11.0.0.1 --rt $as:1
+
+## attach on IP-VPN:
+MAC_VM1=$(r_a ip netns exec net1vm1 ifconfig | grep HWaddr | awk '{print $5}')
+r_a bagpipe-rest-attach --attach --port evpn:net1vm1_evpn --network-type ipvpn --vpn-instance-id net1vm1_ipvpn --ip 11.0.0.1 --mac $MAC_VM1 --rt $as:10
+
+
+##
+## VM2:  sur B
+##
+
+## attach on E-VPN:
+r_b bagpipe-rest-attach --attach --netns net2vm2  --port netns:to-vm2 --network-type evpn --vpn-instance-id net2vm2_evpn --ip 12.0.0.1 --rt $as:2
+
+## attach on IP-VPN:
+MAC_VM2=$(r_b ip netns exec net2vm2 ifconfig | grep HWaddr | awk '{print $5}')
+r_b bagpipe-rest-attach --attach --port evpn:net2vm2_evpn --network-type ipvpn --vpn-instance-id net2vm2_ipvpn --ip 12.0.0.1 --mac $MAC_VM2 --rt $as:10
+
+
+#
+# Test
+#
+
+wait_ready
+
+r_a ip netns exec net1vm1 ping 12.0.0.1 -c 12
+
+
+r_a bagpipe-looking-glass vpns instances net1vm1_ipvpn dataplane flows
+r_b bagpipe-looking-glass vpns instances net2vm2_ipvpn dataplane flows
+
+r_both bagpipe-looking-glass logs
+
+clean_stop
+
