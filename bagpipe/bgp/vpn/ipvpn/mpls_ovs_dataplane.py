@@ -922,10 +922,13 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             "ovs_table_vrfs": self.ovs_table_vrfs,
             "ovs_table_incoming": self.ovs_table_incoming,
             "gre": {'enabled': self.useGRE},
+            "vxlan": {'enabled': self.vxlanEncap},
             "ovs_version": self.ovsRelease
         }
         if self.useGRE:
-            d["gre"].update({'tunnel_port': GRE_TUNNEL})
+            d["gre"].update({'gre_tunnel_port': GRE_TUNNEL})
+        if self.vxlanEncap:
+            d["gre"].update({'vxlan_tunnel_port': VXLAN_TUNNEL})
         return d
 
     def getLGOVSFlows(self, pathPrefix):
