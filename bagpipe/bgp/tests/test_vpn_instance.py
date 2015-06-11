@@ -35,7 +35,6 @@
      MAC and IP addresses as the ones plugged on different ports
 
 """
-import mock
 
 import logging
 
@@ -59,7 +58,6 @@ from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 
 from bagpipe.bgp.vpn.ipvpn import VRF
-from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver
 
 from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update.nlri.mpls import MPLSVPN
@@ -79,19 +77,19 @@ from exabgp.bgp.message import OUT
 log = logging.getLogger()
 
 MAC1 = "00:00:de:ad:be:ef"
-IP1 = "10.0.0.2/32"
+IP1 = "10.0.0.1/32"
 LOCAL_PORT1 = {'linuxif': 'tap1'}
 
 MAC2 = "00:00:fe:ed:fa:ce"
-IP2 = "10.0.0.3/32"
+IP2 = "10.0.0.2/32"
 LOCAL_PORT2 = {'linuxif': 'tap2'}
 
 MAC3 = "00:00:de:ad:c0:de"
-IP3 = "10.0.0.4/32"
+IP3 = "10.0.0.3/32"
 LOCAL_PORT3 = {'linuxif': 'tap3'}
 
 MAC4 = "00:00:fe:ed:f0:0d"
-IP4 = "10.0.0.5/32"
+IP4 = "10.0.0.4/32"
 LOCAL_PORT4 = {'linuxif': 'tap4'}
 
 
@@ -709,8 +707,6 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.vpnInstance.stop()
         self.vpnInstance.join()
 
-    _extractRTFromAdvertiseCall
-
     # unit test for IPVPN re-advertisement
     def test_ReAdvertisement1(self):
 
@@ -744,45 +740,59 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
         self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
-        # withdraw of re-adv route supposed to happen
-        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count)
-        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        # new interface plugged in
+        # route vpnNLRI2 should be re-advertized with this new next hop as
+        # next-hop
+        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
+        # advertised route count should increment by 2:
+        # - vif route itself
+        # - re-adv of NLRI1 with this new port as next-hop
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(0, self.vpnInstance._withdrawRoute.call_count)
+        self.assertIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        self.assertNotIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
+        self.assertNotIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
+
+        # check that second event is for re-advertised route vpnNLRI2 and
+        # contains what we expect
+        routeEntry = self.vpnInstance._advertiseRoute.call_args_list[1][0][0]
+        self.assertEqual(vpnNLRI2.prefix(), routeEntry.nlri.prefix())
+        self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
+        self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
         self.vpnInstance._advertiseRoute = Mock()
-        self.vpnInstance._withdrawRoute = Mock()
-        # dataplane *not* supposed to be updated for this route
-        self.assertEqual(
-            0,
-            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
-        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
+
+        # vif unplugged, routes VPN NLRI2 with next-hop
+        # corresponding to this ports should now be withdrawn
+        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
+        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count)
+        routeEntry = self.vpnInstance._withdrawRoute.call_args_list[0][0][0]
+        self.assertEqual(vpnNLRI2.prefix(), routeEntry.nlri.prefix())
+        self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
+        self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
+        self.vpnInstance._advertiseRoute = Mock()
 
         # RTs of route NLRI1 now include a re-advertiseed RT
         self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2, RT3],
                             workerA, NH1, 200)
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
         self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
-        self.vpnInstance._advertiseRoute = Mock()
         # dataplane supposed to be updated for this route
         self.assertEqual(
             1,
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
         self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
-        # new interface plugged in
-        # a route should be advertized for this new next hop
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False)
-        # advertised route count should increment by 2:
-        # - vif route itself
-        # - re-adv of NLRI1 with this new port as next-hop
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
-        self.assertIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
-        self.assertNotIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
-        self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
-        self.assertNotIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
         self.vpnInstance._advertiseRoute = Mock()
+        self.vpnInstance._withdrawRoute = Mock()
 
-        # vif unplugged, routes VPN NLRI1 and VPN NLRI1 with next-hops
-        # corresponding to this ports should now be withdrawn
-        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
-        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count)
+        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
+                            workerA, NH1, 200)
+        # withdraw of re-adv route supposed to happen
+        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count)
+        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        # dataplane *not* supposed to be updated for this route
+        self.assertEqual(
+            0,
+            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
