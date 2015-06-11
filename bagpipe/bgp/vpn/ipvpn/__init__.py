@@ -137,7 +137,7 @@ class VRF(VPNInstance, LookingGlass):
         for prefix in self.readvertised:
             self.log.debug("Re-advertising %s with this port as next hop",
                            prefix)
-            routeEntry = self._routeForReAdvertisement(ipAddressPrefix, label)
+            routeEntry = self._routeForReAdvertisement(prefix, label)
             self._pushEvent(RouteEvent(RouteEvent.ADVERTISE, routeEntry))
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
@@ -145,7 +145,7 @@ class VRF(VPNInstance, LookingGlass):
         for prefix in self.readvertised:
             self.log.debug("Stop re-advertising %s with this port as next hop",
                            prefix)
-            routeEntry = self._routeForReAdvertisement(ipAddressPrefix, label)
+            routeEntry = self._routeForReAdvertisement(prefix, label)
             self._pushEvent(RouteEvent(RouteEvent.WITHDRAW, routeEntry))
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
