@@ -36,22 +36,22 @@ route table manager (singleton)
 
 import logging
 
-from exabgp.reactor.protocol import AFI, SAFI
-
-from exabgp.bgp.message.update.attribute.community.extended import \
-    RouteTargetASN2Number as RouteTarget
-
-from exabgp.bgp.message.update.attribute.attribute import Attribute
-from exabgp.bgp.message.update import Attributes
-
 from bagpipe.bgp.common.looking_glass import LookingGlass
 from bagpipe.bgp.common.looking_glass import LookingGlassReferences
 from bagpipe.bgp.common.looking_glass import LGMap
 
+from bagpipe.bgp.common import logDecorator
+
+from exabgp.bgp.message.update import Attributes
+from exabgp.bgp.message.update.attribute.attribute import Attribute
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
+from exabgp.bgp.message.update.attribute.community.extended import \
+    RouteTargetASN2Number as RouteTarget
 
 from exabgp.bgp.message.state import OUT
+
+from exabgp.reactor.protocol import AFI, SAFI
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +101,7 @@ class RouteEntry(LookingGlass):
     def routeTargets(self):
         return self._routeTargets
 
+    @logDecorator.log
     def setRouteTargets(self, routeTargets):
         # first build a list of ecoms without any RT
         newEComs = ExtendedCommunities()
@@ -228,6 +229,7 @@ class RouteEvent(object):
         else:  # WITHDRAW
             self.routeEntry.nlri.action = OUT.WITHDRAW
 
+    @logDecorator.log
     def setReplacedRoute(self, replacedRoute):
         ''' Called only by RouteTableManager, replacedRoute should be a
         RouteEntry '''
@@ -307,11 +309,13 @@ class EventSource(LookingGlass):
     def getRouteEntries(self):
         return self._rtm_routeEntries
 
+    @logDecorator.logInfo
     def _advertiseRoute(self, routeEntry):
         log.debug("Publish advertise route event")
         self.routeTableManager.enqueue(RouteEvent(RouteEvent.ADVERTISE,
                                                   routeEntry, self))
 
+    @logDecorator.logInfo
     def _withdrawRoute(self, routeEntry):
         log.debug("Publish withdraw route event")
         self.routeTableManager.enqueue(RouteEvent(RouteEvent.WITHDRAW,
