@@ -830,9 +830,10 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
         if exitCode == 0:
             self.log.info("Cleaning up OVS rules")
             self._ovs_flow_del('mpls', self.ovs_table_incoming)
-            self._ovs_flow_del('in_port=%d' %
-                               self.find_ovs_port(VXLAN_TUNNEL),
-                               self.ovs_table_incoming)
+            if self.vxlanEncap:
+                self._ovs_flow_del('in_port=%d' %
+                                   self.find_ovs_port(VXLAN_TUNNEL),
+                                   self.ovs_table_incoming)
             self._ovs_flow_del('ip', self.ovs_table_vrfs)
             self._ovs_flow_del('arp', self.ovs_table_vrfs)
             if self.log.debug:
