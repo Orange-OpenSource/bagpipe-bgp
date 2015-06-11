@@ -5,4 +5,4 @@ lockfile >= 0.8
 netaddr >= 0.7.7
 twisted >= 13.2
 # python-testtools ?
-#exabgp >= 3.5
+exabgp >= 3.5
