@@ -71,3 +71,12 @@ dataplane_driver = DummyDataplaneDriver
 # required to get proper MTU with the LinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000
 
+# The LinuxVXLANDataplaneDriver and LinuxVXLANHybridDataplaneDriver
+# allow to force the VXLAN destination port IF iproute2 is at version
+# 3.14 or above (i.e. >= "ss140411" with "ip -V").
+#
+#vxlan_dst_port=4789 # to use standard IANA port for VXLAN
+#vxlan_dst_port=8472 # to interoperate with boxes not having the ability to
+#                    # use another port than the linux kernel default 8472
+
+
