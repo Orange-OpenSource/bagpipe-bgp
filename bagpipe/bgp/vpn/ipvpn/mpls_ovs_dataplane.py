@@ -893,7 +893,12 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
         (output, _) = self._runCommand("ovs-vsctl get Interface %s ofport" %
                                        dev_name, acceptableReturnCodes=[0, 1])
         try:
-            return int(output[0])
+            port = int(output[0])
+            if port == -1:
+                raise Exception("OVS port not found for device %s, "
+                                "(known by ovs-vsctl but not by ovs-ofctl?)"
+                                % dev_name)
+            return port
         except:
             raise Exception("OVS port not found for device %s" % dev_name)
 
@@ -935,11 +940,13 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     def getLGOVSFlows(self, pathPrefix):
         # TODO: filter to only get flows from our tables
         (output, _) = self._runCommand("ovs-ofctl dump-flows %s %s" %
-                                       (self.bridge, OVS_DUMP_FLOW_FILTER))
+                                       (self.bridge, OVS_DUMP_FLOW_FILTER),
+                                       acceptableReturnCodes=[0, 1])
         return output
 
     def getLGOVSPorts(self, pathPrefix):
         (output, _) = self._runCommand(
-            "ovs-ofctl show %s |grep addr" % self.bridge)
+            "ovs-ofctl show %s |grep addr" % self.bridge,
+            acceptableReturnCodes=[0, 1])
         # FIXME: does it properly show the GRE tunnel interface
         return output
