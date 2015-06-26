@@ -54,7 +54,7 @@ echo "Setting up $BAGPIPE_MPLS_BR OVS bridge and associated IP interface $BAGPIP
 MPLS_IFACE_IP=\`ip addr show $BAGPIPE_MPLS_IFACE | grep 'inet ' | awk '{ print \$2 }'\`
 
 if [ -z "\$MPLS_IFACE_IP" ]; then
-	echo "Failure retrieving IP config of BaGPipe MPLS interface ($BAGPIPE_MPLS_IFACE): perhaps br-mpls was configured already ?"
+	echo "Failure retrieving IP config of BaGPipe MPLS interface ($BAGPIPE_MPLS_IFACE): perhaps $BAGPIPE_MPLS_BR was configured already ?"
 	echo "Try to setup $BAGPIPE_MPLS_IFACE before trying again.."
 	return 0
 fi
