@@ -36,7 +36,7 @@ mpls_interface=*gre*
 # Uncomment the following to allow the use of standard MPLS-o-GRE in OVS
 # (rather than MPLS-o-Eth-o-GRE). 
 # This currently requires a modified OVS, which can be found at: 
-#   https://github.com/tmmorin/openvswitch
+#   https://github.com/tmmorin/openvswitch/tree/grempls
 #
 # gre_tunnel_options="options:l3port=true"
 
