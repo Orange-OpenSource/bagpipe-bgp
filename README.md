@@ -1,6 +1,8 @@
 BaGPipe BGP
 ===========
 
+[![Join the chat at https://gitter.im/Orange-OpenSource/bagpipe-bgp](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/Orange-OpenSource/bagpipe-bgp?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 BaGPipe BGP is a lightweight implementation of BGP VPNs (IP VPNs and E-VPNs), targeting
 deployments on servers hosting VMs, in particular for Openstack/KVM platforms.
 
