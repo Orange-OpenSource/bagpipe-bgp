@@ -1,7 +1,5 @@
-pbr >= 0.6,!= 0.7, < 1.0
+pbr >= 0.11, < 2.0
 bottle >= 0.11.3
 python-daemon >= 1.5.5
-lockfile >= 0.8
 netaddr >= 0.7.7
 twisted >= 13.2
-# python-testtools ?
