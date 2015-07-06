@@ -173,9 +173,7 @@ if [[ "$1" == "source" ]]; then
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
 		echo_summary "Installing Bagpipe"
 		#FIXME: there must be a better way...
-		echo "bottle >= 0.11.3" >> $DEST/requirements/global-requirements.txt
-		echo "python-daemon >= 1.5.5, < 1.6" >> $DEST/requirements/global-requirements.txt
-		echo "twisted >= 14.0.0" >> $DEST/requirements/global-requirements.txt
+		grep -iv pbr $BAGPIPE_DIR/requirements.txt >> $DEST/requirements/global-requirements.txt
 		setup_develop $BAGPIPE_DIR
 elif [[ "$1" == "stack" && "$2" == "post-config" ]]; then
 		echo_summary "Configuring Bagpipe"
