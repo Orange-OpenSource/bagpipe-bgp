@@ -286,7 +286,7 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
 
         self.log.info("Initializing %s", self.__class__.__name__)
 
-        self.vxlanDestPort = config.get("vxlan_dst_port", None)
+        self.vxlanDestPort = int(config.get("vxlan_dst_port", None))
 
         DataplaneDriver.__init__(self, config, init)
 
