@@ -289,7 +289,11 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
 
         self.log.info("Initializing %s", self.__class__.__name__)
 
-        self.vxlanDestPort = int(config.get("vxlan_dst_port", None))
+        try:
+            self.vxlanDestPort = int(config.get("vxlan_dst_port", 0)) or None
+        except ValueError:
+            raise Exception("Could not parse specified vxlan_dst_port: %s" %
+                            config["vxlan_dst_port"])
 
         DataplaneDriver.__init__(self, config, init)
 
