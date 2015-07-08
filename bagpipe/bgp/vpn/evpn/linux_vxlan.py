@@ -98,8 +98,9 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         # Create VXLAN interface
         self._runCommand(
-            "ip link add %s type vxlan id %d nolearning proxy %s" %
-            (self.vxlan_if_name, self.instanceLabel, dstPortSpec)
+            "ip link add %s type vxlan id %d local %s nolearning proxy %s" %
+            (self.vxlan_if_name, self.instanceLabel,
+             self.driver.getLocalAddress(), dstPortSpec)
         )
 
         self._runCommand("ip link set %s up" % self.vxlan_if_name)
