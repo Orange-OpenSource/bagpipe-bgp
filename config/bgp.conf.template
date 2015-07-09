@@ -16,10 +16,10 @@ api_port=8082
 # IP VPN dataplane driver class
 # (bagpipe.bgp, bgp., or bagpipe.bgp.ipvpn can be omitted)
 # Example values: 
-# - dataplane_driver = bagpipe.bgp.vpn.ipvpn.DummyDataplaneDriver
-# - dataplane_driver = bgp.vpn.ipvpn.mpls_linux_dataplane.MPLSLinux32DataplaneDriver
-# - dataplane_driver = mpls_linux_dataplane.MPLSLinuxDataplaneDriver
-# - dataplane_driver = mpls_ovs_dataplane.MPLSOVSDataplaneDriver
+#dataplane_driver = bagpipe.bgp.vpn.ipvpn.DummyDataplaneDriver
+#dataplane_driver = bgp.vpn.ipvpn.mpls_linux_dataplane.MPLSLinux32DataplaneDriver
+#dataplane_driver = mpls_linux_dataplane.MPLSLinuxDataplaneDriver
+#dataplane_driver = mpls_ovs_dataplane.MPLSOVSDataplaneDriver
 dataplane_driver = DummyDataplaneDriver
 
 # OVS bridge to use (defaults to br-int)
@@ -52,8 +52,9 @@ mpls_interface=*gre*
 #
 #vxlan_encap=True
 
-# IP address that others will us to send us packets
-#   does not need to be specified if different than the BGP local_address
+# local IP address (that others will use to send us encapsulated packets, and that
+# we will use to send)
+# Note: does not need to be specified if different than the BGP local_address
 # dataplane_local_address=1.2.3.4
 
 # required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
@@ -63,9 +64,9 @@ ovsbr_interfaces_mtu=4000
 # EVPN dataplane driver class
 # (bagpipe.bgp, bgp., or bagpipe.bgp.evpn can be omitted)
 # Example values:
-# - dataplane_driver = DummyDataplaneDriver
-# - dataplane_driver = linux_vxlan.LinuxVXLANDataplaneDriver
-# - dataplane_driver = linux_vxlan.LinuxVXLANHybridDataplaneDriver
+#dataplane_driver = DummyDataplaneDriver
+#dataplane_driver = linux_vxlan.LinuxVXLANDataplaneDriver
+#dataplane_driver = linux_vxlan.LinuxVXLANHybridDataplaneDriver
 dataplane_driver = DummyDataplaneDriver
 
 # required to get proper MTU with the LinuxVXLANHybridDataplaneDriver
@@ -82,4 +83,8 @@ ovsbr_interfaces_mtu=4000
 # use another port than the linux kernel default 8472:
 #vxlan_dst_port=8472
 
+# local IP address (that others will use to send us encapsulated packets, and that
+# we will use to send)
+# Note: does not need to be specified if different than the BGP local_address
+#dataplane_local_address=1.2.3.4
 
