@@ -112,7 +112,8 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         if self._is_vxlan_if_on_bridge():
             # Unplug VXLAN interface from Linux bridge
             self._unplug_from_bridge(self.vxlan_if_name)
-            self._remove_vxlan_if()
+
+        self._remove_vxlan_if()
 
     def _remove_vxlan_if(self):
         # Remove VXLAN interface
