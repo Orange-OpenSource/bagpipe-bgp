@@ -303,11 +303,11 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
 
         if (StrictVersion(kernelRelease) <
                 StrictVersion(LinuxVXLANDataplaneDriver.requiredKernel)):
-            raise Exception("%s requires at least Linux kernel %s (you are"
-                            " running %s)" %
-                            (self.__class__.__name__,
-                             LinuxVXLANDataplaneDriver.requiredKernel,
-                             kernelRelease))
+            self.log.warning("%s requires at least Linux kernel %s (you are"
+                             " running %s)" %
+                             (self.__class__.__name__,
+                              LinuxVXLANDataplaneDriver.requiredKernel,
+                              kernelRelease))
 
         self._runCommand("modprobe vxlan")
 
