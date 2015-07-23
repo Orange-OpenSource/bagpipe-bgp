@@ -42,7 +42,17 @@ function create_bagpipe_conf {
 }
 
 # Initialize databases, etc.
+
 function init_bagpipe {
+	if [[ $BAGPIPE_DATAPLANE_DRIVER_IPVPN == *"MPLSOVSDataplaneDriver"* ]]
+		init_bagpipe_ovsmpls
+	else
+		echo "IP VPN driver not MPLSOVSDataplaneDriver, let's not init OVS MPLS bridge ($BAGPIPE_DATAPLANE_DRIVER_IPVPN)"
+	fi
+}
+
+
+function init_bagpipe_ovsmpls {
 
 	:> $BAGPIPE_BR_RESET_SCRIPT
 
