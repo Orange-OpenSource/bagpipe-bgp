@@ -49,7 +49,7 @@ from exabgp.bgp.message.update.attribute.community.extended.communities \
 from exabgp.bgp.message.update.attribute.community.extended import \
     RouteTargetASN2Number as RouteTarget
 
-from exabgp.bgp.message.state import OUT
+from exabgp.bgp.message import OUT
 
 from exabgp.reactor.protocol import AFI, SAFI
 
@@ -124,10 +124,10 @@ class RouteEntry(LookingGlass):
     @property
     def nexthop(self):
         try:
-            return self.nlri.nexthop.ip
+            return self.nlri.nexthop.string
         except AttributeError:
             try:
-                return self.attributes[Attribute.CODE.NEXT_HOP].ip
+                return self.attributes[Attribute.CODE.NEXT_HOP].string
             except KeyError:
                 return None
 
