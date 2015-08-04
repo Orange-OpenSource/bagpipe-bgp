@@ -113,8 +113,6 @@ EOF
 sudo ovs-vsctl del-br $BAGPIPE_MPLS_BR || true
 sudo ovs-vsctl --may-exist add-br $BAGPIPE_MPLS_BR
 #sudo ovs-vsctl --may-exist set-br $BAGPIPE_MPLS_BR datapath_type=netdev
-sudo ovs-vsctl del-port $BAGPIPE_MPLS_BR eth0 || true
-sudo ovs-vsctl del-port $BAGPIPE_MPLS_BR eth1 || true
 # remove the default 'NORMAL' rule
 sudo ovs-ofctl del-flows $BAGPIPE_MPLS_BR --strict priority=0
 
