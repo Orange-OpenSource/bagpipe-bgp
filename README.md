@@ -104,7 +104,7 @@ and the `linux_vxlan.LinuxVXLANDataplaneDriver` for E-VPN.
 currently be used for IP VPNs:
 
 * the MPLSOVSDataplaneDriver can be used on most recent Linux kernels, but 
-  requires an OpenVSwitch with suitable MPLS code (current OVS git trunk is suitable, this code hasn't been successfully tested with OVS 2.3.x); 
+  requires an OpenVSwitch with suitable MPLS code (OVS 2.4 was tested);
   this driver can do bare-MPLS or MPLS-over-GRE (but see [Caveats](#caveats) for MPLS-over-GRE);
   for bare MPLS, this driver requires the OVS bridge to be associated with 
   an IP address, and that VRF interfaces be plugged into OVS prior to 
