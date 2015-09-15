@@ -618,12 +618,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     """
     Dataplane driver using OpenVSwitch
 
-    Based on an OpenVSwtich MPLS kernel dataplane implementation to be
-    included in OVS 2.4.
-
-    In the meantime, the master branch of openvswitch git repository can be
-    used:
-        https://github.com/openvswitch/ovs.git
+    Based on an OpenVSwitch 2.4 MPLS kernel dataplane implementation.
 
     This driver uses MPLS-over-GRE by default. However, note well that current
     OVS implementation of MPLS-over-GRE is not yet conformant with RFC4023,
@@ -734,9 +729,9 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             self._runCommand("fping -v", raiseExceptionOnError=True)
 
         if (not self.vxlanEncap and
-                StrictVersion(self.ovsRelease) < StrictVersion("2.3.90")):
+                StrictVersion(self.ovsRelease) < StrictVersion("2.4.0")):
             self.log.warning(
-                "%s requires at least OVS 2.3.90 (you are running %s)",
+                "%s requires at least OVS 2.4.0 (you are running %s)",
                 self.__class__.__name__, self.ovsRelease)
 
         DataplaneDriver.__init__(self, config, init)
