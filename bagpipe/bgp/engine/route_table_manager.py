@@ -226,17 +226,13 @@ class RouteTableManager(Thread, LookingGlass):
 
     def callbackFirstLocalSubscriber(self, sub):
         if self.firstLocalSubscriberCallback:
-            event = self.firstLocalSubscriberCallback(sub)
-            log.debug("first local subscriber callback for %s: %s", sub, event)
-            if event:
-                self.enqueue(event)
+            log.debug("first local subscriber callback for %s ...", sub)
+            self.firstLocalSubscriberCallback(sub)
 
     def callbackLastLocalSubscriber(self, sub):
         if self.lastLocalSubscriberCallback:
-            event = self.lastLocalSubscriberCallback(sub)
-            log.debug("last local subscriber callback for %s: %s", sub, event)
-            if event:
-                self.enqueue(event)
+            log.debug("last local subscriber callback for %s ...", sub)
+            self.lastLocalSubscriberCallback(sub)
 
     def _workerSubscribes(self, sub):
         # TODO: this function currently will not consider whether or not

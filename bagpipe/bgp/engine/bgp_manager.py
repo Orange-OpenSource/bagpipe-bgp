@@ -119,7 +119,7 @@ class Manager(EventSource, LookingGlass):
                                self._subscription2RTCRouteEntry(sub),
                                self)
             log.debug("Based on subscription => synthesized RTC %s", event)
-            return event
+            self.routeTableManager.enqueue(event)
 
     @logDecorator.log
     def rtcWithdrawalForSub(self, sub):
@@ -129,7 +129,7 @@ class Manager(EventSource, LookingGlass):
                                self)
             log.debug("Based on unsubscription => synthesized withdraw"
                       " for RTC %s", event)
-            return event
+            self.routeTableManager.enqueue(event)
 
     def _subscription2RTCRouteEntry(self, subscription):
 
