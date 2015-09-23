@@ -18,6 +18,8 @@
 import select
 import time
 
+from collections import defaultdict
+
 import traceback
 
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
@@ -26,6 +28,7 @@ from bagpipe.bgp.engine.bgp_peer_worker import KeepAliveReceived
 from bagpipe.bgp.engine.bgp_peer_worker import InitiateConnectionException
 from bagpipe.bgp.engine.bgp_peer_worker import OpenWaitTimeout
 from bagpipe.bgp.engine.bgp_peer_worker import StoppedException
+from bagpipe.bgp.engine.bgp_peer_worker import DEFAULT_HOLDTIME
 
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
@@ -46,6 +49,7 @@ from exabgp.reactor.network.error import LostConnection
 
 from exabgp.bgp.message.open import RouterID
 from exabgp.bgp.message.open.capability.capability import Capability
+from exabgp.bgp.message.open.holdtime import HoldTime
 
 from exabgp.bgp.message import NOP
 from exabgp.bgp.message import Notification
@@ -124,6 +128,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         neighbor.peer_as = ASN(self.config['peer_as'])
         neighbor.local_address = IP.create(self.localAddress)
         neighbor.peer_address = IP.create(self.peerAddress)
+        neighbor.hold_time = HoldTime(DEFAULT_HOLDTIME)
+        neighbor.api = defaultdict(list)
 
         for afi_safi in self.__class__.enabledFamilies:
             neighbor.add_family(afi_safi)
