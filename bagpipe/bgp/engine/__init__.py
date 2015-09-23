@@ -124,10 +124,10 @@ class RouteEntry(LookingGlass):
     @property
     def nexthop(self):
         try:
-            return self.nlri.nexthop.string
+            return self.nlri.nexthop.top()
         except AttributeError:
             try:
-                return self.attributes[Attribute.CODE.NEXT_HOP].string
+                return self.attributes[Attribute.CODE.NEXT_HOP].top()
             except KeyError:
                 return None
 

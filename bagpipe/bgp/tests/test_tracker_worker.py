@@ -71,10 +71,10 @@ def _test_compareRoutes(self, routeA, routeB):
             return 0
         else:
             lpA = routeA.attributes[Attribute.CODE.LOCAL_PREF].localpref
-            nhA = routeA.attributes[Attribute.CODE.NEXT_HOP].ip
+            nhA = routeA.attributes[Attribute.CODE.NEXT_HOP].top()
 
             lpB = routeB.attributes[Attribute.CODE.LOCAL_PREF].localpref
-            nhB = routeB.attributes[Attribute.CODE.NEXT_HOP].ip
+            nhB = routeB.attributes[Attribute.CODE.NEXT_HOP].top()
 
             if nhA != nhB and lpA == lpB:
                 # ECMP routes

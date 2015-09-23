@@ -34,10 +34,7 @@ from bagpipe.bgp.common import logDecorator
 from exabgp.bgp.message.update.nlri.rtc import RTC
 from exabgp.reactor.protocol import AFI, SAFI
 
-from exabgp.bgp.message import OUT
-
 from exabgp.protocol.ip import IP
-
 
 log = logging.getLogger(__name__)
 
@@ -136,10 +133,10 @@ class Manager(EventSource, LookingGlass):
 
     def _subscription2RTCRouteEntry(self, subscription):
 
-        nlri = RTC(
-            AFI(AFI.ipv4), SAFI(SAFI.rtc), None,
-            IP.pton(self.getLocalAddress()),
-            self.config['my_as'], subscription.routeTarget)
+        nlri = RTC.new(AFI(AFI.ipv4), SAFI(SAFI.rtc),
+                       self.config['my_as'],
+                       subscription.routeTarget,
+                       IP.create(self.getLocalAddress()))
 
         routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.rtc), nlri)
 

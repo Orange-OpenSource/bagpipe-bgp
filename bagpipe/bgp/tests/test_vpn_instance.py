@@ -60,7 +60,7 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.vpn.ipvpn import VRF
 
 from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.update.nlri.mpls import MPLSVPN
+from exabgp.bgp.message.update.nlri.ipvpn import IPVPN
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
@@ -69,9 +69,7 @@ from exabgp.protocol.ip import IP
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
-from bagpipe.bgp.vpn.ipvpn import prefixToPackedIPMask
-
-from exabgp.bgp.message import OUT
+from bagpipe.bgp.vpn.ipvpn import IPVPNRouteFactory
 
 
 log = logging.getLogger()
@@ -646,23 +644,13 @@ class TestVPNInstance(TestCase):
         self.assertIn(RT1, _extractRTFromAdvertiseCall(self.vpnInstance))
 
 
-packedPrefix1, mask = prefixToPackedIPMask("1.1.1.1/32")
-packedPrefix2, mask = prefixToPackedIPMask("2.2.2.2/32")
+TEST_RD = RouteDistinguisher.fromElements("42.42.42.42", 5)
 
+vpnNLRI1 = IPVPNRouteFactory(AFI(AFI.ipv4), "1.1.1.1/32",
+                             42, TEST_RD, '45.45.45.45')
 
-vpnNLRI1 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                   packedPrefix1, mask,
-                   Labels([42], True),
-                   RouteDistinguisher.fromElements("42.42.42.42", 5),
-                   IP.pton("45.45.45.45"),
-                   OUT.ANNOUNCE)
-
-vpnNLRI2 = MPLSVPN(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                   packedPrefix2, mask,
-                   Labels([50], True),
-                   RouteDistinguisher.fromElements("42.42.42.42", 5),
-                   IP.pton("45.45.45.45"),
-                   OUT.ANNOUNCE)
+vpnNLRI2 = IPVPNRouteFactory(AFI(AFI.ipv4), "2.2.2.2/32",
+                             50, TEST_RD, '45.45.45.45')
 
 
 class TestVRF(BaseTestBagPipeBGP, TestCase):
@@ -757,7 +745,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         # check that second event is for re-advertised route vpnNLRI2 and
         # contains what we expect
         routeEntry = self.vpnInstance._advertiseRoute.call_args_list[1][0][0]
-        self.assertEqual(vpnNLRI2.prefix(), routeEntry.nlri.prefix())
+        self.assertEqual(vpnNLRI2.cidr.prefix(), routeEntry.nlri.cidr.prefix())
         self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
         self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
         self.vpnInstance._advertiseRoute = Mock()
@@ -767,7 +755,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.vpnInstance.vifUnplugged(MAC2, IP2, False)
         self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count)
         routeEntry = self.vpnInstance._withdrawRoute.call_args_list[0][0][0]
-        self.assertEqual(vpnNLRI2.prefix(), routeEntry.nlri.prefix())
+        self.assertEqual(vpnNLRI2.cidr.prefix(), routeEntry.nlri.cidr.prefix())
         self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
         self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
         self.vpnInstance._advertiseRoute = Mock()

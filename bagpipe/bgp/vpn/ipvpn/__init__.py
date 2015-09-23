@@ -27,36 +27,21 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 
+from bagpipe.bgp.engine.ipvpn import IPVPN as IPVPNNlri
+from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
+
 from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver \
     as _DummyDataplaneDriver
 
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 
+from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
-from exabgp.bgp.message.update.nlri.mpls import MPLSVPN
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
 
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
-
-from exabgp.bgp.message import OUT
-
-from exabgp.protocol.ip import IP
-
 IPVPN = "ipvpn"
-
-
-def prefixFromNLRI(nlri):
-    return "%s/%s" % (nlri.ip, nlri.mask)
-
-
-def prefixToPackedIPMask(prefix):
-    ipString, mask = prefix.split("/")
-    return (IP.pton(ipString), int(mask))
 
 
 class DummyDataplaneDriver(_DummyDataplaneDriver):
@@ -82,10 +67,9 @@ class VRF(VPNInstance, LookingGlass):
 
     def _nlriFrom(self, prefix, label, rd):
         assert(rd is not None)
-        packedPrefix, mask = prefixToPackedIPMask(prefix)
-        return MPLSVPN(self.afi, self.safi, packedPrefix, mask,
-                       Labels([label], True), rd,
-                       IP.pton(self.dataplaneDriver.getLocalAddress()))
+
+        return IPVPNRouteFactory(self.afi, prefix, label, rd,
+                                 self.dataplaneDriver.getLocalAddress())
 
     def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
@@ -106,6 +90,7 @@ class VRF(VPNInstance, LookingGlass):
             10000+label)
 
     def _routeForReAdvertisement(self, prefix, label):
+        self.log.debug("prefix: %s", prefix)
         nlri = self._nlriFrom(prefix, label,
                               self._getRDFromLabel(label))
 
@@ -116,28 +101,28 @@ class VRF(VPNInstance, LookingGlass):
 
     @logDecorator.log
     def _readvertise(self, nlri):
-        self.log.debug("Start re-advertising %s from VRF", nlri.prefix)
+        self.log.debug("Start re-advertising %s from VRF", nlri.cidr.prefix())
         for label in self._getLocalLabels():
             self.log.debug("Start re-advertising %s from VRF, with label %s",
-                           nlri.prefix, label)
+                           nlri.cidr.prefix(), label)
             # need a distinct RD for each route...
-            routeEntry = self._routeForReAdvertisement(prefixFromNLRI(nlri),
+            routeEntry = self._routeForReAdvertisement(nlri.cidr.prefix(),
                                                        label)
             self._advertiseRoute(routeEntry)
 
-        self.readvertised.add(nlri.prefix())
+        self.readvertised.add(nlri.cidr.prefix())
 
     @logDecorator.log
     def _readvertiseStop(self, nlri):
-        self.log.debug("Stop re-advertising %s from VRF", nlri.prefix)
+        self.log.debug("Stop re-advertising %s from VRF", nlri.cidr.prefix())
         for label in self._getLocalLabels():
             self.log.debug("Stop re-advertising %s from VRF, with label %s",
-                           nlri.prefix, label)
-            routeEntry = self._routeForReAdvertisement(prefixFromNLRI(nlri),
+                           nlri.cidr.prefix(), label)
+            routeEntry = self._routeForReAdvertisement(nlri.cidr.prefix(),
                                                        label)
             self._withdrawRoute(routeEntry)
 
-        self.readvertised.remove(nlri.prefix())
+        self.readvertised.remove(nlri.cidr.prefix())
 
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
                    advertiseSubnet):
@@ -165,8 +150,8 @@ class VRF(VPNInstance, LookingGlass):
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
     def _route2trackedEntry(self, route):
-        if isinstance(route.nlri, MPLSVPN):
-            return route.nlri.prefix()
+        if isinstance(route.nlri, IPVPNNlri):
+            return route.nlri.cidr.prefix()
         else:
             self.log.error("We should not receive routes of type %s",
                            type(route.nlri))
