@@ -620,6 +620,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
 
     Based on an OpenVSwitch 2.4 MPLS kernel dataplane implementation.
 
+    This driver was succesfully tested with the OVS 2.4 DKMS module.
+
     This driver uses MPLS-over-GRE by default. However, note well that current
     OVS implementation of MPLS-over-GRE is not yet conformant with RFC4023,
     because of an intermediate Eth header (MPLS-over-Eth-over-GRE).
@@ -659,7 +661,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             (o, _) = self._runCommand("ovs-ofctl -V | head -1 |"
                                       " awk '{print $4}'")
             self.ovsRelease = o[0]
-            self.log.info("OVS kernel module %s", self.ovsRelease)
+            self.log.info("OVS version: %s", self.ovsRelease)
         except:
             self.log.warning("Could not determine OVS release")
             self.ovsRelease = None
