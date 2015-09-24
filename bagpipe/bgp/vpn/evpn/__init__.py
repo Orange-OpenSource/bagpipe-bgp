@@ -156,7 +156,7 @@ class EVI(VPNInstance, LookingGlass):
                              EthernetTag(),
                              IP.create(self.bgpManager.getLocalAddress()),
                              None,
-                             IP.pton(self.bgpManager.getLocalAddress()))
+                             IP.create(self.bgpManager.getLocalAddress()))
 
         attributes = Attributes()
 
@@ -183,7 +183,7 @@ class EVI(VPNInstance, LookingGlass):
         nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8,
                        Labels([self.instanceLabel]),
                        IP.create(ipPrefix), None,
-                       IP.pton(self.dataplaneDriver.getLocalAddress()))
+                       IP.create(self.dataplaneDriver.getLocalAddress()))
 
         return RouteEntry(self.afi, self.safi, nlri)
 
