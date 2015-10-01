@@ -3,4 +3,9 @@ bottle >= 0.11.3
 python-daemon >= 1.5.5
 netaddr >= 0.7.7
 twisted >= 13.2
-exabgp >= 3.9
+
+#exabgp >= 3.9
+#until exabgp 3.9 or 4 is released:
+-e https://github.com/Exa-Networks/exabgp.git#egg=exabgp
+#-e https://github.com/Exa-Networks/exabgp.git@<commitid>#egg=exabgp
+
