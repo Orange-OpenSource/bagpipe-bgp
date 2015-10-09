@@ -70,16 +70,19 @@ def setupExaBGPEnv():
     from exabgp.configuration.environment import environment
     import exabgp.configuration.setup  # initialises environment.configuration
     environment.application = 'bagpipe-bgp'
-    conf = environment.setup(None)
+    env = environment.setup(None)
     # tell exabgp to parse routes:
-    conf.log.routes = True
+    env.log.routes = True
     # FIXME: find a way to redirect exabgp logs into bagpipe's
-    conf.log.destination = "stderr"
-    conf.log.level = repr(log.getEffectiveLevel())
-    conf.log.all = True
-    conf.log.packets = True
-
-setupExaBGPEnv()
+    env.log.destination = "stderr"
+    if log.getEffectiveLevel():
+        env.log.level = environment.syslog_value(
+            logging.getLevelName(log.getEffectiveLevel())
+            )
+    else:
+        env.log.level = environment.syslog_value('INFO')
+    env.log.all = True
+    env.log.packets = True
 
 
 TranslateExaBGPState = {ExaFSM.IDLE: FSM.Idle,
@@ -99,6 +102,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
     def __init__(self, routeTableManager, name, peerAddress, config):
         BGPPeerWorker.__init__(self, routeTableManager, name, peerAddress)
+
+        setupExaBGPEnv()
+
         self.config = config
         self.localAddress = self.config['local_address']
         self.peerAddress = peerAddress
