@@ -22,7 +22,7 @@ import socket
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.bgp.vpn.vpn_instance import VPNInstance
+from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
@@ -40,6 +40,11 @@ from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
+
+from exabgp.bgp.message.update import Attribute
+from exabgp.bgp.message.update.nlri.flow import Flow
+from exabgp.bgp.message.update.attribute.community.extended \
+    import TrafficRedirect
 
 IPVPN = "ipvpn"
 
@@ -59,6 +64,7 @@ class VRF(VPNInstance, LookingGlass):
     type = IPVPN
     afi = AFI(AFI.ipv4)
     safi = SAFI(SAFI.mpls_vpn)
+    flow_safi = SAFI(SAFI.flow_ip)
 
     @logDecorator.log
     def __init__(self, *args, **kwargs):
@@ -123,6 +129,18 @@ class VRF(VPNInstance, LookingGlass):
 
         self.readvertised.remove(nlri.cidr.prefix())
 
+    @logDecorator.log
+    def _routeForRedirectPrefix(self, prefix):
+        prefixClassifier = self.attractClassifier.copy()
+        prefixClassifier['destinationPrefix'] = prefix
+
+        trafficClassifier = TrafficClassifier(**prefixClassifier)
+        self.log.debug("Advertising prefix %s for redirection based on "
+                       "traffic classifier %s", prefix, trafficClassifier)
+        rules = trafficClassifier.mapTrafficClassifier2RedirectRules()
+
+        return self.synthesizeRedirectBGPRoute(rules)
+
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
                    advertiseSubnet):
         VPNInstance.vifPlugged(self, macAddress, ipAddressPrefix, localPort,
@@ -151,6 +169,8 @@ class VRF(VPNInstance, LookingGlass):
     def _route2trackedEntry(self, route):
         if isinstance(route.nlri, IPVPNNlri):
             return route.nlri.cidr.prefix()
+        elif isinstance(route.nlri, Flow):
+            return (Flow, route.nlri)
         else:
             self.log.error("We should not receive routes of type %s",
                            type(route.nlri))
@@ -170,26 +190,44 @@ class VRF(VPNInstance, LookingGlass):
 
         prefix = entry
 
-        if self.readvertise:
-            # check if this is a route we need to re-advertise
-            self.log.debug("route RTs: %s", newRoute.routeTargets)
-            self.log.debug("readv from RTs: %s", self.readvertiseFromRTs)
-            if self._toReadvertise(newRoute):
-                self.log.debug("Need to re-advertise %s", prefix)
-                self._readvertise(newRoute.nlri)
-                if not self._imported(newRoute):
-                    self.log.debug("No need to setup dataplane for:%s", prefix)
-                    return
+        if isinstance(newRoute.nlri, Flow):
+            if Attribute.CODE.EXTENDED_COMMUNITY in newRoute.attributes:
+                ecoms = newRoute.attributes[
+                    Attribute.CODE.EXTENDED_COMMUNITY].communities
+                for ecom in ecoms:
+                    if isinstance(ecom, TrafficRedirect):
+                        redirectRT = "%s:%s" % (ecom.asn, ecom.target)
+                        self.vpnManager.trafficRedirectToVPN(self,
+                                                             redirectRT,
+                                                             newRoute.nlri.rules)
 
-        encaps = self._checkEncaps(newRoute)
-        if not encaps:
-            return
+        else:
+            if self.readvertise:
+                # check if this is a route we need to re-advertise
+                self.log.debug("route RTs: %s", newRoute.routeTargets)
+                self.log.debug("readv from RTs: %s", self.readvertiseFromRTs)
+                if self._toReadvertise(newRoute):
+                    self.log.debug("Need to re-advertise %s", prefix)
+                    self._readvertise(newRoute.nlri)
 
-        assert(len(newRoute.nlri.labels.labels) == 1)
+                    if self.attractTraffic:
+                        flowEntry = self._routeForRedirectPrefix(prefix)
+                        self._advertiseRoute(flowEntry)
 
-        self.dataplane.setupDataplaneForRemoteEndpoint(
-            prefix, newRoute.nexthop,
-            newRoute.nlri.labels.labels[0], newRoute.nlri, encaps)
+                    if not self._imported(newRoute):
+                        self.log.debug("No need to setup dataplane for:%s",
+                                       prefix)
+                        return
+
+            encaps = self._checkEncaps(newRoute)
+            if not encaps:
+                return
+
+            assert(len(newRoute.nlri.labels.labels) == 1)
+
+            self.dataplane.setupDataplaneForRemoteEndpoint(
+                prefix, newRoute.nexthop,
+                newRoute.nlri.labels.labels[0], newRoute.nlri, encaps)
 
     @utils.synchronized
     @logDecorator.log
@@ -197,25 +235,40 @@ class VRF(VPNInstance, LookingGlass):
 
         prefix = entry
 
-        if self.readvertise and last:
-            # check if this is a route we were re-advertising
-            if self._toReadvertise(oldRoute):
-                self.log.debug("Need to stop re-advertising %s", prefix)
-                self._readvertiseStop(oldRoute.nlri)
-                if not self._imported(oldRoute):
-                    self.log.debug("No need to setup dataplane for:%s", prefix)
-                    return
+        if isinstance(oldRoute.nlri, Flow):
+            if Attribute.CODE.EXTENDED_COMMUNITY in oldRoute.attributes:
+                ecoms = oldRoute.attributes[
+                    Attribute.CODE.EXTENDED_COMMUNITY].communities
+                for ecom in ecoms:
+                    if isinstance(ecom, TrafficRedirect):
+                        redirectRT = "%s:%s" % (ecom.asn, ecom.target)
+                        self.vpnManager.trafficIndirectFromVPN(self,
+                                                               redirectRT)
+        else:
+            if self.readvertise and last:
+                # check if this is a route we were re-advertising
+                if self._toReadvertise(oldRoute):
+                    self.log.debug("Need to stop re-advertising %s", prefix)
+                    self._readvertiseStop(oldRoute.nlri)
 
-        if self._skipRouteRemoval(last):
-            self.log.debug("Skipping removal of non-last route because "
-                           "dataplane does not want it")
-            return
+                    if self.attractTraffic:
+                        flowEntry = self._routeForRedirectPrefix(prefix)
+                        self._withdrawRoute(flowEntry)
 
-        assert(len(oldRoute.nlri.labels.labels) == 1)
+                    if not self._imported(oldRoute):
+                        self.log.debug("No need to setup dataplane for:%s", prefix)
+                        return
 
-        self.dataplane.removeDataplaneForRemoteEndpoint(
-            prefix, oldRoute.nexthop,
-            oldRoute.nlri.labels.labels[0], oldRoute.nlri)
+            if self._skipRouteRemoval(last):
+                self.log.debug("Skipping removal of non-last route because "
+                               "dataplane does not want it")
+                return
+
+            assert(len(oldRoute.nlri.labels.labels) == 1)
+
+            self.dataplane.removeDataplaneForRemoteEndpoint(
+                prefix, oldRoute.nexthop,
+                oldRoute.nlri.labels.labels[0], oldRoute.nlri)
 
     def getLGMap(self):
         return {

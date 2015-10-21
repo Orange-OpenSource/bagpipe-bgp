@@ -122,6 +122,12 @@ def createSpecialNetNSPort(options):
                raiseExceptionOnError=False)
 
 
+def classifier_callback(option, opt_str, value, parser):
+    if not hasattr(parser.values, 'classifier'):
+        parser.values.classifier = dict()
+    parser.values.classifier.update({option.dest: value})
+
+
 def main():
     usage = "usage: %prog [--attach|--detach] --network-type (ipvpn|evpn) "\
         "--port (<port>|netns) --ip <ip>[/<mask>] [options] (see --help)"
@@ -203,6 +209,32 @@ def main():
                       help="enables route readvertisement to these RTs,"
                       " works in conjunction with --readv-from-rt",
                       default=[], action="append")
+
+    parser.add_option("--redirect-rt", dest="redirectRT",
+                      help="Redirection route target to attract traffic, "
+                      "matching the traffic classifier, in specified VRF from "
+                      "any VRF importing this route target",
+                      default=None)
+    parser.add_option("--source-prefix", dest="sourcePrefix",
+                      type="string", help="Traffic classifier source prefix "
+                      "filter",
+                      action="callback", callback=classifier_callback)
+    parser.add_option("--destination-prefix", dest="destinationPrefix",
+                      type="string", help="Traffic classifier destination "
+                      "prefix filter",
+                      action="callback", callback=classifier_callback)
+    parser.add_option("--source-port", dest="sourcePort",
+                      type="string", help="Traffic classifier source port "
+                      "number or range filter",
+                      action="callback", callback=classifier_callback)
+    parser.add_option("--destination-port", dest="destinationPort",
+                      type="string", help="Traffic classifier destination port"
+                      " number or range filter",
+                      action="callback", callback=classifier_callback)
+    parser.add_option("--protocol", dest="protocol",
+                      type="string", help="Traffic classifier IP protocol "
+                      "filter",
+                      action="callback", callback=classifier_callback)
 
     (options, _) = parser.parse_args()
 
@@ -303,6 +335,15 @@ def main():
         readvertise = {"from_rt": options.reAdvFromRTs,
                        "to_rt": options.reAdvToRTs}
 
+    attract_traffic = dict()
+    if options.redirectRT:
+        if options.classifier:
+            attract_traffic.update(dict({'redirect_rt': options.redirectRT,
+                                         'classifier': options.classifier}))
+        else:
+            parser.error("Need to specify --redirect-rt and at least one "
+                         "traffic classifier option")
+
     json_data = json.dumps({"import_rt":  importRTs,
                             "export_rt":  exportRTs,
                             "local_port":  local_port,
@@ -312,7 +353,8 @@ def main():
                             "mac_address": options.mac,
                             "ip_address":  options.ip,
                             "advertise_subnet": options.advertiseSubnet,
-                            "readvertise": readvertise
+                            "readvertise": readvertise,
+                            "attract_traffic": attract_traffic
                             })
 
     print "request: %s" % json_data
