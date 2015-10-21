@@ -14,6 +14,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
+import socket
+
+import re
 
 from abc import ABCMeta, abstractmethod
 
@@ -40,10 +44,194 @@ from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 from exabgp.bgp.message.update.attribute.attribute import Attribute
 
+from exabgp.bgp.message.open.asn import ASN
+
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
+from exabgp.bgp.message.update.attribute.community.extended \
+    import TrafficRedirect
+
+from exabgp.bgp.message.update.nlri.flow import (
+    Flow, FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
+    Flow6Source, Flow4Destination, Flow6Destination, NumericOperator)
+
+from exabgp.protocol import Protocol
 
 from bagpipe.bgp.rest_api import APIException
+
+log = logging.getLogger(__name__)
+
+
+class TrafficClassifier(object):
+
+    def __init__(self, sourcePrefix=None, destinationPrefix=None,
+                 sourcePort=None, destinationPort=None, protocol='tcp'):
+        self.sourcePrefix = sourcePrefix
+        self.destinationPrefix = destinationPrefix
+
+        if sourcePort:
+            if ":" in sourcePort:
+                self.sourcePort = tuple(
+                    [int(p) for p in sourcePort.split(":")]
+                )
+            else:
+                self.sourcePort = int(sourcePort)
+        else:
+            self.sourcePort = sourcePort
+
+        if destinationPort:
+            if ":" in destinationPort:
+                self.destinationPort = tuple(
+                    [int(p) for p in destinationPort.split(":")]
+                )
+            else:
+                self.destinationPort = int(destinationPort)
+        else:
+            self.destinationPort = destinationPort
+
+        self.protocol = protocol
+
+    def __repr__(self):
+        return "traffic-classifier:%s" % str(self)
+
+    def __str__(self):
+        return "%s-%s,%s-%s,%s" % (self.sourcePrefix or "*",
+                                   self.sourcePort or "*",
+                                   self.destinationPrefix or "*",
+                                   self.destinationPort or "*",
+                                   self.protocol)
+
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__) and
+                self.__dict__ == other.__dict__)
+
+    def _interpretPortRule(self, rule):
+        if len(rule) == 1:
+            op = rule[0].operations
+            port = rule[0].value
+            if op == '>=':
+                port_range = (int(port), 65535)
+            elif op == '<=':
+                port_range = (0, int(port))
+            elif op == '>':
+                port_range = (int(port)+1, 65535)
+            elif op == '<':
+                port_range = (0, int(port)-1)
+            else:
+                port_range = int(port)
+        else:
+            port_range = ()
+            for index in range(len(rule)):
+                op = rule[index].operations
+                port = rule[index].value
+                if op == '>=' or op == '<=':
+                    port_range += int(port)
+                elif op == '>':
+                    port_range += int(port)+1
+                elif op == '<':
+                    port_range += int(port)-1
+
+        return port_range
+
+    @logDecorator.log
+    def _constructPortRules(self, port_range, flow_object):
+        log.info("Construct port rules with %s (type %s) on %s object",
+                 port_range, type(port_range), flow_object)
+        port_rules = list()
+
+        # Check if port range or port number
+        if type(port_range) == tuple:
+            port_min, port_max = port_range
+
+            if int(port_min) == 0:
+                # Operator <
+                port_rules.append(flow_object(NumericOperator.LT,
+                                              port_max))
+            elif int(port_max) == 65535:
+                # Operator >
+                port_rules.append(flow_object(NumericOperator.GT,
+                                              port_min))
+            else:
+                # Operator >=
+                gt_eq_op = (NumericOperator.GT | NumericOperator.EQ)
+                # Operator &<=
+                lt_eq_op = (NumericOperator.AND | NumericOperator.LT |
+                            NumericOperator.EQ)
+                port_rules.append(flow_object(gt_eq_op, port_min))
+                port_rules.append(flow_object(lt_eq_op, port_max))
+        else:
+            port_rules.append(flow_object(NumericOperator.EQ,
+                                          port_range))
+
+        return port_rules
+
+    def _getSourcePrefix(self, rule):
+        self.sourcePrefix = rule[0].cidr.prefix()
+
+    def _getDestinationPrefix(self, rule):
+        self.destinationPrefix = rule[0].cidr.prefix()
+
+    def _parseAnyPort(self, rule):
+        self.sourcePort = self._interpretPortRule(rule)
+        self.destinationPort = list(self.sourcePort)
+
+    def _parseSourcePort(self, rule):
+        self.sourcePort = self._interpretPortRule(rule)
+
+    def _parseDestinationPort(self, rule):
+        self.destinationPort = self._interpretPortRule(rule)
+
+    def _getProtocol(self, rule):
+        self.protocol = Protocol.names[rule[0].value]
+
+    def mapTrafficClassifier2RedirectRules(self):
+        rules = list()
+        if self.sourcePrefix:
+            ip, mask = self.sourcePrefix.split('/')
+            if IPNetwork(self.sourcePrefix).version == 4:
+                rules.append(Flow4Source(socket.inet_pton(socket.AF_INET, ip),
+                                         int(mask)))
+            elif IPNetwork(self.sourcePrefix).version == 6:
+                rules.append(Flow6Source(socket.inet_pton(socket.AF_INET6, ip),
+                                         int(mask), 0))  # TODO: IPv6 offset ??
+
+        if self.destinationPrefix:
+            ip, mask = self.destinationPrefix.split('/')
+            if IPNetwork(self.destinationPrefix).version == 4:
+                rules.append(
+                    Flow4Destination(socket.inet_pton(socket.AF_INET, ip),
+                                     int(mask))
+                )
+            elif IPNetwork(self.destinationPrefix).version == 6:
+                rules.append(
+                    Flow6Destination(socket.inet_pton(socket.AF_INET6, ip),
+                                     int(mask), 0)
+                )  # TODO: IPv6 offset ??
+
+        if self.sourcePort:
+            rules += self._constructPortRules(self.sourcePort,
+                                              FlowSourcePort)
+
+        if self.destinationPort:
+            rules += self._constructPortRules(self.destinationPort,
+                                              FlowDestinationPort)
+
+        if self.protocol:
+            rules.append(FlowIPProtocol(NumericOperator.EQ,
+                                        Protocol.codes[self.protocol]))
+
+        return rules
+
+    def mapRedirectRules2TrafficClassifier(self, rules):
+        components = {1: self._getDestinationPrefix,  # FlowDestinationPrefix
+                      2: self._getSourcePrefix,  # FlowSourcePrefix
+                      3: self._getProtocol,  # FlowIPProtocol
+                      4: self._parseAnyPort,  # FlowAnyPort
+                      5: self._parseDestinationPort,  # FLowDestinationPort
+                      6: self._parseSourcePort}  # FlowSourcePort
+
+        for ID, rule in rules.iteritems():
+            components[ID](rule)
 
 
 class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
@@ -51,11 +239,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     afi = None
     safi = None
+    flow_safi = None
 
     @logDecorator.log
-    def __init__(self, bgpManager, labelAllocator, dataplaneDriver,
+    def __init__(self, vpnManager, dataplaneDriver,
                  externalInstanceId, instanceId, importRTs, exportRTs,
-                 gatewayIP, mask, readvertise, **kwargs):
+                 gatewayIP, mask, readvertise, attractTraffic, **kwargs):
+
+        self.vpnManager = vpnManager
 
         self.instanceType = self.__class__.__name__
         self.instanceId = instanceId
@@ -68,7 +259,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         else:
             compareRoutes = compareNoECMP
 
-        TrackerWorker.__init__(self, bgpManager, "%s %d" %
+        TrackerWorker.__init__(self, self.vpnManager.bgpManager, "%s %d" %
                                (self.instanceType, self.instanceId),
                                compareRoutes)
 
@@ -85,13 +276,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
+        self.flow_safi = self.__class__.flow_safi
         assert(isinstance(self.afi, AFI))
         assert(isinstance(self.safi, SAFI))
+        assert(isinstance(self.flow_safi, SAFI))
 
         self.dataplaneDriver = dataplaneDriver
-        self.labelAllocator = labelAllocator
 
-        self.instanceLabel = self.labelAllocator.getNewLabel(
+        self.instanceLabel = self.vpnManager.labelAllocator.getNewLabel(
             "Incoming traffic for %s %d" % (self.instanceType,
                                             self.instanceId))
 
@@ -110,6 +302,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         for rt in self.importRTs:
             self._subscribe(self.afi, self.safi, rt)
+            # Subscribe to FlowSpec AFI/SAFI
+            self._subscribe(self.afi, self.flow_safi, rt)
 
         if readvertise:
             self.readvertise = True
@@ -126,6 +320,20 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.log.debug("readvertise not enabled")
             self.readvertise = False
 
+        if self.readvertise and attractTraffic:
+            self.attractTraffic = True
+            self.attractRT = attractTraffic['redirect_rt']
+            try:
+                self.attractClassifier = attractTraffic['classifier']
+            except KeyError:
+                raise APIException("'attractTraffic' specified with no "
+                                   "'classifier'")
+            self.log.debug("Attract traffic enabled for RT: %s and classifier:"
+                           " %s", self.attractRT, self.attractClassifier)
+        else:
+            self.log.debug("attract traffic not enabled")
+            self.attractTraffic = False
+
     @utils.synchronized
     def stop(self):
         self._stop()
@@ -138,7 +346,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         self.dataplane.cleanup()
 
-        self.labelAllocator.release(self.instanceLabel)
+        self.vpnManager.labelAllocator.release(self.instanceLabel)
 
         # this makes sure that the thread will be stopped, and any remaining
         # routes/subscriptions are released:
@@ -244,7 +452,31 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         routeEntry.attributes.add(self._genExtendedCommunities())
         routeEntry.setRouteTargets(self.exportRTs)
 
-        self.log.debug("synthesized route entry: %s", routeEntry)
+        self.log.debug("Synthesized Vif route entry: %s", routeEntry)
+        return routeEntry
+
+    def synthesizeRedirectBGPRoute(self, rules):
+        self.log.info("synthesizeRedirectBGPRoute called for rules %s", rules)
+        nlri = Flow()
+        for rule in rules:
+            nlri.add(rule)
+
+        routeEntry = RouteEntry(self.afi, self.flow_safi, nlri)
+
+        assert(isinstance(routeEntry, RouteEntry))
+
+        ecommunities = ExtendedCommunities()
+        # TODO: Check readvertiseToRTs length
+        asn, target = (self.readvertiseToRTs[0].asn,
+                       self.readvertiseToRTs[0].number)
+        ecommunities.communities.append(
+            TrafficRedirect(ASN(int(asn)), int(target))
+        )
+
+        routeEntry.attributes.add(ecommunities)
+        routeEntry.setRouteTargets(self.attractRT)
+
+        self.log.debug("Synthesized redirect route entry: %s", routeEntry)
         return routeEntry
 
     @utils.synchronized
@@ -283,7 +515,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.log.debug("Plugging port (%s)", ipPrefix)
 
             portData = dict()
-            portData['label'] = self.labelAllocator.getNewLabel(
+            portData['label'] = self.vpnManager.labelAllocator.getNewLabel(
                 "Incoming traffic for %s %d, interface %s, endpoint %s/%s" %
                 (self.instanceType, self.instanceId, localPort['linuxif'],
                  macAddress, ipAddressPrefix)
@@ -384,7 +616,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                 macAddress, ipPrefix, localPort, label, lastEndpoint)
 
             # Free label to the allocator
-            self.labelAllocator.release(label)
+            self.vpnManager.labelAllocator.release(label)
 
             # Forget data for this port if last endpoint
             if lastEndpoint:
@@ -401,6 +633,42 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                            " port data is incomplete", macAddress,
                            ipAddressPrefix)
             raise Exception("BGP component bug, check its logs")
+
+    @logDecorator.log
+    def trafficRedirected(self, redirectRT, rules, redirectPort):
+        self.log.debug("Traffic redirected to VRF importing route target %s "
+                       "based on rules %s and port", redirectRT, rules,
+                       redirectPort)
+        classifier = TrafficClassifier()
+        classifier.mapRedirectRules2TrafficClassifier(rules)
+
+        self.dataplane.addDataplaneForTrafficClassifier(classifier,
+                                                        redirectPort)
+
+        if not hasattr(self, 'redirectRT2classifierAndPort'):
+            # One redirect route target -> One traffic classifier and one
+            # redirect port tuple
+            self.redirectRT2classifierAndPort = dict()
+
+        self.redirectRT2classifierAndPort[redirectRT] = (
+            dict(classifier=classifier, port=redirectPort)
+        )
+
+    @logDecorator.log
+    def trafficIndirected(self, redirectRT):
+        self.log.debug("Traffic indirected from VRF importing route target "
+                       "%s ", redirectRT)
+
+        if redirectRT in self.redirectRT2classifierAndPort:
+            classifier = self.redirectRT2classifierAndPort[redirectRT].get('classifier')
+        else:
+            self.log.error("trafficIndirected called for redirect route "
+                           "target %s, but doesn't exist", redirectRT)
+            raise Exception("BGP component bug, check its logs")
+
+        self.dataplane.removeDataplaneForTrafficClassifier(classifier)
+
+        del self.redirectRT2classifierAndPort[redirectRT]
 
     def _checkEncaps(self, route):
         '''
@@ -441,6 +709,18 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         '''
         return not last and not (self.dataplaneDriver.makeB4BreakSupport or
                                  self.dataplaneDriver.ecmpSupport)
+
+    # Callbacks for BGP route updates (TrackerWorker) ########################
+
+    @utils.synchronized
+    @logDecorator.log
+    def _newBestRoute(self, entry, newRoute):
+        pass
+
+    @utils.synchronized
+    @logDecorator.log
+    def _bestRouteRemoved(self, entry, oldRoute, last):
+        pass
 
     # Looking Glass ####
 

@@ -393,6 +393,9 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         return (port, port2vm, localport_match, push_vlan_action,
                 strip_vlan_action, port_unplug_action)
 
+    def getRedirectPort(self):
+        return self.patchPortOutNumber
+
     @logDecorator.log
     def vifPlugged(self, macAddress, ipAddress, localPort, label):
 
@@ -587,6 +590,50 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         # since multiple routes to the same prefix cannot co-exist in OVS
         # a delete action cannot selectively delete one next-hop
         # hence this driver does not support make-before-break
+
+    def _createFlowMatchFromTrafficClassifier(self, classifier):
+        flow_match = ''
+        if classifier.sourcePrefix:
+            flow_match += ',nw_src=%s' % classifier.sourcePrefix
+        if classifier.destinationPrefix:
+            flow_match += ',nw_dst=%s' % classifier.destinationPrefix
+        if classifier.sourcePort:
+            if type(classifier.sourcePort) == tuple:
+                port_min, port_max = classifier.sourcePort
+                flow_match += ',tp_src=%d' % port_min
+                flow_match += '/%d' % 65535 - (port_max - port_min)
+            else:
+                flow_match += ',tp_src=%d' % classifier.sourcePort
+        if classifier.destinationPort:
+            if type(classifier.destinationPort) == tuple:
+                port_min, port_max = classifier.destinationPort
+                flow_match += ',tp_dst=%d' % port_min
+                flow_match += '/%d' % 65535 - (port_max - port_min)
+            else:
+                flow_match += ',tp_dst=%d' % classifier.destinationPort
+
+        return flow_match
+
+    @logDecorator.logInfo
+    def addDataplaneForTrafficClassifier(self, classifier, output):
+        flow_match = self._createFlowMatchFromTrafficClassifier(classifier)
+
+        # Map traffic to redirect VRF patch port
+        self._ovs_flow_add('%s,in_port=%s%s' % (classifier.protocol,
+                                                self.patchPortInNumber,
+                                                flow_match),
+                           'output:%s' % output,
+                           self.driver.ovs_table_vrfs)
+
+    @logDecorator.logInfo
+    def removeDataplaneForTrafficClassifier(self, classifier):
+        flow_match = self._createFlowMatchFromTrafficClassifier(classifier)
+
+        # Unmap traffic to redirect VRF patch port
+        self._ovs_flow_del('%s,in_port=%s%s' % (classifier.protocol,
+                                                self.patchPortInNumber,
+                                                flow_match),
+                           self.driver.ovs_table_vrfs)
 
     def _ovs_flow_add(self, flow, actions, table):
         self.driver._ovs_flow_add("cookie=%d,priority=%d,%s" %

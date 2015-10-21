@@ -231,10 +231,54 @@ class VPNManager(LookingGlass):
             runCommand(log, "ovs-vsctl del-port %s" % ipvpn_if)
             runCommand(log, "ip link delete %s" % ipvpn_if)
 
+    def getRedirectPort(self, externalInstanceId):
+        try:
+            vrf = self.vpnInstances[externalInstanceId]
+            return vrf.dataplane.getRedirectPort()
+        except KeyError:
+            log.error("Try to get patch port from non existing VRF %s",
+                      externalInstanceId)
+            raise exc.VPNNotFound(externalInstanceId)
+
+    @logDecorator.logInfo
+    def _createVPNInstance(self, externalInstanceId, instanceType, importRTs,
+                           exportRTs, gatewayIP, mask, readvertise,
+                           attractTraffic, **kwargs):
+        instanceId = self.getInstanceId()
+        log.info("Create and start new VPN instance %d for external "
+                 "instance identifier %s", instanceId, externalInstanceId)
+        try:
+            vpnInstanceFactory = VPNManager.type2class[instanceType]
+        except KeyError:
+            log.error("Unsupported instanceType for VPNInstance: %s",
+                      instanceType)
+            raise Exception("Unsupported instance type: %s" % instanceType)
+
+        try:
+            dataplaneDriver = self.dataplaneDrivers[instanceType]
+        except KeyError:
+            log.error("No dataplane driver for VPN type %s",
+                      instanceType)
+            raise Exception("No dataplane driver for VPN type %s" %
+                            instanceType)
+
+        vpnInstance = vpnInstanceFactory(
+            self, dataplaneDriver,
+            externalInstanceId, instanceId, importRTs, exportRTs,
+            gatewayIP, mask, readvertise, attractTraffic, **kwargs)
+
+        # Update VPN instance list
+        self.vpnInstances[externalInstanceId] = vpnInstance
+
+        vpnInstance.start()
+
+        return vpnInstance
+
     @logDecorator.logInfo
     def plugVifToVPN(self, externalInstanceId, instanceType, importRTs,
                      exportRTs, macAddress, ipAddress, gatewayIP,
-                     localPort, linuxbr, advertiseSubnet, readvertise):
+                     localPort, linuxbr, advertiseSubnet, readvertise,
+                     attractTraffic):
 
         # Verify and format IP address with prefix if necessary
         try:
@@ -253,6 +297,13 @@ class VPNManager(LookingGlass):
             except KeyError as e:
                 raise Exception("Wrong 'readvertise' parameters: %s" % e)
 
+        if attractTraffic:
+            try:
+                attractTraffic['redirect_rt'] = (
+                    convertRouteTargets([attractTraffic['redirect_rt']]))
+            except KeyError as e:
+                raise Exception("Wrong 'attractTraffic' parameters: %s" % e)
+
         # retrieve network mask
         mask = int(ipAddressPrefix.split('/')[1])
 
@@ -264,39 +315,14 @@ class VPNManager(LookingGlass):
                                 "of a different type (existing: %s, asked: %s)"
                                 % (vpnInstance.type, instanceType))
         except KeyError:
-            instanceId = self.getInstanceId()
-            log.info("Create and start new VPN instance %d for external "
-                     "network instance identifier %s", instanceId,
-                     externalInstanceId)
-            try:
-                vpnInstanceFactory = VPNManager.type2class[instanceType]
-            except KeyError:
-                log.error("Unsupported instanceType for VPNInstance: %s",
-                          instanceType)
-                raise Exception("Unsupported instance type: %s" % instanceType)
-
-            try:
-                dataplaneDriver = self.dataplaneDrivers[instanceType]
-            except KeyError:
-                log.error("No dataplane driver for VPN type %s",
-                          instanceType)
-                raise Exception("No dataplane driver for VPN type %s" %
-                                instanceType)
-
             if instanceType == EVPN and linuxbr:
                 kwargs = {'linuxbr': linuxbr}
             else:
                 kwargs = {}
 
-            vpnInstance = vpnInstanceFactory(
-                self.bgpManager, self.labelAllocator, dataplaneDriver,
-                externalInstanceId, instanceId, importRTs, exportRTs,
-                gatewayIP, mask, readvertise, **kwargs)
-
-            # Update VPN instance list
-            self.vpnInstances[externalInstanceId] = vpnInstance
-
-            vpnInstance.start()
+            vpnInstance = self._createVPNInstance(
+                externalInstanceId, instanceType, importRTs, exportRTs,
+                gatewayIP, mask, readvertise, attractTraffic, **kwargs)
 
         # Check if new route target import/export must be updated
         if not ((set(vpnInstance.importRTs) == set(importRTs)) and
@@ -339,6 +365,55 @@ class VPNManager(LookingGlass):
 
         if vpnInstance.stopIfEmpty():
             del self.vpnInstances[externalInstanceId]
+
+    @logDecorator.logInfo
+    def trafficRedirectToVPN(self, redirectedInstance, redirectRT, rules):
+        instanceType = redirectedInstance.type
+        externalInstanceId = "redirect-to-%s-%s" % (instanceType,
+                                                    redirectRT.replace(":", "_"))
+
+        log.info("Retrieve VPN instance %s for traffic redirection to route "
+                 "target %s", externalInstanceId, redirectRT)
+
+        # Retrieve redirect VPN instance or create new one if does not exist
+        try:
+            redirectVpnInstance = self.vpnInstances[externalInstanceId]
+            if (redirectVpnInstance.type != instanceType):
+                raise Exception("Trying to redirect traffic to an existing "
+                                "instance of a different type (existing: %s, "
+                                "asked: %s)"
+                                % (redirectVpnInstance.type, instanceType))
+        except KeyError:
+            # Convert route target string to RouteTarget dictionary
+            importRTs = convertRouteTargets([redirectRT])
+
+            redirectVpnInstance = self._createVPNInstance(
+                externalInstanceId, instanceType, importRTs, [],
+                "127.0.0.1", "24", False, None)
+
+        redirectPort = (
+            self.getRedirectPort(redirectVpnInstance.externalInstanceId)
+        )
+
+        redirectedInstance.trafficRedirected(redirectRT, rules, redirectPort)
+
+    @logDecorator.logInfo
+    def trafficIndirectFromVPN(self, redirectedInstance, redirectRT):
+        instanceType = redirectedInstance.type
+        externalInstanceId = "redirect-to-%s-%s" % (instanceType,
+                                                    redirectRT.replace(":", "_"))
+
+        # Retrieve VPN instance or raise exception if does not exist
+        try:
+            redirectVpnInstance = self.vpnInstances[externalInstanceId]
+        except KeyError:
+            log.error("Try to indirect traffic from non existing VPN instance "
+                      "%s", externalInstanceId)
+            raise exc.VPNNotFound(externalInstanceId)
+
+        redirectedInstance.trafficIndirected(redirectRT)
+
+        del self.vpnInstances[externalInstanceId]
 
     @logDecorator.logInfo
     def stop(self):

@@ -117,6 +117,10 @@ class RESTAPI(LookingGlass):
         if not isinstance(params.get('advertise_subnet', False), bool):
             abort(400, "'advertise_subnet' must be a boolean")
 
+        if not params.get('readvertise') and params.get('attract_traffic'):
+            abort(400, "'attract_traffic' must be used in conjunction with "
+                  "'readvertise")
+
         return params
 
     def attach_localport(self):
@@ -178,6 +182,20 @@ class RESTAPI(LookingGlass):
         'readvertise': {  # optional, used to re-advertise addresses...
             'from_rt': [list of RTs]  # ...received on these RTs
             'to_rt': [list of RTs] # ...toward these RTs
+        },
+        'attract_traffic': { # optional, will result in the VRF to attract
+                               traffic, matching the classifier, from any VRF
+                               importing redirection route target
+            'classifier': {
+                'sourcePrefix': IP/mask,
+                'destinationPrefix': IP/mask,
+                'sourcePort': Port number or port range,
+                'destinationPort': Port number or port range,
+                'protocol': IP protocol
+            },
+            'redirect_rt': used to re-advertise addresses received on RTs
+                           specified in 'readvertise: from_rt' in
+                           FlowSpec routes
         }
 
         """
@@ -203,7 +221,8 @@ class RESTAPI(LookingGlass):
                                          attach_params.get('linuxbr'),
                                          attach_params.get('advertise_subnet',
                                                            False),
-                                         attach_params.get('readvertise'))
+                                         attach_params.get('readvertise'),
+                                         attach_params.get('attract_traffic'))
         except APIException as e:
             log.warning('attach_localport: API parameter error: %s', e)
             abort(400, "API parameter error: %s" % e)
