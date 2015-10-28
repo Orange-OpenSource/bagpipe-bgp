@@ -51,8 +51,10 @@ from exabgp.bgp.message.update.attribute.community.extended.communities \
 from exabgp.bgp.message.update.attribute.community.extended \
     import TrafficRedirect
 
+from bagpipe.bgp.engine.flowspec import Flow
+
 from exabgp.bgp.message.update.nlri.flow import (
-    Flow, FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
+    FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
     Flow6Source, Flow4Destination, Flow6Destination, NumericOperator)
 
 from exabgp.protocol import Protocol
@@ -456,7 +458,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     def synthesizeRedirectBGPRoute(self, rules):
         self.log.info("synthesizeRedirectBGPRoute called for rules %s", rules)
-        nlri = Flow()
+        nlri = Flow(self.afi, self.instanceId)
         for rule in rules:
             nlri.add(rule)
 
