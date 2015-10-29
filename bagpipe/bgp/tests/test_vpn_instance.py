@@ -148,7 +148,6 @@ class TestVPNInstance(TestCase):
 
     def setUp(self):
         super(TestVPNInstance, self).setUp()
-        labelAllocator = LabelAllocator()
 
         mockDataplane = Mock()
         mockDataplane.vifPlugged = Mock()
@@ -159,11 +158,10 @@ class TestVPNInstance(TestCase):
 
         VPNInstance.afi = AFI(AFI.ipv4)
         VPNInstance.safi = SAFI(SAFI.mpls_vpn)
-        self.vpnInstance = TestableVPNInstance(Mock(name='BGPManager'),
-                                               labelAllocator,
+        self.vpnInstance = TestableVPNInstance(Mock(name='VPNManager'),
                                                mockDPDriver, 1, 1,
                                                [RT1], [RT1], '10.0.0.1', 24,
-                                               None)
+                                               None, None)
         self.vpnInstance.synthesizeVifBGPRoute = Mock(
             return_value=RouteEntry(NLRI1, [RT1]))
         self.vpnInstance._advertiseRoute = Mock()
