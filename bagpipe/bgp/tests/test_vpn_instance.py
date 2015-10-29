@@ -132,8 +132,7 @@ class TestVPNInstance(TestCase):
                                                [RT1], [RT1], '10.0.0.1', 24,
                                                None)
         self.vpnInstance.synthesizeVifBGPRoute = Mock(
-            return_value=RouteEntry(self.vpnInstance.afi,
-                                    self.vpnInstance.safi, NLRI1, [RT1]))
+            return_value=RouteEntry(NLRI1, [RT1]))
         self.vpnInstance._advertiseRoute = Mock()
         self.vpnInstance._withdrawRoute = Mock()
         self.vpnInstance._postFirstPlug = Mock()
@@ -600,8 +599,7 @@ class TestVPNInstance(TestCase):
     def _test_updateRTsInit(self):
         self.vpnInstance._advertiseRoute = Mock()
 
-        route = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn),
-                           NLRI1, [RT1])
+        route = RouteEntry(NLRI1, [RT1])
         self.vpnInstance._rtm_routeEntries = set([route])
 
     def test_updateRTs1(self):

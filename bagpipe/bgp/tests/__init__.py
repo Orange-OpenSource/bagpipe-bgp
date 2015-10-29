@@ -46,6 +46,8 @@ class TestNLRI(object):
     def __init__(self, desc):
         self.desc = desc
         self.action = None
+        self.afi = AFI(AFI.ipv4)
+        self.safi = SAFI(SAFI.mpls_vpn)
 
     def __repr__(self):
         return self.desc
@@ -86,8 +88,9 @@ class BaseTestBagPipeBGP():
         attributes = Attributes()
         attributes.add(NextHop(nh))
         attributes.add(LocalPreference(lp))
-        routeEvent = RouteEvent(eventType, RouteEntry(
-            afi, safi, nlri, rts, attributes, source), source)
+        routeEvent = RouteEvent(eventType,
+                                RouteEntry(nlri, rts, attributes, source),
+                                source)
         routeEvent.setReplacedRoute(replacedRouteEntry)
 
         self.eventTargetWorker.enqueue(routeEvent)

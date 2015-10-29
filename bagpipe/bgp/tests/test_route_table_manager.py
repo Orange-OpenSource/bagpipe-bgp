@@ -635,9 +635,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         w2 = self._newworker("Worker2", Worker)
 
         routeEvent = RouteEvent(RouteEvent.ADVERTISE,
-                                RouteEntry(AFI(AFI.ipv4),
-                                           SAFI(SAFI.mpls_vpn),
-                                           NLRI1, None, Attributes()),
+                                RouteEntry(NLRI1, None, Attributes()),
                                 w2)
 
         self.routeTableManager.enqueue(routeEvent)

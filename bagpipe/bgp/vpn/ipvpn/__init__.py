@@ -77,7 +77,7 @@ class VRF(VPNInstance, LookingGlass):
                                              self.instanceId)
         nlri = self._nlriFrom("%s/%s" % (ipPrefix, prefixLen), label, rd)
 
-        return RouteEntry(self.afi, self.safi, nlri)
+        return RouteEntry(nlri)
 
     def _getLocalLabels(self):
         for portData in self.macAddress2LocalPortData.itervalues():
@@ -96,8 +96,7 @@ class VRF(VPNInstance, LookingGlass):
 
         attributes = Attributes()
 
-        return RouteEntry(self.afi, self.safi, nlri,
-                          self.readvertiseToRTs, attributes)
+        return RouteEntry(nlri, self.readvertiseToRTs, attributes)
 
     @logDecorator.log
     def _readvertise(self, nlri):

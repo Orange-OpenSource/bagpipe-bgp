@@ -65,10 +65,8 @@ class RouteEntry(LookingGlass):
   that advertizes the route)
 """
 
-    def __init__(self, afi, safi, nlri, RTs=None, attributes=None,
+    def __init__(self, nlri, RTs=None, attributes=None,
                  source=None):
-        assert(isinstance(afi, AFI))
-        assert(isinstance(safi, SAFI))
         if attributes is None:
             attributes = Attributes()
         assert(isinstance(attributes, Attributes))
@@ -77,8 +75,10 @@ class RouteEntry(LookingGlass):
             assert(len(RTs) == 0 or isinstance(RTs[0], RouteTarget))
 
         self.source = source
-        self.afi = afi
-        self.safi = safi
+        self.afi = nlri.afi
+        self.safi = nlri.safi
+        assert(isinstance(self.afi, AFI))
+        assert(isinstance(self.safi, SAFI))
         self.nlri = nlri
         self.attributes = attributes
         # a list of exabgp.bgp.message.update.attribute.community.

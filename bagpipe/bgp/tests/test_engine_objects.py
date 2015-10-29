@@ -31,6 +31,8 @@ from testtools import TestCase
 
 from bagpipe.bgp.engine import RouteEntry
 
+from bagpipe.bgp.tests import NLRI1
+from bagpipe.bgp.tests import NLRI2
 
 from exabgp.reactor.protocol import AFI, SAFI
 
@@ -178,7 +180,7 @@ class TestEngineObjects(TestCase):
         Two routes with same NLRI but distinct attributes should
         not be equal
         '''
-        nlri = "Foo"
+        nlri = NLRI1
 
         atts1 = Attributes()
         atts1.add(LocalPreference(10))
@@ -186,11 +188,8 @@ class TestEngineObjects(TestCase):
         atts2 = Attributes()
         atts2.add(LocalPreference(20))
 
-        entry1 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
-                            atts1)
-
-        entry2 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
-                            atts2)
+        entry1 = RouteEntry(nlri, None, atts1)
+        entry2 = RouteEntry(nlri, None, atts2)
 
         self.assertNotEqual(entry1, entry2)
 
@@ -199,7 +198,7 @@ class TestEngineObjects(TestCase):
         Two routes with same NLRI but and same attributes should
         hash to the same values and be equal.
         '''
-        nlri = "Foo"
+        nlri = NLRI1
 
         atts1 = Attributes()
         atts1.add(LocalPreference(10))
@@ -207,11 +206,8 @@ class TestEngineObjects(TestCase):
         atts2 = Attributes()
         atts2.add(LocalPreference(10))
 
-        entry1 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
-                            atts1)
-
-        entry2 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
-                            atts2)
+        entry1 = RouteEntry(nlri, None, atts1)
+        entry2 = RouteEntry(nlri, None, atts2)
 
         self.assertEqual(hash(entry1), hash(entry2))
         self.assertEqual(entry1, entry2)
@@ -223,7 +219,7 @@ class TestEngineObjects(TestCase):
         multivalued attributes, like extended community, the values
         appear in a distinct order
         '''
-        nlri = "Foo"
+        nlri = NLRI1
 
         atts1 = Attributes()
         eComs1 = ExtendedCommunities()
@@ -239,11 +235,9 @@ class TestEngineObjects(TestCase):
         eComs2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
         atts2.add(eComs2)
 
-        entry1 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
-                            atts1)
+        entry1 = RouteEntry(nlri, None, atts1)
 
-        entry2 = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), nlri, None,
-                            atts2)
+        entry2 = RouteEntry(nlri, None, atts2)
 
         self.assertEqual(hash(entry1), hash(entry2))
         self.assertEqual(entry1, entry2)
@@ -257,8 +251,7 @@ class TestEngineObjects(TestCase):
         atts.add(LocalPreference(20))
         atts.add(eComs)
 
-        entry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), "Foo", None,
-                           atts)
+        entry = RouteEntry(NLRI1, None, atts)
 
         # check that the routeEntry object has the RTs we wanted
         self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
@@ -290,8 +283,7 @@ class TestEngineObjects(TestCase):
 
         rts = [RouteTarget(64512, 1), RouteTarget(64512, 2)]
 
-        entry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.unicast), "Foo", rts,
-                           atts)
+        entry = RouteEntry(NLRI1, rts, atts)
 
         self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
         self.assertIn(RouteTarget(64512, 2), entry.routeTargets)

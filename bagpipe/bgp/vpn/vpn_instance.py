@@ -194,8 +194,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
                               routeEntry.nlri, newExportRTs)
 
-                updatedRouteEntry = RouteEntry(routeEntry.afi, routeEntry.safi,
-                                               routeEntry.nlri, None,
+                updatedRouteEntry = RouteEntry(routeEntry.nlri, None,
                                                copy(routeEntry.attributes))
                 # reset the routeTargets
                 # will RTs originally present in routeEntry.attributes

@@ -138,7 +138,7 @@ class Manager(EventSource, LookingGlass):
                        subscription.routeTarget,
                        IP.create(self.getLocalAddress()))
 
-        routeEntry = RouteEntry(AFI(AFI.ipv4), SAFI(SAFI.rtc), nlri)
+        routeEntry = RouteEntry(nlri)
 
         return routeEntry
 

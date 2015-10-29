@@ -271,8 +271,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     def _processReceivedRoute(self, action, nlri, attributes):
         self.log.info("Received route: %s, %s", nlri, attributes)
 
-        routeEntry = RouteEntry(nlri.afi, nlri.safi,
-                                nlri, None, attributes)
+        routeEntry = RouteEntry(nlri, None, attributes)
 
         if action == IN.ANNOUNCED:
             self._advertiseRoute(routeEntry)

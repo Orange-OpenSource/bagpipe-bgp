@@ -166,8 +166,7 @@ class EVI(VPNInstance, LookingGlass):
         attributes.add(PMSIIngressReplication(
             self.dataplaneDriver.getLocalAddress(), self.instanceLabel))
 
-        self.multicastRouteEntry = RouteEntry(self.afi, self.safi,
-                                              nlri, self.exportRTs, attributes)
+        self.multicastRouteEntry = RouteEntry(nlri, self.exportRTs, attributes)
 
         self._advertiseRoute(self.multicastRouteEntry)
 
@@ -185,7 +184,7 @@ class EVI(VPNInstance, LookingGlass):
                        IP.create(ipPrefix), None,
                        IP.create(self.dataplaneDriver.getLocalAddress()))
 
-        return RouteEntry(self.afi, self.safi, nlri)
+        return RouteEntry(nlri)
 
     @logDecorator.log
     def setGatewayPort(self, linuxif, ipvpn):
