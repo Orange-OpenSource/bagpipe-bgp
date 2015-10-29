@@ -77,6 +77,7 @@ class RouteEntry(LookingGlass):
             assert(len(RTs) == 0 or isinstance(RTs[0], RouteTarget))
 
         self.source = source
+        # FIXME(tmorin): .afi and .safi should be taken from nlri
         self.afi = afi
         self.safi = safi
         self.nlri = nlri

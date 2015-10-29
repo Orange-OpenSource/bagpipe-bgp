@@ -241,7 +241,6 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     afi = None
     safi = None
-    flow_safi = None
 
     @logDecorator.log
     def __init__(self, vpnManager, dataplaneDriver,
@@ -278,10 +277,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
-        self.flow_safi = self.__class__.flow_safi
         assert(isinstance(self.afi, AFI))
         assert(isinstance(self.safi, SAFI))
-        assert(isinstance(self.flow_safi, SAFI))
 
         self.dataplaneDriver = dataplaneDriver
 
@@ -304,8 +301,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         for rt in self.importRTs:
             self._subscribe(self.afi, self.safi, rt)
-            # Subscribe to FlowSpec AFI/SAFI
-            self._subscribe(self.afi, self.flow_safi, rt)
+            # Subscribe to FlowSpec routes
+            # FIXME(tmorin): this maybe isn't applicable yet to E-VPN yet
+            self._subscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
 
         if readvertise:
             self.readvertise = True
@@ -463,7 +461,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         for rule in rules:
             nlri.add(rule)
 
-        routeEntry = RouteEntry(self.afi, self.flow_safi, nlri)
+        routeEntry = RouteEntry(nlri.afi, nlri.safi, nlri)
 
         assert(isinstance(routeEntry, RouteEntry))
 

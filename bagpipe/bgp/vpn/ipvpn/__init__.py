@@ -64,7 +64,6 @@ class VRF(VPNInstance, LookingGlass):
     type = IPVPN
     afi = AFI(AFI.ipv4)
     safi = SAFI(SAFI.mpls_vpn)
-    flow_safi = SAFI(SAFI.flow_ip)
 
     @logDecorator.log
     def __init__(self, *args, **kwargs):
