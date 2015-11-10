@@ -43,6 +43,7 @@ from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 from exabgp.bgp.message.update.attribute.attribute import Attribute
+from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 
 from exabgp.bgp.message.open.asn import ASN
 
@@ -51,7 +52,7 @@ from exabgp.bgp.message.update.attribute.community.extended.communities \
 from exabgp.bgp.message.update.attribute.community.extended \
     import TrafficRedirect
 
-from bagpipe.bgp.engine.flowspec import Flow
+from bagpipe.bgp.engine.flowspec import FlowRouteFactory
 
 from exabgp.bgp.message.update.nlri.flow import (
     FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
@@ -437,6 +438,11 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         # FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
 
+    def _getRDFromInstanceId(self):
+        return RouteDistinguisher.fromElements(
+            self.bgpManager.getLocalAddress(),
+            self.instanceId)
+
     @abstractmethod
     def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
         '''
@@ -457,7 +463,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     def synthesizeRedirectBGPRoute(self, rules):
         self.log.info("synthesizeRedirectBGPRoute called for rules %s", rules)
-        nlri = Flow(self.afi, self.instanceId)
+        nlri = FlowRouteFactory(self.afi, self._getRDFromInstanceId())
         for rule in rules:
             nlri.add(rule)
 
