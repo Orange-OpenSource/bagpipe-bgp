@@ -78,8 +78,7 @@ class VRF(VPNInstance, LookingGlass):
 
     def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label):
         # Generate BGP route and advertise it...
-        rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
-                                             self.instanceId)
+        rd = self._getRDFromInstanceId()
         nlri = self._nlriFrom("%s/%s" % (ipPrefix, prefixLen), label, rd)
 
         return RouteEntry(self.afi, self.safi, nlri)
