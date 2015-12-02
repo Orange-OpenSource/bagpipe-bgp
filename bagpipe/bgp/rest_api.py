@@ -312,9 +312,8 @@ class RESTAPI(LookingGlass):
         return "Server Error"
 
     def run(self):
-        # self.bottle.run(host=self.config["api_host"],
-        # FIXME: only the LG should be available from remote hosts
-        self.bottle.run(host="0.0.0.0",
+        # TODO: make looking-glass available to remote hosts
+        self.bottle.run(host=self.config["api_host"],
                         port=self.config["api_port"],
                         quiet=True,
                         debug=True)
