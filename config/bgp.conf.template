@@ -7,7 +7,6 @@ enable_rtc=True
 
 [API]
 # BGP component API IP address and port
-# (api_host is currently ignored, and we bind to 0.0.0.0)
 api_host=localhost 
 api_port=8082
 
