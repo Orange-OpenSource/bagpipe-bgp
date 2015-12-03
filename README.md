@@ -25,8 +25,8 @@ The target is to provide VPN connectivity to VMs deployed by Openstack.
 A typical target architecture is to have BaGPipe-BGP be driven by Openstack 
 Neutron components:
 
-* the [bagpipe driver for the BGP VPN interconnection service plugin](https://github.com/stackforge/networking-bgpvpn)
-* the [bagpipe ML2 mechanism driver](https://github.com/stackforge/networking-bagpipe-l2) using E-VPN
+* the [bagpipe driver for the BGP VPN interconnection service plugin](https://github.com/openstack/networking-bgpvpn)
+* the [bagpipe ML2 mechanism driver](https://github.com/openstack/networking-bagpipe) using E-VPN
 
 BaGPipe-BGP can also be used standalone (e.g. for testing purposes), 
 with for instance VMs tap interfaces or veth interfaces to network namespaces (see [below](#netns-example)).
