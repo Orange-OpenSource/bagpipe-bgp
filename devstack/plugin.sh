@@ -24,6 +24,7 @@ function create_bagpipe_conf {
 	cp -p $BAGPIPE_DIR/config/bgp.conf.template $BAGPIPE_CONF
 	iniset $BAGPIPE_CONF BGP local_address ${BAGPIPE_HOST_IP:-$HOST_IP}
 	iniset $BAGPIPE_CONF BGP peers "$BAGPIPE_BGP_PEERS"
+	iniset $BAGPIPE_CONF API api_host "$BAGPIPE_SERVICE_HOST"
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN dataplane_driver ${BAGPIPE_DATAPLANE_DRIVER_IPVPN:-DummyDataplaneDriver}
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN mpls_interface $BAGPIPE_MPLS_IFACE
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN ovs_bridge $BAGPIPE_MPLS_BR
