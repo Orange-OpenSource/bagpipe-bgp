@@ -738,7 +738,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             "subnet_mask":   (LGMap.VALUE, self.mask),
             "instance_dataplane_id": (LGMap.VALUE, self.instanceLabel),
             "ports":         (LGMap.SUBTREE, self.getLGLocalPortData),
-            "readvertise":   (LGMap.SUBITEM, self.getLGReadvertise)
+            "readvertise":   (LGMap.SUBITEM, self.getLGReadvertise),
+            "attract_traffic": (LGMap.SUBITEM, self.getLGAttractTraffic)
         }
 
     def getLGLocalPortData(self, pathPrefix):
@@ -768,5 +769,12 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         if self.readvertise:
             return {'from': [repr(rt) for rt in self.readvertiseFromRTs],
                     'to': [repr(rt) for rt in self.readvertiseToRTs]}
+        else:
+            return {}
+
+    def getLGAttractTraffic(self):
+        if self.attractTraffic:
+            return {'redirect_rt': [repr(rt) for rt in self.attractRT],
+                    'classifier': self.attractClassifier}
         else:
             return {}
