@@ -77,8 +77,7 @@ fi
 #echo "adding bridge $BAGPIPE_MPLS_BR with interface $BAGPIPE_MPLS_IFACE"
 sudo ip addr flush dev $BAGPIPE_MPLS_IFACE
 sudo ovs-vsctl del-br $BAGPIPE_MPLS_BR || true
-sudo ovs-vsctl --may-exist add-br $BAGPIPE_MPLS_BR
-# sudo ovs-vsctl -- --may-exist add-br $BAGPIPE_MPLS_BR -- set bridge $BAGPIPE_MPLS_BR datapath_type=netdev
+sudo ovs-vsctl --may-exist add-br $BAGPIPE_MPLS_BR -- set-fail-mode $BAGPIPE_MPLS_BR secure
 sudo ovs-vsctl --may-exist add-port $BAGPIPE_MPLS_BR $BAGPIPE_MPLS_IFACE
 #echo "adding iface $BAGPIPE_INTERNAL_PORT to bridge $BAGPIPE_MPLS_BR"
 #when devstack is run on a VM deployed on openstack, by default, openstack will forbid this VM to use another MAC address than the one it has allocated
@@ -102,8 +101,6 @@ BAGPIPE_MPLS_IFACE_PORT_NUMBER=\`sudo ovs-ofctl show $BAGPIPE_MPLS_BR | grep "($
 BAGPIPE_INTERNAL_PORT_NUMBER=\`sudo ovs-ofctl show $BAGPIPE_MPLS_BR | grep "($BAGPIPE_INTERNAL_PORT)" | awk '-F(' '{print \$1}' | tr -d ' '\`
 sudo ovs-ofctl add-flow $BAGPIPE_MPLS_BR priority=0,in_port=\$BAGPIPE_MPLS_IFACE_PORT_NUMBER,action=output:\$BAGPIPE_INTERNAL_PORT_NUMBER
 sudo ovs-ofctl add-flow $BAGPIPE_MPLS_BR in_port=\$BAGPIPE_INTERNAL_PORT_NUMBER,action=output:\$BAGPIPE_MPLS_IFACE_PORT_NUMBER
-# remove the default 'NORMAL' rule
-sudo ovs-ofctl del-flows $BAGPIPE_MPLS_BR --strict priority=0
 
 EOF
 
@@ -112,10 +109,7 @@ EOF
 		cat >> $BAGPIPE_BR_RESET_SCRIPT <<EOF
 
 sudo ovs-vsctl del-br $BAGPIPE_MPLS_BR || true
-sudo ovs-vsctl --may-exist add-br $BAGPIPE_MPLS_BR
-#sudo ovs-vsctl --may-exist set-br $BAGPIPE_MPLS_BR datapath_type=netdev
-# remove the default 'NORMAL' rule
-sudo ovs-ofctl del-flows $BAGPIPE_MPLS_BR --strict priority=0
+sudo ovs-vsctl --may-exist add-br $BAGPIPE_MPLS_BR -- set-fail-mode $BAGPIPE_MPLS_BR secure
 
 EOF
 
