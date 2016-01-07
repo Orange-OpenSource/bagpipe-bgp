@@ -466,7 +466,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         for rule in rules:
             nlri.add(rule)
 
-        routeEntry = RouteEntry(nlri.afi, nlri.safi, nlri)
+        routeEntry = RouteEntry(nlri)
 
         assert(isinstance(routeEntry, RouteEntry))
 
