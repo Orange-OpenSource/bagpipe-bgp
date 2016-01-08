@@ -59,11 +59,27 @@ We provide a tool that can be used to emulate a route reflector to interconnect 
 BaGPipe BGP implementations, typically for test purposes (see [Fake RR](#fakerr)).
 
 For more than 2 servers running BaGPipe BGP, you will need a real BGP implementation
-supporting RFC4364 and BGP route reflection (and ideally also RFC4684). A router from, 
-for instance, Alcatel-Lucent, Cisco or Juniper can be used; some of these vendors 
-also provide their OSes as virtual machines.  BGP implementations in other opensource 
-projects would possibly be suitable, but we did not explore these much yet. There is work 
-in progress to allow the [use of OpenContrail's BGP implementation as a Route Reflector](https://github.com/pedro-r-marques/contrail-controller/tree/rr-dev). 
+supporting RFC4364 and BGP route reflection (and ideally also RFC4684). 
+
+Different options can be considered:
+
+ * A router from for instance, Alcatel-Lucent, Cisco or Juniper can be used; some of these vendors
+   also provide their OSes as virtual machines
+
+ * BGP implementations in other opensource projects would possibly be suitable, but we did not explore i
+   these exhaustively:
+
+    * there has been some work to allow the use of OpenContrail's BGP implementation as a Route Reflector; 
+      although this is currently unfinished, we have done rough hacks to confirm the feasibility and the
+      interoperability
+
+    * [GoBGP](http://osrg.github.io/gobgp/) team has sucessfully deployed a setup with [GoBGP as a RR for bagpipe-bgp PE implementations,
+      with E-VPN](https://github.com/osrg/gobgp/blob/master/docs/sources/evpn.md)
+
+    * we have sucessfully used OpenBSD BGPd as an IP VPN RR for bagpipe-bgp
+
+    * Quagga is supposed to support IP VPNs (untested AFAIK)
+
 
 <a name="config"></a>
 Configuration
