@@ -106,8 +106,6 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
     def __init__(self, routeTableManager, name, peerAddress, config):
         BGPPeerWorker.__init__(self, routeTableManager, name, peerAddress)
 
-        setupExaBGPEnv()
-
         self.config = config
         self.localAddress = self.config['local_address']
         self.peerAddress = peerAddress
