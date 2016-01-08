@@ -38,6 +38,7 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, \
     LookingGlassLogHandler
 
 from bagpipe.bgp.engine.bgp_manager import Manager
+from bagpipe.bgp.engine.exabgp_peer_worker import setupExaBGPEnv
 
 from bagpipe.bgp.rest_api import RESTAPI
 
@@ -251,6 +252,8 @@ def daemon_main():
     logging.root.addHandler(catchAllLogHandler)
 
     # logging_tree.printout()
+
+    setupExaBGPEnv()
 
     config = _loadConfig(options.configFile)
 
