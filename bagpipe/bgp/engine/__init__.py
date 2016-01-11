@@ -101,18 +101,25 @@ class RouteEntry(LookingGlass):
     def routeTargets(self):
         return self._routeTargets
 
-    @logDecorator.log
-    def setRouteTargets(self, routeTargets):
-        # first build a list of ecoms without any RT
-        newEComs = ExtendedCommunities()
+    def extendedCommunities(self, filter_=None):
+        if filter_ is None:
+            def filter_(ecom):
+                return True
+
         if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
             ecoms = self.attributes[
                 Attribute.CODE.EXTENDED_COMMUNITY].communities
-            for ecom in ecoms:
-                if not isinstance(ecom, RouteTarget):
-                    newEComs.communities.append(ecom)
+            return [ecom for ecom in ecoms if filter_(ecom)]
+
+    @logDecorator.log
+    def setRouteTargets(self, routeTargets):
+        # first build a list of ecoms without any RT
+        eComs = self.extendedCommunities(lambda ecom:
+                                         not isinstance(ecom, RouteTarget))
 
         # then add the right RTs
+        newEComs = ExtendedCommunities()
+        newEComs.communities += eComs
         newEComs.communities += routeTargets
 
         # update

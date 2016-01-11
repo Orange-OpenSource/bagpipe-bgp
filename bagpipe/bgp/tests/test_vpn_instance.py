@@ -52,6 +52,8 @@ from bagpipe.bgp.tests import BaseTestBagPipeBGP
 
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
+from bagpipe.bgp.engine.rt_record import RTRecord
+from bagpipe.bgp.engine.rt_record import RTRecordASN2Number
 from bagpipe.bgp.engine.worker import Worker
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
@@ -90,10 +92,21 @@ MAC4 = "00:00:fe:ed:f0:0d"
 IP4 = "10.0.0.4/32"
 LOCAL_PORT4 = {'linuxif': 'tap4'}
 
+RTRecord1 = RTRecord.from_rt(RT1)
+RTRecord2 = RTRecord.from_rt(RT2)
+RTRecord3 = RTRecord.from_rt(RT3)
+RTRecord4 = RTRecord.from_rt(RT4)
 
 def _extractRTFromAdvertiseCall(vpnInstance, callIndex=0):
     calls = vpnInstance._advertiseRoute.call_args_list
     return calls[callIndex][0][0].routeTargets
+
+
+def _extractRTRecordsFromAdvertiseCall(vpnInstance, callIndex=0):
+    calls = vpnInstance._advertiseRoute.call_args_list
+    route = calls[callIndex][0][0]
+    return route.extendedCommunities(lambda ecom:
+                                     isinstance(ecom, RTRecord))
 
 
 class TestableVPNInstance(VPNInstance):
@@ -597,7 +610,7 @@ class TestVPNInstance(TestCase):
     # tests of updateRouteTargets
 
     def _test_updateRTsInit(self):
-        self.vpnInstance._advertiseRoute = Mock()
+        self.vpnInstance._advertiseRoute.reset_mock()
 
         route = RouteEntry(NLRI1, [RT1])
         self.vpnInstance._rtm_routeEntries = set([route])
@@ -650,6 +663,9 @@ vpnNLRI1 = IPVPNRouteFactory(AFI(AFI.ipv4), "1.1.1.1/32",
 vpnNLRI2 = IPVPNRouteFactory(AFI(AFI.ipv4), "2.2.2.2/32",
                              50, TEST_RD, '45.45.45.45')
 
+vpnNLRI3 = IPVPNRouteFactory(AFI(AFI.ipv4), "3.3.3.3/32",
+                             50, TEST_RD, '45.45.45.45')
+
 
 class TestVRF(BaseTestBagPipeBGP, TestCase):
 
@@ -688,6 +704,14 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
 
         self.eventTargetWorker = self.vpnInstance
 
+    def _resetMocks(self):
+        #self._wait()
+        self.vpnInstance._advertiseRoute.reset_mock()
+        self.vpnInstance._withdrawRoute.reset_mock()
+        self.mockDataplane.setupDataplaneForRemoteEndpoint.reset_mock()
+        self.mockDataplane.vifPlugged.reset_mock()
+        self.mockDataplane.vifUnplugged.reset_mock()
+
     def tearDown(self):
         super(TestVRF, self).tearDown()
         self.vpnInstance.stop()
@@ -695,9 +719,9 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
 
     # unit test for IPVPN re-advertisement
     def test_ReAdvertisement1(self):
+        self._resetMocks()
 
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
-        # self.vpnInstance._advertiseRoute.call_count -> 1
 
         workerA = Worker(Mock(), 'Worker-A')
 
@@ -705,26 +729,28 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
                             workerA, NH1, 200)
         # no re-advertisement supposed to happen
         self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-        self.vpnInstance._advertiseRoute = Mock()
         # dataplane supposed to be updated for this route
         self.assertEqual(
             1,
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
-        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
+        self._resetMocks()
+
+        event2 = self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
+                                     workerA, NH1, 200, rtrecords=[RTRecord1])
         # re-advertisement of VPN NLRI2 supposed to happen, to RT4
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)#FIXME:1
         self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
         self.assertNotIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance))
         self.assertNotIn(RT3, _extractRTFromAdvertiseCall(self.vpnInstance))
-        self.vpnInstance._advertiseRoute = Mock()
+        self.assertIn(RTRecord3, _extractRTRecordsFromAdvertiseCall(self.vpnInstance))
+        self.assertIn(RTRecord1, _extractRTRecordsFromAdvertiseCall(self.vpnInstance))
         # dataplane *not* supposed to be updated for this route
         self.assertEqual(
             0,
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
-        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
+
+        self._resetMocks()
 
         # new interface plugged in
         # route vpnNLRI2 should be re-advertized with this new next hop as
@@ -746,7 +772,18 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.assertEqual(vpnNLRI2.cidr.prefix(), routeEntry.nlri.cidr.prefix())
         self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
         self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
-        self.vpnInstance._advertiseRoute = Mock()
+
+        self._resetMocks()
+
+        # new route, that, because it contains the redirectRT in RTRecord
+        # will not be re-advertized
+        event3 = self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI3, [RT3],
+                                     workerA, NH1, 200, rtrecords=[RTRecord4])
+        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(0, self.vpnInstance._withdrawRoute.call_count)
+        self._revertEvent(event3)
+
+        self._resetMocks()
 
         # vif unplugged, routes VPN NLRI2 with next-hop
         # corresponding to this ports should now be withdrawn
@@ -756,7 +793,8 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.assertEqual(vpnNLRI2.cidr.prefix(), routeEntry.nlri.cidr.prefix())
         self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
         self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
-        self.vpnInstance._advertiseRoute = Mock()
+
+        self._resetMocks()
 
         # RTs of route NLRI1 now include a re-advertiseed RT
         self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2, RT3],
@@ -767,13 +805,10 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.assertEqual(
             1,
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
-        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
-        self.vpnInstance._advertiseRoute = Mock()
-        self.vpnInstance._withdrawRoute = Mock()
+        self._resetMocks()
 
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
+        self._revertEvent(event2)
         # withdraw of re-adv route supposed to happen
         self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count)
         self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
@@ -782,3 +817,4 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
             0,
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
         self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
+
