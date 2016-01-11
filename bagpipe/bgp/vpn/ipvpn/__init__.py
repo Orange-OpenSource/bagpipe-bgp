@@ -27,6 +27,8 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 
+from bagpipe.bgp.engine.rt_record import RTRecord
+
 from bagpipe.bgp.engine.ipvpn import IPVPN as IPVPNNlri
 from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
 
@@ -37,6 +39,10 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
 
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
+from exabgp.bgp.message.update.attribute.attribute import Attribute
+from exabgp.bgp.message.update.attribute.community.extended.communities \
+    import ExtendedCommunities
+from exabgp.bgp.message.update.attribute.community.extended.rt import RouteTarget as RTExtCom
 
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
@@ -93,39 +99,76 @@ class VRF(VPNInstance, LookingGlass):
             self.bgpManager.getLocalAddress(),
             10000+label)
 
-    def _routeForReAdvertisement(self, prefix, label):
-        self.log.debug("prefix: %s", prefix)
+    def _toReadvertise(self, route):
+        rtRecords = route.extendedCommunities(lambda ecom:
+                                              isinstance(ecom, RTRecord))
+        self.log.debug("RTRecords: %s (readvertiseToRTs:%s)",
+                       rtRecords,
+                       self.readvertiseToRTs)
+
+        readvertiseToRTs_as_records = [RTRecord.from_rt(rt)
+                                       for rt in self.readvertiseToRTs]
+
+        if set(readvertiseToRTs_as_records).intersection(set(rtRecords)):
+            self.log.debug("not to re-advertise because one of readvertise "
+                           "RTs is in RTRecords: %s",
+                           set(readvertiseToRTs_as_records)
+                           .intersection(set(rtRecords)))
+            return False
+
+        return (len(set(route.routeTargets).intersection(
+                    set(self.readvertiseFromRTs))) > 0)
+
+    def _routeForReAdvertisement(self, route, label):
+        prefix = route.nlri.cidr.prefix()
         nlri = self._nlriFrom(prefix, label,
                               self._getRDFromLabel(label))
 
         attributes = Attributes()
 
-        return RouteEntry(nlri, self.readvertiseToRTs, attributes)
+        # new RTRecord = original RTRecord (if any) + orig RTs
+        origRTRecords = route.extendedCommunities(lambda ecom:
+                                              isinstance(ecom, RTRecord))
+        rts = route.extendedCommunities(lambda ecom:
+                                        isinstance(ecom, RTExtCom))
+        addRTRecords = [RTRecord.from_rt(rt) for rt in rts]
+
+        finalRTRecords = list(set(origRTRecords) | set(addRTRecords))
+
+        eComs = ExtendedCommunities()
+        eComs.communities += finalRTRecords
+        attributes.add(eComs)
+
+        entry = RouteEntry(nlri, self.readvertiseToRTs, attributes)
+        self.log.debug("RouteEntry for readvertisement: %s", entry)
+        return entry
 
     @logDecorator.log
-    def _readvertise(self, nlri):
+    def _readvertise(self, route):
+        nlri = route.nlri
+
         self.log.debug("Start re-advertising %s from VRF", nlri.cidr.prefix())
         for label in self._getLocalLabels():
             self.log.debug("Start re-advertising %s from VRF, with label %s",
-                           nlri.cidr.prefix(), label)
+                           nlri, label)
             # need a distinct RD for each route...
-            routeEntry = self._routeForReAdvertisement(nlri.cidr.prefix(),
-                                                       label)
+            routeEntry = self._routeForReAdvertisement(route, label)
             self._advertiseRoute(routeEntry)
 
-        self.readvertised.add(nlri.cidr.prefix())
+        self.readvertised.add(route)
 
     @logDecorator.log
-    def _readvertiseStop(self, nlri):
+    def _readvertiseStop(self, route):
+        nlri = route.nlri
+
         self.log.debug("Stop re-advertising %s from VRF", nlri.cidr.prefix())
         for label in self._getLocalLabels():
             self.log.debug("Stop re-advertising %s from VRF, with label %s",
-                           nlri.cidr.prefix(), label)
-            routeEntry = self._routeForReAdvertisement(nlri.cidr.prefix(),
-                                                       label)
+                           nlri, label)
+            routeEntry = self._routeForReAdvertisement(route, label)
             self._withdrawRoute(routeEntry)
 
-        self.readvertised.remove(nlri.cidr.prefix())
+        self.readvertised.remove(route)
 
     @logDecorator.log
     def _routeForRedirectPrefix(self, prefix):
@@ -145,18 +188,18 @@ class VRF(VPNInstance, LookingGlass):
                                advertiseSubnet)
 
         label = self.macAddress2LocalPortData[macAddress]['label']
-        for prefix in self.readvertised:
+        for route in self.readvertised:
             self.log.debug("Re-advertising %s with this port as next hop",
-                           prefix)
-            routeEntry = self._routeForReAdvertisement(prefix, label)
+                           route.nlri)
+            routeEntry = self._routeForReAdvertisement(route, label)
             self._advertiseRoute(routeEntry)
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
-        for prefix in self.readvertised:
+        for route in self.readvertised:
             self.log.debug("Stop re-advertising %s with this port as next hop",
-                           prefix)
-            routeEntry = self._routeForReAdvertisement(prefix, label)
+                           route.nlri)
+            routeEntry = self._routeForReAdvertisement(route, label)
             self._withdrawRoute(routeEntry)
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
@@ -174,10 +217,6 @@ class VRF(VPNInstance, LookingGlass):
                            type(route.nlri))
             return None
 
-    def _toReadvertise(self, route):
-        return (len(set(route.routeTargets).intersection(
-                    set(self.readvertiseFromRTs))) > 0)
-
     def _imported(self, route):
         return (len(set(route.routeTargets).intersection(
                     set(self.importRTs))) > 0)
@@ -189,6 +228,7 @@ class VRF(VPNInstance, LookingGlass):
         prefix = entry
 
         if isinstance(newRoute.nlri, Flow):
+            #for redirectRT in newRoute.extendedCommunities(lambda: ...)
             if Attribute.CODE.EXTENDED_COMMUNITY in newRoute.attributes:
                 ecoms = newRoute.attributes[
                     Attribute.CODE.EXTENDED_COMMUNITY].communities
@@ -198,7 +238,6 @@ class VRF(VPNInstance, LookingGlass):
                         self.vpnManager.trafficRedirectToVPN(self,
                                                              redirectRT,
                                                              newRoute.nlri.rules)
-
         else:
             if self.readvertise:
                 # check if this is a route we need to re-advertise
@@ -206,7 +245,7 @@ class VRF(VPNInstance, LookingGlass):
                 self.log.debug("readv from RTs: %s", self.readvertiseFromRTs)
                 if self._toReadvertise(newRoute):
                     self.log.debug("Need to re-advertise %s", prefix)
-                    self._readvertise(newRoute.nlri)
+                    self._readvertise(newRoute)
 
                     if self.attractTraffic:
                         flowEntry = self._routeForRedirectPrefix(prefix)
@@ -234,6 +273,7 @@ class VRF(VPNInstance, LookingGlass):
         prefix = entry
 
         if isinstance(oldRoute.nlri, Flow):
+            #for redirectRT in newRoute.extendedCommunities(lambda: ...)
             if Attribute.CODE.EXTENDED_COMMUNITY in oldRoute.attributes:
                 ecoms = oldRoute.attributes[
                     Attribute.CODE.EXTENDED_COMMUNITY].communities
@@ -247,7 +287,7 @@ class VRF(VPNInstance, LookingGlass):
                 # check if this is a route we were re-advertising
                 if self._toReadvertise(oldRoute):
                     self.log.debug("Need to stop re-advertising %s", prefix)
-                    self._readvertiseStop(oldRoute.nlri)
+                    self._readvertiseStop(oldRoute)
 
                     if self.attractTraffic:
                         flowEntry = self._routeForRedirectPrefix(prefix)

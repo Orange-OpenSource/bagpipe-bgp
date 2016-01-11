@@ -90,10 +90,17 @@ class BaseTestBagPipeBGP():
 
     def _newRouteEvent(self, eventType, nlri, rts, source, nh, lp=0,
                        replacedRouteEntry=None,
-                       afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
+                       afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn), 
+                       **kwargs):
         attributes = Attributes()
         attributes.add(NextHop(nh))
         attributes.add(LocalPreference(lp))
+
+        if 'rtrecords' in kwargs:
+            eComs = ExtendedCommunities()
+            eComs.communities += kwargs['rtrecords']
+            attributes.add(eComs)
+
         routeEvent = RouteEvent(eventType,
                                 RouteEntry(nlri, rts, attributes, source),
                                 source)
@@ -107,6 +114,21 @@ class BaseTestBagPipeBGP():
         self._wait()
 
         return routeEvent
+
+    def _revertEvent(self, event):
+        if event.type == RouteEvent.ADVERTISE:
+            type = RouteEvent.WITHDRAW
+        else:  # WITHDRAW
+            type = RouteEvent.ADVERTISE
+
+        routeEvent = RouteEvent(type, event.routeEntry, event.source)
+
+        self.eventTargetWorker.enqueue(routeEvent)
+
+        log.info("*** Emitting event to %s: %s",
+                 self.eventTargetWorker, routeEvent)
+
+        self._wait()
 
     def _wait(self):
         time.sleep(WAIT_TIME)

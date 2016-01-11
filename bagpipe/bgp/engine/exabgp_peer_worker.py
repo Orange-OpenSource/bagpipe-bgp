@@ -33,6 +33,9 @@ from bagpipe.bgp.engine.bgp_peer_worker import DEFAULT_HOLDTIME
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
 
+from bagpipe.bgp.engine import ipvpn
+from bagpipe.bgp.engine import rt_record
+
 from bagpipe.bgp.common.looking_glass import LookingGlass
 
 from exabgp.reactor.peer import Peer
