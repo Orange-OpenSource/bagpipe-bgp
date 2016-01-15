@@ -335,7 +335,7 @@ class RESTAPI(LookingGlass):
 
     def run(self):
         # TODO: make looking-glass available to remote hosts
-        self.bottle.run(host=self.config["api_host"],
-                        port=self.config["api_port"],
+        self.bottle.run(host=self.config.get("api_host", "localhost"),
+                        port=self.config.get("api_port", 8082),
                         quiet=True,
                         debug=True)
