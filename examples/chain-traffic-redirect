@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Destination-based setup with two-directions traffic combined and default routes announced at
+# 5-tuple classfied chain setup with two-directions traffic combined and default routes announced at
 # intermediate hops (Ingress VRF between hops configured to statically announce a 0.0.0.0/0)
 #
 # This script will setup network namespaces SVM1 ("service VM1") and SVM2 so that
