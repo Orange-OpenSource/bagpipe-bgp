@@ -52,8 +52,6 @@ from bagpipe.bgp.tests import BaseTestBagPipeBGP
 
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
-from bagpipe.bgp.engine.rt_record import RTRecord
-from bagpipe.bgp.engine.rt_record import RTRecordASN2Number
 from bagpipe.bgp.engine.worker import Worker
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
@@ -70,6 +68,10 @@ from exabgp.protocol.ip import IP
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecord
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecordASN2Number
 
 from bagpipe.bgp.vpn.ipvpn import IPVPNRouteFactory
 
