@@ -53,8 +53,6 @@ from bagpipe.bgp.tests import BaseTestBagPipeBGP
 
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
-from bagpipe.bgp.engine.rt_record import RTRecord
-from bagpipe.bgp.engine.rt_record import RTRecordASN2Number
 from bagpipe.bgp.engine.worker import Worker
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
@@ -80,6 +78,10 @@ from exabgp.bgp.message.update.nlri.flow import (
     Flow6Source, Flow4Destination, Flow6Destination, NumericOperator)
 from exabgp.bgp.message.update.attribute.community.extended import \
     RouteTargetASN2Number as RouteTarget
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecord
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecordASN2Number
 
 from exabgp.protocol import Protocol
 

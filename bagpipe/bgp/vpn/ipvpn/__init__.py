@@ -27,8 +27,6 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 
-from bagpipe.bgp.engine.rt_record import RTRecord
-
 from bagpipe.bgp.engine.ipvpn import IPVPN as IPVPNNlri
 from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
 
@@ -42,7 +40,10 @@ from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.attribute.attribute import Attribute
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended.rt import RouteTarget as RTExtCom
+from exabgp.bgp.message.update.attribute.community.extended.rt \
+    import RouteTarget as RTExtCom
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecord
 
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI

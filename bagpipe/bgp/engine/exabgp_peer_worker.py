@@ -34,7 +34,6 @@ from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
 
 from bagpipe.bgp.engine import ipvpn
-from bagpipe.bgp.engine import rt_record
 
 from bagpipe.bgp.common.looking_glass import LookingGlass
 
