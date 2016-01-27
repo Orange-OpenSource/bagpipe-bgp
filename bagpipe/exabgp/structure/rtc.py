@@ -97,7 +97,7 @@ class RouteTargetConstraint(object):
             return RouteTargetConstraint(afi,safi,ASN(0),None)
         
         if (len_in_bits<4):
-            raise Exception("RTC route too short to be decoded")
+            raise Exception("RTC route too short to be decoded (len %d bits)" % len_in_bits)
         
         asn = ASN( unpack('!L', data[0:4] )[0] )
         data = data[4:]
