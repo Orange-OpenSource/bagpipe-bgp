@@ -200,8 +200,12 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
                          (mac, self.vxlan_if_name, remotePE, vni))
 
         # populate ARP cache
-        self._runCommand("ip neighbor replace %s lladdr %s dev %s nud "
-                         "permanent" % (ip, mac, self.vxlan_if_name))
+        if ip is not None:
+            self._runCommand("ip neighbor replace %s lladdr %s dev %s nud "
+                             "permanent" % (ip, mac, self.vxlan_if_name))
+        else:
+            self.log.warning("No IP in E-VPN route, ARP will not work for this"
+                             "IP/MAC")
 
         self._fdbDump()
 
