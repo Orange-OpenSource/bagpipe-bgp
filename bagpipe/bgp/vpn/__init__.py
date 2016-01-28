@@ -413,7 +413,8 @@ class VPNManager(LookingGlass):
 
         redirectedInstance.trafficIndirected(redirectRT)
 
-        del self.vpnInstances[externalInstanceId]
+        if redirectVpnInstance.stopIfEmpty():
+            del self.vpnInstances[externalInstanceId]
 
     @logDecorator.logInfo
     def stop(self):
