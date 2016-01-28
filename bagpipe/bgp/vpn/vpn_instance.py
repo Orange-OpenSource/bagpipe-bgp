@@ -278,13 +278,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
             self.log.debug("Plugging port (%s)", ipPrefix)
 
-            portData = dict()
-            portData['label'] = self.labelAllocator.getNewLabel(
-                "Incoming traffic for %s %d, interface %s, endpoint %s/%s" %
-                (self.instanceType, self.instanceId, localPort['linuxif'],
-                 macAddress, ipAddressPrefix)
-            )
-            portData["port_info"] = localPort
+            portData = self.macAddress2LocalPortData.get(macAddress, dict())
+            if not portData:
+                portData['label'] = self.vpnManager.labelAllocator.getNewLabel(
+                    "Incoming traffic for %s %d, interface %s, endpoint %s/%s" %
+                    (self.instanceType, self.instanceId, localPort['linuxif'],
+                     macAddress, ipAddressPrefix)
+                )
+                portData["port_info"] = localPort
 
             # Call driver to setup the dataplane for incoming traffic
             self.dataplane.vifPlugged(macAddress, ipPrefix,
@@ -378,18 +379,18 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.dataplane.vifUnplugged(
                 macAddress, ipPrefix, localPort, label, lastEndpoint)
 
-            # Free label to the allocator
-            self.labelAllocator.release(label)
-
             # Forget data for this port if last endpoint
             if lastEndpoint:
+                # Free label to the allocator
+                self.vpnManager.labelAllocator.release(label)
+
                 del self.localPort2Endpoints[localPort['linuxif']]
+                del self.macAddress2LocalPortData[macAddress]
             else:
                 self.localPort2Endpoints[localPort['linuxif']].remove(
                     {'mac': macAddress, 'ip': ipAddressPrefix}
                 )
 
-            del self.macAddress2LocalPortData[macAddress]
             del self.ipAddress2MacAddress[ipAddressPrefix]
         else:
             self.log.error("vifUnplugged called for endpoint {%s, %s}, but"
