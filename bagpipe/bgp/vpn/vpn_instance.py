@@ -344,6 +344,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         # cleanup BGP subscriptions
         for rt in self.importRTs:
             self._unsubscribe(self.afi, self.safi, rt)
+            self._unsubscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
 
         self.dataplane.cleanup()
 
@@ -382,10 +383,12 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         # Register to BGP with these route targets
         for rt in added_import_rt:
             self._subscribe(self.afi, self.safi, rt)
+            self._subscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
 
         # Unregister from BGP with these route targets
         for rt in removed_import_rt:
             self._unsubscribe(self.afi, self.safi, rt)
+            self._unsubscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
 
         # Update import and export route targets
         self.importRTs = newImportRTs
