@@ -97,6 +97,10 @@ class VRF(VPNInstance, LookingGlass):
             10000+label)
 
     def _toReadvertise(self, route):
+        # Only re-advertise IP VPN routes (e.g. not Flowspec routes)
+        if not isinstance(route.nlri, IPVPNNlri):
+            return False
+
         rtRecords = route.extendedCommunities(lambda ecom:
                                               isinstance(ecom, RTRecord))
         self.log.debug("RTRecords: %s (readvertiseToRTs:%s)",
