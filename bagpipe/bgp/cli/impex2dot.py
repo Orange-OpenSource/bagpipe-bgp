@@ -23,13 +23,13 @@ def request(options, args):
 
 def normalize(rtstring):
     return (rtstring
-            .replace("target:","rt:")
-            .replace(":","_")
-            .replace("-","_")
-            .replace("64512_",""))
+            .replace("target:", "rt:")
+            .replace(":", "_")
+            .replace("-", "_")
+            .replace("64512_", ""))
 
 
-RT_STYLE='color="orange",textcolor="orange"'
+RT_STYLE = 'color="orange",textcolor="orange"'
 
 
 def get_all(options):
@@ -73,7 +73,7 @@ def main():
         "--prefix", dest="prefix", default=LOOKING_GLASS_BASE,
         help="Looking-glass URL Prefix (optional, default: %default)")
 
-    (options, args) = parser.parse_args()
+    (options, _) = parser.parse_args()
 
     ports = set()
     dests = set()
@@ -83,7 +83,7 @@ def main():
     print '   subgraph rts {'
     print '       rank=same;'
     for rt in rts:
-        label = rt.replace("_", "\n").upper()
+        label = rt.replace('_', '\n').upper()
         print '        %s [shape="circle",label="%s",%s];' % (rt, label,
                                                               RT_STYLE)
     print '    }'
