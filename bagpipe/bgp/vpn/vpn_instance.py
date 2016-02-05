@@ -283,7 +283,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
             portData = self.macAddress2LocalPortData.get(macAddress, dict())
             if not portData:
-                portData['label'] = self.vpnManager.labelAllocator.getNewLabel(
+                portData['label'] = self.labelAllocator.getNewLabel(
                     "Incoming traffic for %s %d, interface %s, endpoint %s/%s" %
                     (self.instanceType, self.instanceId, localPort['linuxif'],
                      macAddress, ipAddressPrefix)
@@ -386,7 +386,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             # Forget data for this port if last endpoint
             if lastEndpoint:
                 # Free label to the allocator
-                self.vpnManager.labelAllocator.release(label)
+                self.labelAllocator.release(label)
 
                 del self.localPort2Endpoints[localPort['linuxif']]
                 del self.macAddress2LocalPortData[macAddress]
