@@ -83,7 +83,7 @@ def main():
     print '   subgraph rts {'
     print '       rank=same;'
     for rt in rts:
-        label = rt.replace('_', '\\n').upper()
+        label = rt.upper().replace('_', '\\n')
         print '        %s [shape="circle",label="%s",%s];' % (rt, label,
                                                               RT_STYLE)
     print '    }'
