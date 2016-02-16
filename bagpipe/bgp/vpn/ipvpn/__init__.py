@@ -140,7 +140,7 @@ class VRF(VPNInstance, LookingGlass):
 
         finalRTRecords = list(set(origRTRecords) | set(addRTRecords))
 
-        eComs = ExtendedCommunities()
+        eComs = self._genEncapExtendedCommunities()
         eComs.communities += finalRTRecords
         attributes.add(eComs)
 
@@ -299,7 +299,8 @@ class VRF(VPNInstance, LookingGlass):
                         self._withdrawRoute(flowEntry)
 
                     if not self._imported(oldRoute):
-                        self.log.debug("No need to setup dataplane for:%s", prefix)
+                        self.log.debug("No need to setup dataplane for:%s",
+                                       prefix)
                         return
 
             if self._skipRouteRemoval(last):

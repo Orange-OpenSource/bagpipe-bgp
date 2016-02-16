@@ -160,7 +160,7 @@ class EVI(VPNInstance, LookingGlass):
 
         attributes = Attributes()
 
-        attributes.add(self._genExtendedCommunities())
+        attributes.add(self._genEncapExtendedCommunities())
 
         # add PMSI Tunnel Attribute route
         attributes.add(PMSIIngressReplication(

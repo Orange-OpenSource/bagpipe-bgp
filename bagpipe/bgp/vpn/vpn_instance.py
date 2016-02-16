@@ -427,7 +427,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         return (ipAddress, mask)
 
-    def _genExtendedCommunities(self):
+    def _genEncapExtendedCommunities(self):
         ecommunities = ExtendedCommunities()
         for encap in self.dataplaneDriver.supportedEncaps():
             if not isinstance(encap, Encapsulation):
@@ -457,7 +457,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                                               label)
         assert(isinstance(routeEntry, RouteEntry))
 
-        routeEntry.attributes.add(self._genExtendedCommunities())
+        routeEntry.attributes.add(self._genEncapExtendedCommunities())
         routeEntry.setRouteTargets(self.exportRTs)
 
         self.log.debug("Synthesized Vif route entry: %s", routeEntry)
