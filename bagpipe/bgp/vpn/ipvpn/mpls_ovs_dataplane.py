@@ -521,21 +521,28 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                                                                self.mask)):
             dec_ttl_action = "dec_ttl"
 
-        label_action = "push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" % label
+        if (self.driver.vxlanEncap and
+                Encapsulation(Encapsulation.VXLAN) in encaps):
+            label_action = "set_field:%d->tunnel_id" % label
+        else:
+            label_action = "push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" % label
 
         # Check if prefix is from a local VRF
         if self.driver.getLocalAddress() == str(remotePE):
             self.log.debug("Local route, using a resubmit action")
             # For local traffic, we have to use a resubmit action
-            output_action = "resubmit:%s" % self._mplsInPort()
+            if (self.driver.vxlanEncap and
+                    Encapsulation(Encapsulation.VXLAN) in encaps):
+                output_action = ("resubmit:%s"
+                                 % self.driver.ovsVXLANTunnelPortNumber)
+            else:
+                output_action = "resubmit:%s" % self._mplsInPort()
         else:
             if (self.driver.vxlanEncap and
                     Encapsulation(Encapsulation.VXLAN) in encaps):
                 self.log.debug("Will use a VXLAN encap for this destination")
                 output_action = "set_field:%s->tun_dst,output:%s" % (
                     str(remotePE), self.driver.ovsVXLANTunnelPortNumber)
-                label_action = "set_field:%d->tunnel_id" % label
-                # OR set_field:0xfoo->tun_id ?
             elif self.driver.useGRE:
                 self.log.debug("Using MPLS/GRE encap")
                 output_action = "set_field:%s->tun_dst,output:%s" % (
@@ -827,6 +834,12 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             if self.vxlanEncap:
                 self._ovs_flow_del('in_port=%d' %
                                    self.find_ovs_port(VXLAN_TUNNEL),
+                                   self.ovs_table_incoming)
+                # the above won't clean up flows if the vxlan_tunnel interface
+                # has changed...
+                self._ovs_flow_del('tun_id=2/1',
+                                   self.ovs_table_incoming)
+                self._ovs_flow_del('tun_id=1/1',
                                    self.ovs_table_incoming)
             self._ovs_flow_del('ip', self.ovs_table_vrfs)
             self._ovs_flow_del('arp', self.ovs_table_vrfs)
