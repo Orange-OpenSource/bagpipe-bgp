@@ -579,7 +579,10 @@ class RouteTableManager(Thread, LookingGlass):
         match_EVPN = Match(
             AFI(AFI.l2vpn), SAFI(SAFI.evpn), Subscription.ANY_RT)
         match_RTC = Match(AFI(AFI.ipv4), SAFI(SAFI.rtc), Subscription.ANY_RT)
-        for match in [match_IPVPN, match_EVPN, match_RTC]:
+        match_FlowSpecVPN = Match(AFI(AFI.ipv4),
+                                  SAFI(SAFI.flow_vpn),
+                                  Subscription.ANY_RT)
+        for match in [match_IPVPN, match_EVPN, match_RTC, match_FlowSpecVPN]:
             matchResult = []
             if match in self._match2workersAndEntries:
                 for entry in self._match2entries(match):

@@ -83,7 +83,7 @@ def main():
     print '   subgraph rts {'
     print '       rank=same;'
     for rt in rts:
-        label = rt.replace('_', '\n').upper()
+        label = rt.replace('_', '\\n').upper()
         print '        %s [shape="circle",label="%s",%s];' % (rt, label,
                                                               RT_STYLE)
     print '    }'
@@ -91,7 +91,7 @@ def main():
     print '    subgraph vrfs {'
     print '       rank=same;'
     for vrf in vrfs:
-        print '        vrf_%s [label="VRF\n%s", shape="box"];' % (vrf, vrf)
+        print '        vrf_%s [label="VRF\\n%s", shape="box"];' % (vrf, vrf)
     print '    }'
 
     for vrf_id in vrfs:

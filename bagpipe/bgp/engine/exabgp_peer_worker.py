@@ -100,7 +100,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
 
     enabledFamilies = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
                        # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
-                       (AFI(AFI.l2vpn), SAFI(SAFI.evpn))]
+                       (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
+                       (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn)),
+                       (AFI(AFI.ipv4), SAFI(SAFI.flow_ip))]
 
     def __init__(self, routeTableManager, name, peerAddress, config):
         BGPPeerWorker.__init__(self, routeTableManager, name, peerAddress)

@@ -27,6 +27,8 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 
+from bagpipe.bgp.engine.rt_record import RTRecord
+
 from bagpipe.bgp.engine.ipvpn import IPVPN as IPVPNNlri
 from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
 
@@ -40,10 +42,7 @@ from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.attribute.attribute import Attribute
 from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended.rt \
-    import RouteTarget as RTExtCom
-from exabgp.bgp.message.update.attribute.community.extended.rt_record\
-    import RTRecord
+from exabgp.bgp.message.update.attribute.community.extended.rt import RouteTarget as RTExtCom
 
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
@@ -101,10 +100,6 @@ class VRF(VPNInstance, LookingGlass):
             10000+label)
 
     def _toReadvertise(self, route):
-        # Only re-advertise IP VPN routes (e.g. not Flowspec routes)
-        if not isinstance(route.nlri, IPVPNNlri):
-            return False
-
         rtRecords = route.extendedCommunities(lambda ecom:
                                               isinstance(ecom, RTRecord))
         self.log.debug("RTRecords: %s (readvertiseToRTs:%s)",
@@ -149,18 +144,6 @@ class VRF(VPNInstance, LookingGlass):
         return entry
 
     @logDecorator.log
-    def _routeForRedirectPrefix(self, prefix):
-        prefixClassifier = self.attractClassifier.copy()
-        prefixClassifier['destinationPrefix'] = prefix
-
-        trafficClassifier = TrafficClassifier(**prefixClassifier)
-        self.log.debug("Advertising prefix %s for redirection based on "
-                       "traffic classifier %s", prefix, trafficClassifier)
-        rules = trafficClassifier.mapTrafficClassifier2RedirectRules()
-
-        return self.synthesizeRedirectBGPRoute(rules)
-
-    @logDecorator.log
     def _readvertise(self, route):
         nlri = route.nlri
 
@@ -186,6 +169,18 @@ class VRF(VPNInstance, LookingGlass):
             self._withdrawRoute(routeEntry)
 
         self.readvertised.remove(route)
+
+    @logDecorator.log
+    def _routeForRedirectPrefix(self, prefix):
+        prefixClassifier = self.attractClassifier.copy()
+        prefixClassifier['destinationPrefix'] = prefix
+
+        trafficClassifier = TrafficClassifier(**prefixClassifier)
+        self.log.debug("Advertising prefix %s for redirection based on "
+                       "traffic classifier %s", prefix, trafficClassifier)
+        rules = trafficClassifier.mapTrafficClassifier2RedirectRules()
+
+        return self.synthesizeRedirectBGPRoute(rules)
 
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
                    advertiseSubnet):
@@ -313,14 +308,8 @@ class VRF(VPNInstance, LookingGlass):
                 prefix, oldRoute.nexthop,
                 oldRoute.nlri.labels.labels[0], oldRoute.nlri)
 
-    ### Looking glass ###
-
     def getLGMap(self):
         return {
-            "readvertised": (LGMap.SUBTREE, self.getLGReadvertisedRoutes),
+            "readvertised":  (LGMap.VALUE, [prefix for prefix in
+                                            self.readvertised])
         }
-
-    def getLGReadvertisedRoutes(self, pathPrefix):
-        return [route.getLookingGlassLocalInfo(pathPrefix)
-                for route in self.readvertised]
-

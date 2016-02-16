@@ -26,6 +26,11 @@ from bagpipe.bgp.engine.exabgp_peer_worker import setupExaBGPEnv
 setupExaBGPEnv()
 
 from exabgp.reactor.protocol import AFI, SAFI
+from exabgp.bgp.message.open.asn import ASN
+from exabgp.bgp.message.update.attribute.community.extended.communities \
+    import ExtendedCommunities
+from exabgp.bgp.message.update.attribute.community.extended \
+    import TrafficRedirect
 from exabgp.bgp.message.update.attribute.community.extended import \
     ExtendedCommunities
 from exabgp.bgp.message.update.attribute.community.extended import \
@@ -41,6 +46,7 @@ RT1 = RouteTarget(64512, 10)
 RT2 = RouteTarget(64512, 20)
 RT3 = RouteTarget(64512, 30)
 RT4 = RouteTarget(64512, 40)
+RT5 = RouteTarget(64512, 50)
 
 
 class TestNLRI(object):

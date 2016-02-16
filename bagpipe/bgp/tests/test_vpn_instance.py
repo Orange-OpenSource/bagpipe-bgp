@@ -45,6 +45,7 @@ from bagpipe.bgp.tests import RT1
 from bagpipe.bgp.tests import RT2
 from bagpipe.bgp.tests import RT3
 from bagpipe.bgp.tests import RT4
+from bagpipe.bgp.tests import RT5
 from bagpipe.bgp.tests import NLRI1
 from bagpipe.bgp.tests import NLRI2
 from bagpipe.bgp.tests import NH1
@@ -55,7 +56,7 @@ from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine.worker import Worker
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
-from bagpipe.bgp.vpn.vpn_instance import VPNInstance
+from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 
 from bagpipe.bgp.vpn.ipvpn import VRF
 
@@ -72,6 +73,21 @@ from exabgp.bgp.message.update.attribute.community.extended.rt_record\
     import RTRecord
 from exabgp.bgp.message.update.attribute.community.extended.rt_record\
     import RTRecordASN2Number
+
+from exabgp.bgp.message.update import Attribute
+from exabgp.bgp.message.update.attribute.community.extended \
+    import TrafficRedirect
+from exabgp.bgp.message.update.nlri.flow import (
+    Flow, FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
+    Flow6Source, Flow4Destination, Flow6Destination, NumericOperator)
+from exabgp.bgp.message.update.attribute.community.extended import \
+    RouteTargetASN2Number as RouteTarget
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecord
+from exabgp.bgp.message.update.attribute.community.extended.rt_record\
+    import RTRecordASN2Number
+
+from exabgp.protocol import Protocol
 
 from bagpipe.bgp.vpn.ipvpn import IPVPNRouteFactory
 
@@ -111,6 +127,25 @@ def _extractRTRecordsFromAdvertiseCall(vpnInstance, callIndex=0):
                                      isinstance(ecom, RTRecord))
 
 
+def _extractTrafficRedirectFromAdvertiseCall(vpnInstance, callIndex=0):
+    calls = vpnInstance._advertiseRoute.call_args_list
+    attributes = calls[callIndex][0][0].attributes
+    if Attribute.CODE.EXTENDED_COMMUNITY in attributes:
+        ecoms = attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
+        for ecom in ecoms:
+            if isinstance(ecom, TrafficRedirect):
+                return RouteTarget(int(ecom.asn), int(ecom.target))
+    return None
+
+
+def _extractTrafficClassifierFromAdvertiseCall(vpnInstance, callIndex=0):
+    calls = vpnInstance._advertiseRoute.call_args_list
+    print calls[callIndex][0][0].nlri.rules
+    trafficClassifier = TrafficClassifier()
+    trafficClassifier.mapRedirectRules2TrafficClassifier(calls[callIndex][0][0].nlri.rules)
+    return trafficClassifier
+
+
 class TestableVPNInstance(VPNInstance):
 
     def _bestRouteRemoved(self, entry, route):
@@ -130,7 +165,6 @@ class TestVPNInstance(TestCase):
 
     def setUp(self):
         super(TestVPNInstance, self).setUp()
-        labelAllocator = LabelAllocator()
 
         mockDataplane = Mock()
         mockDataplane.vifPlugged = Mock()
@@ -141,11 +175,10 @@ class TestVPNInstance(TestCase):
 
         VPNInstance.afi = AFI(AFI.ipv4)
         VPNInstance.safi = SAFI(SAFI.mpls_vpn)
-        self.vpnInstance = TestableVPNInstance(Mock(name='BGPManager'),
-                                               labelAllocator,
+        self.vpnInstance = TestableVPNInstance(Mock(name='VPNManager'),
                                                mockDPDriver, 1, 1,
                                                [RT1], [RT1], '10.0.0.1', 24,
-                                               None)
+                                               None, None)
         self.vpnInstance.synthesizeVifBGPRoute = Mock(
             return_value=RouteEntry(NLRI1, [RT1]))
         self.vpnInstance._advertiseRoute = Mock()
@@ -668,12 +701,21 @@ vpnNLRI2 = IPVPNRouteFactory(AFI(AFI.ipv4), "2.2.2.2/32",
 vpnNLRI3 = IPVPNRouteFactory(AFI(AFI.ipv4), "3.3.3.3/32",
                              50, TEST_RD, '45.45.45.45')
 
+attractTraffic1 = {'redirect_rt': [RT5],
+                   'classifier': {'destinationPort': '80',
+                                  'protocol': 'tcp'
+                                  }
+                   }
+
+trafficClassifier1 = TrafficClassifier(destinationPrefix="1.1.1.1/32",
+                                       destinationPort="80",
+                                       protocol="tcp")
+
 
 class TestVRF(BaseTestBagPipeBGP, TestCase):
 
     def setUp(self):
         super(TestVRF, self).setUp()
-        labelAllocator = LabelAllocator()
 
         self.mockDataplane = Mock()
         self.mockDataplane.vifPlugged = Mock()
@@ -687,22 +729,40 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         mockDPDriver.supportedEncaps.return_value = \
             [Encapsulation(Encapsulation.Type.DEFAULT)]
 
+        labelAllocator = LabelAllocator()
         bgpManager = Mock()
         bgpManager.getLocalAddress.return_value = "4.5.6.7"
+        vpnManager = Mock(bgpManager=bgpManager,
+                          labelAllocator=labelAllocator)
 
-        VPNInstance.afi = AFI(AFI.ipv4)
-        VPNInstance.safi = SAFI(SAFI.mpls_vpn)
+#        VPNInstance.afi = AFI(AFI.ipv4)
+#        VPNInstance.safi = SAFI(SAFI.mpls_vpn)
         self.vpnInstance = VRF(
-            bgpManager,
-            labelAllocator,
+            vpnManager,
             mockDPDriver, 1, 1,
             [RT1], [RT1], '10.0.0.1', 24,
             {'from_rt': [RT3],
              'to_rt': [RT4]
-             })
+             }, None)
         self.vpnInstance._advertiseRoute = Mock()
         self.vpnInstance._withdrawRoute = Mock()
         self.vpnInstance.start()
+
+#         self.vpnInstanceAttract = VRF(
+#             vpnManager,
+#             mockDPDriver, 1, 1,
+#             [RT1], [], '10.0.0.1', 24,
+#             {'from_rt': [RT3],
+#              'to_rt': [RT4]
+#              },
+#             {'redirect_rt': [RT5],
+#              'classifier': {'destinationPort': '80',
+#                             'protocol': 'tcp'
+#                             }
+#              })
+#         self.vpnInstanceAttract._advertiseRoute = Mock()
+#         self.vpnInstanceAttract._withdrawRoute = Mock()
+#         self.vpnInstanceAttract.start()
 
         self.eventTargetWorker = self.vpnInstance
 
@@ -718,6 +778,11 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         super(TestVRF, self).tearDown()
         self.vpnInstance.stop()
         self.vpnInstance.join()
+
+    def _configVRFWithAttractTraffic(self, attractTraffic):
+        self.vpnInstance.attractTraffic = True
+        self.vpnInstance.attractRT = attractTraffic['redirect_rt']
+        self.vpnInstance.attractClassifier = attractTraffic['classifier']
 
     # unit test for IPVPN re-advertisement
     def test_ReAdvertisement1(self):
@@ -818,5 +883,40 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self.assertEqual(
             0,
             self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
-        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
 
+    # unit test for IPVPN traffic redirection
+    def test_AttractTraffic1(self):
+        # Configure VRF generate traffic redirection to route target, based on
+        # 5-tuple classifier
+        self._configVRFWithAttractTraffic(attractTraffic1)
+
+        self._resetMocks()
+
+        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False)
+
+        # new Route for plugged if supposed to be advertised
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+
+        self._resetMocks()
+
+        workerA = Worker(Mock(), 'Worker-A')
+
+        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
+                            workerA, NH1, 200)
+
+        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        # 1 - re-advertisement of VPN NLRI1 supposed to happen to RT4
+        self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        self.assertNotIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        self.assertNotIn(RT3, _extractRTFromAdvertiseCall(self.vpnInstance, 0))
+        # 2 - advertisement of FlowSpec NLRI supposed to happen to RT5 for
+        #     traffic redirect to RT4 on TCP destination port 80
+        self.assertIn(RT5, _extractRTFromAdvertiseCall(self.vpnInstance, 1))
+        self.assertEqual(
+            RT4,
+            _extractTrafficRedirectFromAdvertiseCall(self.vpnInstance, 1)
+        )
+        self.assertEqual(
+            trafficClassifier1,
+            _extractTrafficClassifierFromAdvertiseCall(self.vpnInstance, 1)
+        )
