@@ -535,9 +535,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.dataplane.vifPlugged(macAddress, ipPrefix,
                                       localPort, portData['label'])
 
-            if not advertiseSubnet:
-                self.log.debug("Will advertise as /32 instead of /%d" %
-                               prefixLen)
+            if not advertiseSubnet and prefixLen != 32:
+                self.log.debug("Using /32 instead of /%d", prefixLen)
                 prefixLen = 32
 
             self.log.info("Synthesizing and advertising BGP route for VIF %s "
@@ -613,9 +612,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             lastEndpoint = len(self.localPort2Endpoints[localPort['linuxif']
                                                         ]) <= 1
 
-            if not advertiseSubnet:
-                self.log.debug("Will advertise as /32 instead of /%d" %
-                               prefixLen)
+            if not advertiseSubnet and prefixLen != 32:
+                self.log.debug("Using /32 instead of /%d", prefixLen)
                 prefixLen = 32
 
             self.log.info("Synthesizing and withdrawing BGP route for VIF %s "
