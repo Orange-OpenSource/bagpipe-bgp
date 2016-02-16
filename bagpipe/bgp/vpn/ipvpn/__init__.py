@@ -261,8 +261,13 @@ class VRF(VPNInstance, LookingGlass):
             prefix, oldRoute.nexthop,
             oldRoute.nlri.labels.labels[0], oldRoute.nlri)
 
+    ### Looking glass ###
+
     def getLGMap(self):
         return {
-            "readvertised":  (LGMap.VALUE, [prefix for prefix in
-                                            self.readvertised])
+            "readvertised": (LGMap.SUBTREE, self.getLGReadvertisedRoutes),
         }
+
+    def getLGReadvertisedRoutes(self, pathPrefix):
+        return [route.getLookingGlassLocalInfo(pathPrefix)
+                for route in self.readvertised]
