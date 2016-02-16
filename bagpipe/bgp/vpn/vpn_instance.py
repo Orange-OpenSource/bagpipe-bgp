@@ -385,11 +385,18 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                 self.labelAllocator.release(label)
 
                 del self.localPort2Endpoints[localPort['linuxif']]
-                del self.macAddress2LocalPortData[macAddress]
             else:
                 self.localPort2Endpoints[localPort['linuxif']].remove(
                     {'mac': macAddress, 'ip': ipAddressPrefix}
                 )
+
+            if not lastEndpoint:
+                if not any([endpoint['mac'] == macAddress for endpoint
+                            in self.localPort2Endpoints[localPort['linuxif']]]
+                           ):
+                    del self.macAddress2LocalPortData[macAddress]
+            else:
+                del self.macAddress2LocalPortData[macAddress]
 
             del self.ipAddress2MacAddress[ipAddressPrefix]
         else:
