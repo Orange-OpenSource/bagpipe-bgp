@@ -210,11 +210,11 @@ def main():
                       " works in conjunction with --readv-from-rt",
                       default=[], action="append")
 
-    parser.add_option("--redirect-rt", dest="redirectRT",
-                      help="Redirection route target to attract traffic, "
+    parser.add_option("--redirect-rts", dest="redirectRTs",
+                      help="Redirection Route Targets to attract traffic, "
                       "matching the traffic classifier, in specified VRF from "
                       "any VRF importing this route target",
-                      default=None)
+                      default=[], action="append")
     parser.add_option("--source-prefix", dest="sourcePrefix",
                       type="string", help="Traffic classifier source prefix "
                       "filter",
@@ -336,9 +336,9 @@ def main():
                        "to_rt": options.reAdvToRTs}
 
     attract_traffic = dict()
-    if options.redirectRT:
+    if options.redirectRTs:
         if options.classifier:
-            attract_traffic.update(dict({'redirect_rt': options.redirectRT,
+            attract_traffic.update(dict({'redirect_rts': options.redirectRTs,
                                          'classifier': options.classifier}))
         else:
             parser.error("Need to specify --redirect-rt and at least one "

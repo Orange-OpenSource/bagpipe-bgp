@@ -322,15 +322,18 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             self.readvertise = False
 
         if self.readvertise and attractTraffic:
+            if len(self.readvertiseToRTs) != 1:
+                raise APIException("attract_traffic requires exactly one RT"
+                                   " to be provided in readvertise/to_rt")
             self.attractTraffic = True
-            self.attractRT = attractTraffic['redirect_rt']
+            self.attractRTs = attractTraffic['redirect_rts']
             try:
                 self.attractClassifier = attractTraffic['classifier']
             except KeyError:
                 raise APIException("'attractTraffic' specified with no "
                                    "'classifier'")
             self.log.debug("Attract traffic enabled for RT: %s and classifier:"
-                           " %s", self.attractRT, self.attractClassifier)
+                           " %s", self.attractRTs, self.attractClassifier)
         else:
             self.log.debug("attract traffic not enabled")
             self.attractTraffic = False
@@ -474,15 +477,16 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         assert(isinstance(routeEntry, RouteEntry))
 
         ecommunities = ExtendedCommunities()
-        # TODO: Check readvertiseToRTs length
-        asn, target = (self.readvertiseToRTs[0].asn,
-                       self.readvertiseToRTs[0].number)
+
+        # checked at __init__:
+        assert(len(self.readvertiseToRTs) == 1)
+        rt = self.readvertiseToRTs[0]
         ecommunities.communities.append(
-            TrafficRedirect(ASN(int(asn)), int(target))
+            TrafficRedirect(ASN(int(rt.asn)), int(rt.number))
         )
 
         routeEntry.attributes.add(ecommunities)
-        routeEntry.setRouteTargets(self.attractRT)
+        routeEntry.setRouteTargets(self.attractRTs)
 
         self.log.debug("Synthesized redirect route entry: %s", routeEntry)
         return routeEntry
@@ -787,7 +791,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     def getLGAttractTraffic(self):
         if self.attractTraffic:
-            return {'redirect_rt': [repr(rt) for rt in self.attractRT],
+            return {'redirect_rts': [repr(rt) for rt in self.attractRTs],
                     'classifier': self.attractClassifier}
         else:
             return {}

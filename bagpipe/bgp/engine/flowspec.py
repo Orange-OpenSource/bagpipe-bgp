@@ -21,7 +21,7 @@ class Flow(ExaBGPFlow):
 
     def __hash__(self):
         #FIXME: are dicts hashable ?
-        log.warning("flow rules: %s", repr(self.rules))
+        log.debug("flow rules: %s", repr(self.rules))
         return hash((self.rd, repr(self.rules)))
 
 

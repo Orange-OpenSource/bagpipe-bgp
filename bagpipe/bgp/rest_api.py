@@ -193,9 +193,10 @@ class RESTAPI(LookingGlass):
                 'destinationPort': Port number or port range,
                 'protocol': IP protocol
             },
-            'redirect_rt': used to re-advertise addresses received on RTs
-                           specified in 'readvertise: from_rt' in
-                           FlowSpec routes
+            'redirect_rts': a FlowSpec route for the classifier will be
+                            toward these Route Targets, with an action
+                            consisting in redirecting to a VRF with an RT
+                            of "readvertise: to_rt"
         }
 
         """

@@ -701,7 +701,7 @@ vpnNLRI2 = IPVPNRouteFactory(AFI(AFI.ipv4), "2.2.2.2/32",
 vpnNLRI3 = IPVPNRouteFactory(AFI(AFI.ipv4), "3.3.3.3/32",
                              50, TEST_RD, '45.45.45.45')
 
-attractTraffic1 = {'redirect_rt': [RT5],
+attractTraffic1 = {'redirect_rts': [RT5],
                    'classifier': {'destinationPort': '80',
                                   'protocol': 'tcp'
                                   }
@@ -755,7 +755,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
 #             {'from_rt': [RT3],
 #              'to_rt': [RT4]
 #              },
-#             {'redirect_rt': [RT5],
+#             {'redirect_rts': [RT5],
 #              'classifier': {'destinationPort': '80',
 #                             'protocol': 'tcp'
 #                             }
@@ -781,7 +781,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
 
     def _configVRFWithAttractTraffic(self, attractTraffic):
         self.vpnInstance.attractTraffic = True
-        self.vpnInstance.attractRT = attractTraffic['redirect_rt']
+        self.vpnInstance.attractRTs = attractTraffic['redirect_rts']
         self.vpnInstance.attractClassifier = attractTraffic['classifier']
 
     # unit test for IPVPN re-advertisement

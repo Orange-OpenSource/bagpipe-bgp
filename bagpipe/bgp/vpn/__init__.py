@@ -299,8 +299,8 @@ class VPNManager(LookingGlass):
 
         if attractTraffic:
             try:
-                attractTraffic['redirect_rt'] = (
-                    convertRouteTargets(attractTraffic['redirect_rt']))
+                attractTraffic['redirect_rts'] = (
+                    convertRouteTargets(attractTraffic['redirect_rts']))
             except KeyError as e:
                 raise Exception("Wrong 'attractTraffic' parameters: %s" % e)
 
