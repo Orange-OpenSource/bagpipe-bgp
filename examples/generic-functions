@@ -43,6 +43,12 @@ scp $(dirname $0)/setup-cross-routing $hostB:
 
 ###############################################################################
 
+function clean_netns_all {
+	for netns in $*; do
+		r_both ip netns delete $netns
+	done
+}
+
 function clean_start {
 	r_both /etc/init.d/bagpipe-bgp start
 	if r_a 'test $(bagpipe-looking-glass summary vpn_instances_count) -ge 1'; then

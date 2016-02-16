@@ -37,6 +37,9 @@ source $(dirname $0)/generic-functions
 
 clean_start
 
+clean_netns_all net1vm1 svm1 svm2 net2vm2
+
+
 ## 
 ## VM1:  sur A
 ##
