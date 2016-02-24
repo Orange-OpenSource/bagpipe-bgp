@@ -800,6 +800,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             # specified and force the use of GRE
         else:
             yield Encapsulation(Encapsulation.Type.MPLS)
+            # we also accept route with no encap specified
+            yield Encapsulation(Encapsulation.Type.DEFAULT)
 
         if self.vxlanEncap:
             yield Encapsulation(Encapsulation.Type.VXLAN)
