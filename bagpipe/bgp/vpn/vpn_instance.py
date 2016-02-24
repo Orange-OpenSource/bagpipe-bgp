@@ -725,9 +725,11 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         if not goodEncaps:
             self.log.warning("No encap supported by dataplane driver for route"
-                             " %s, advertized: %s,dataplane supports: %s)",
+                             " %s, advertized: %s, dataplane supports: {%s}",
                              route, advEncaps,
-                             self.dataplaneDriver.supportedEncaps())
+                             ", ".join([repr(encap) for encap in
+                                        self.dataplaneDriver.supportedEncaps()]
+                                       ))
 
         return goodEncaps
 
