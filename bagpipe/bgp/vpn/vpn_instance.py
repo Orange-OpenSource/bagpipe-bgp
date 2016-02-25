@@ -332,7 +332,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             except KeyError:
                 raise APIException("'attractTraffic' specified with no "
                                    "'classifier'")
-            self.log.debug("Attract traffic enabled for RT: %s and classifier:"
+            self.log.debug("Attract traffic enabled with RT: %s and classifier:"
                            " %s", self.attractRTs, self.attractClassifier)
         else:
             self.log.debug("attract traffic not enabled")

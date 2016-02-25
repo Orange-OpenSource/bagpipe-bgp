@@ -111,13 +111,17 @@ class VRF(VPNInstance, LookingGlass):
                        rtRecords,
                        self.readvertiseToRTs)
 
-        readvertiseToRTs_as_records = [RTRecord.from_rt(rt)
-                                       for rt in self.readvertiseToRTs]
+        readvertise_targets_as_records = [RTRecord.from_rt(rt)
+                                          for rt in self.readvertiseToRTs]
 
-        if set(readvertiseToRTs_as_records).intersection(set(rtRecords)):
-            self.log.debug("not to re-advertise because one of readvertise "
-                           "RTs is in RTRecords: %s",
-                           set(readvertiseToRTs_as_records)
+        if self.attractTraffic:
+            readvertise_targets_as_records += [RTRecord.from_rt(rt)
+                                               for rt in self.attractRTs]
+
+        if set(readvertise_targets_as_records).intersection(set(rtRecords)):
+            self.log.debug("not to re-advertise because one of the readvertise"
+                           " or attract-redirect RTs is in RTRecords: %s",
+                           set(readvertise_targets_as_records)
                            .intersection(set(rtRecords)))
             return False
 
@@ -133,7 +137,7 @@ class VRF(VPNInstance, LookingGlass):
 
         # new RTRecord = original RTRecord (if any) + orig RTs
         origRTRecords = route.extendedCommunities(lambda ecom:
-                                              isinstance(ecom, RTRecord))
+                                                  isinstance(ecom, RTRecord))
         rts = route.extendedCommunities(lambda ecom:
                                         isinstance(ecom, RTExtCom))
         addRTRecords = [RTRecord.from_rt(rt) for rt in rts]
