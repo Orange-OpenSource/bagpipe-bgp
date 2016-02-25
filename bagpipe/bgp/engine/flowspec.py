@@ -17,12 +17,13 @@ class Flow(ExaBGPFlow):
     '''
 
     def __eq__(self, other):
-        return self.rd == other.rd and self.rules == other.rules
+        return self.pack() == other.pack()
 
     def __hash__(self):
-        #FIXME: are dicts hashable ?
-        log.debug("flow rules: %s", repr(self.rules))
-        return hash((self.rd, repr(self.rules)))
+        return hash(self.pack())
+
+    def __repr__(self):
+        return str(self)
 
 
 def FlowRouteFactory(afi, rd):
