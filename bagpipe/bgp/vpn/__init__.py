@@ -148,7 +148,7 @@ class VPNManager(LookingGlass):
             else:
                 # do nothing
                 log.warning('Trying to plug an E-VPN into an IPVPN, but it was'
-                            'already done')
+                            ' already done')
                 localPort['linuxif'] = ipvpn_if
                 return
 

@@ -405,7 +405,7 @@ class RouteTableManager(Thread, LookingGlass):
 
         entry = routeEvent.routeEntry
 
-        log.debug("Try to find an entry from same peer with same nlri")
+        log.debug("Try to find an entry from same worker with same nlri")
         try:
             replacedEntry = self._source_nlri2entry[(entry.source, entry.nlri)]
         except KeyError:
