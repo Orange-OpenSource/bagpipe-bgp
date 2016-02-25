@@ -87,8 +87,9 @@ class RouteEntry(LookingGlass):
         if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
             ecoms = self.attributes[
                 Attribute.CODE.EXTENDED_COMMUNITY].communities
+            # use type(..) because isinstance(rtrecord, RouteTarget) is True
             self._routeTargets = [ecom for ecom in ecoms
-                                  if isinstance(ecom, RouteTarget)]
+                                  if type(ecom) == RouteTarget]
             if RTs:
                 ecoms += RTs
                 self._routeTargets += RTs
