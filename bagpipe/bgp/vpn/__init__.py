@@ -450,7 +450,9 @@ class VPNManager(LookingGlass):
         }
 
     def getLGVPNList(self):
-        return [{"id": i} for i in self.vpnInstances.iterkeys()]
+        return [{"id": id,
+                 "name": instance.name}
+                for (id, instance) in self.vpnInstances.iteritems()]
 
     def getLGVPNFromPathItem(self, pathItem):
         return self.vpnInstances[pathItem]

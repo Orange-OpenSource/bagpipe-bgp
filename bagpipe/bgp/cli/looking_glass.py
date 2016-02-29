@@ -145,6 +145,14 @@ e.g.: %prog vpns instances"""
 
         if response.getcode() == 200:
             data = json.load(response)
+
+            if ("href" in data):
+                target_url_bis = data["href"]
+                response_bis = urllib2.urlopen(target_url_bis)
+                if response.getcode() == 200:
+                    target_url = target_url_bis
+                    data = json.load(response_bis)
+
             pretty_print_recurse(data, 0, options.recurse, target_url,
                                  alreadyANewLine=True)
 
