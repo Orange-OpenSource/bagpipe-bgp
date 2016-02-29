@@ -303,12 +303,17 @@ class EVI(VPNInstance, LookingGlass):
 
     def getLookingGlassLocalInfo(self, pathPrefix):
         if not self.gwPort:
-            return {"gwPort": None}
+            return {"gateway_port": None}
         else:
             (linuxif, ipvpn) = self.gwPort
-            return {"gwPort": {
+            return {"gateway_port": {
                     "interface": repr(linuxif),
-                    "ipvpn": LookingGlassReferences.getAbsolutePath(
-                        "VPN_INSTANCES", pathPrefix,
-                        [ipvpn.externalInstanceId]),
+                    "ipvpn": {"href":
+                              LookingGlassReferences.getAbsolutePath(
+                                  "VPN_INSTANCES", pathPrefix,
+                                  [ipvpn.externalInstanceId]),
+                              "id": ipvpn.name,
+                              "external_instance_id":
+                                  ipvpn.externalInstanceId
+                              },
                     }}

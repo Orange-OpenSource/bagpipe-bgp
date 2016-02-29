@@ -70,7 +70,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         else:
             compareRoutes = compareNoECMP
 
-        TrackerWorker.__init__(self, bgpManager, "%s %d" %
+        TrackerWorker.__init__(self, bgpManager, "%s-%d" %
                                (self.instanceType, self.instanceId),
                                compareRoutes)
 
@@ -451,6 +451,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     def getLGMap(self):
         return {
+            "external_instance_id":   (LGMap.VALUE, self.externalInstanceId),
             "dataplane":     (LGMap.DELEGATE, self.dataplane),
             "route_targets": (LGMap.SUBITEM, self.getRTs),
             "gateway_ip":    (LGMap.VALUE, self.gatewayIP),
