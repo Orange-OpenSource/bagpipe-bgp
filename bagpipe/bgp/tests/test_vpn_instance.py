@@ -115,6 +115,7 @@ RTRecord2 = RTRecord.from_rt(RT2)
 RTRecord3 = RTRecord.from_rt(RT3)
 RTRecord4 = RTRecord.from_rt(RT4)
 
+
 def _extractRTFromAdvertiseCall(vpnInstance, callIndex=0):
     calls = vpnInstance._advertiseRoute.call_args_list
     return calls[callIndex][0][0].routeTargets
@@ -123,18 +124,14 @@ def _extractRTFromAdvertiseCall(vpnInstance, callIndex=0):
 def _extractRTRecordsFromAdvertiseCall(vpnInstance, callIndex=0):
     calls = vpnInstance._advertiseRoute.call_args_list
     route = calls[callIndex][0][0]
-    return route.extendedCommunities(lambda ecom:
-                                     isinstance(ecom, RTRecord))
+    return route.extendedCommunities(RTRecord)
 
 
 def _extractTrafficRedirectFromAdvertiseCall(vpnInstance, callIndex=0):
     calls = vpnInstance._advertiseRoute.call_args_list
-    attributes = calls[callIndex][0][0].attributes
-    if Attribute.CODE.EXTENDED_COMMUNITY in attributes:
-        ecoms = attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
-        for ecom in ecoms:
-            if isinstance(ecom, TrafficRedirect):
-                return RouteTarget(int(ecom.asn), int(ecom.target))
+    route = calls[callIndex][0][0]
+    for ecom in route.extendedCommunities(TrafficRedirect):
+        return RouteTarget(int(ecom.asn), int(ecom.target))
     return None
 
 
@@ -142,7 +139,8 @@ def _extractTrafficClassifierFromAdvertiseCall(vpnInstance, callIndex=0):
     calls = vpnInstance._advertiseRoute.call_args_list
     print calls[callIndex][0][0].nlri.rules
     trafficClassifier = TrafficClassifier()
-    trafficClassifier.mapRedirectRules2TrafficClassifier(calls[callIndex][0][0].nlri.rules)
+    trafficClassifier.mapRedirectRules2TrafficClassifier(
+        calls[callIndex][0][0].nlri.rules)
     return trafficClassifier
 
 
@@ -806,7 +804,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         event2 = self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
                                      workerA, NH1, 200, rtrecords=[RTRecord1])
         # re-advertisement of VPN NLRI2 supposed to happen, to RT4
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)#FIXME:1
+        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
         self.assertIn(RT4, _extractRTFromAdvertiseCall(self.vpnInstance))
         self.assertNotIn(RT2, _extractRTFromAdvertiseCall(self.vpnInstance))
         self.assertNotIn(RT3, _extractRTFromAdvertiseCall(self.vpnInstance))

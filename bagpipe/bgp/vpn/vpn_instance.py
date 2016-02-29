@@ -709,10 +709,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         '''
         advEncaps = None
         try:
-            advEncaps = filter(lambda ecom: isinstance(ecom, Encapsulation),
-                               route.attributes[
-                Attribute.CODE.EXTENDED_COMMUNITY].communities
-            )
+            advEncaps = route.extendedCommunities(Encapsulation)
             self.log.debug("Advertized Encaps: %s", advEncaps)
         except KeyError:
             self.log.debug("no encap advertized, let's use default")

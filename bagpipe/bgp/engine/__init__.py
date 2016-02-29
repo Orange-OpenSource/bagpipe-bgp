@@ -34,6 +34,8 @@ route table manager (singleton)
 
 """
 
+import types
+
 import logging
 
 from bagpipe.bgp.common.looking_glass import LookingGlass
@@ -104,13 +106,23 @@ class RouteEntry(LookingGlass):
 
     def extendedCommunities(self, filter_=None):
         if filter_ is None:
-            def filter_(ecom):
+
+            def filter_real(ecom):
                 return True
+        elif isinstance(filter_, (types.ClassType, types.TypeType)):
+
+            def filter_real(ecom):
+                return isinstance(ecom, filter_)
+        else:
+            # filter is a function(ecom)
+            filter_real = filter_
 
         if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
-            ecoms = self.attributes[
-                Attribute.CODE.EXTENDED_COMMUNITY].communities
-            return [ecom for ecom in ecoms if filter_(ecom)]
+            return filter(filter_real,
+                          self.attributes[Attribute.CODE.EXTENDED_COMMUNITY]
+                          .communities)
+        else:
+            return []
 
     @logDecorator.log
     def setRouteTargets(self, routeTargets):

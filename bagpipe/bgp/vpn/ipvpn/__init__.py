@@ -109,8 +109,7 @@ class VRF(VPNInstance, LookingGlass):
         if not isinstance(route.nlri, IPVPNNlri):
             return False
 
-        rtRecords = route.extendedCommunities(lambda ecom:
-                                              isinstance(ecom, RTRecord))
+        rtRecords = route.extendedCommunities(RTRecord)
         self.log.debug("RTRecords: %s (readvertiseToRTs:%s)",
                        rtRecords,
                        self.readvertiseToRTs)
@@ -140,10 +139,8 @@ class VRF(VPNInstance, LookingGlass):
         attributes = Attributes()
 
         # new RTRecord = original RTRecord (if any) + orig RTs
-        origRTRecords = route.extendedCommunities(lambda ecom:
-                                                  isinstance(ecom, RTRecord))
-        rts = route.extendedCommunities(lambda ecom:
-                                        isinstance(ecom, RTExtCom))
+        origRTRecords = route.extendedCommunities(RTRecord)
+        rts = route.extendedCommunities(RTExtCom)
         addRTRecords = [RTRecord.from_rt(rt) for rt in rts]
 
         finalRTRecords = list(set(origRTRecords) | set(addRTRecords))
@@ -237,16 +234,11 @@ class VRF(VPNInstance, LookingGlass):
         prefix = entry
 
         if isinstance(newRoute.nlri, Flow):
-            #TODO: for redirectRT in newRoute.extendedCommunities(lambda: ...)
-            if Attribute.CODE.EXTENDED_COMMUNITY in newRoute.attributes:
-                ecoms = newRoute.attributes[
-                    Attribute.CODE.EXTENDED_COMMUNITY].communities
-                for ecom in ecoms:
-                    if isinstance(ecom, TrafficRedirect):
-                        redirectRT = "%s:%s" % (ecom.asn, ecom.target)
-                        self.vpnManager.trafficRedirectToVPN(self,
-                                                             redirectRT,
-                                                             newRoute.nlri.rules)
+            #FIXME: check if there are multiple redirect RT
+            for ecom in newRoute.extendedCommunities(TrafficRedirect):
+                redirectRT = "%s:%s" % (ecom.asn, ecom.target)
+                self.vpnManager.trafficRedirectToVPN(self, redirectRT,
+                                                     newRoute.nlri.rules)
         else:
             if self.readvertise:
                 # check if this is a route we need to re-advertise
@@ -282,15 +274,10 @@ class VRF(VPNInstance, LookingGlass):
         prefix = entry
 
         if isinstance(oldRoute.nlri, Flow):
-            #TODO: for redirectRT in newRoute.extendedCommunities(lambda: ...)
-            if Attribute.CODE.EXTENDED_COMMUNITY in oldRoute.attributes:
-                ecoms = oldRoute.attributes[
-                    Attribute.CODE.EXTENDED_COMMUNITY].communities
-                for ecom in ecoms:
-                    if isinstance(ecom, TrafficRedirect):
-                        redirectRT = "%s:%s" % (ecom.asn, ecom.target)
-                        self.vpnManager.trafficIndirectFromVPN(self,
-                                                               redirectRT)
+            #FIXME: check if there are multiple redirect RT
+            for ecom in oldRoute.extendedCommunities(TrafficRedirect):
+                redirectRT = "%s:%s" % (ecom.asn, ecom.target)
+                self.vpnManager.trafficIndirectFromVPN(self, redirectRT)
         else:
             if self.readvertise and last:
                 # check if this is a route we were re-advertising
