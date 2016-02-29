@@ -100,6 +100,10 @@ class VRF(VPNInstance, LookingGlass):
             self.bgpManager.getLocalAddress(),
             10000+label)
 
+    def _imported(self, route):
+        return (len(set(route.routeTargets).intersection(
+                    set(self.importRTs))) > 0)
+
     def _toReadvertise(self, route):
         # Only re-advertise IP VPN routes (e.g. not Flowspec routes)
         if not isinstance(route.nlri, IPVPNNlri):
@@ -226,10 +230,6 @@ class VRF(VPNInstance, LookingGlass):
                            type(route.nlri))
             return None
 
-    def _imported(self, route):
-        return (len(set(route.routeTargets).intersection(
-                    set(self.importRTs))) > 0)
-
     @utils.synchronized
     @logDecorator.log
     def _newBestRoute(self, entry, newRoute):
@@ -237,7 +237,7 @@ class VRF(VPNInstance, LookingGlass):
         prefix = entry
 
         if isinstance(newRoute.nlri, Flow):
-            #for redirectRT in newRoute.extendedCommunities(lambda: ...)
+            #TODO: for redirectRT in newRoute.extendedCommunities(lambda: ...)
             if Attribute.CODE.EXTENDED_COMMUNITY in newRoute.attributes:
                 ecoms = newRoute.attributes[
                     Attribute.CODE.EXTENDED_COMMUNITY].communities
@@ -260,10 +260,10 @@ class VRF(VPNInstance, LookingGlass):
                         flowEntry = self._routeForRedirectPrefix(prefix)
                         self._advertiseRoute(flowEntry)
 
-                    if not self._imported(newRoute):
-                        self.log.debug("No need to setup dataplane for:%s",
-                                       prefix)
-                        return
+            if not self._imported(newRoute):
+                self.log.debug("No need to setup dataplane for:%s",
+                               prefix)
+                return
 
             encaps = self._checkEncaps(newRoute)
             if not encaps:
@@ -282,7 +282,7 @@ class VRF(VPNInstance, LookingGlass):
         prefix = entry
 
         if isinstance(oldRoute.nlri, Flow):
-            #for redirectRT in newRoute.extendedCommunities(lambda: ...)
+            #TODO: for redirectRT in newRoute.extendedCommunities(lambda: ...)
             if Attribute.CODE.EXTENDED_COMMUNITY in oldRoute.attributes:
                 ecoms = oldRoute.attributes[
                     Attribute.CODE.EXTENDED_COMMUNITY].communities
@@ -302,10 +302,10 @@ class VRF(VPNInstance, LookingGlass):
                         flowEntry = self._routeForRedirectPrefix(prefix)
                         self._withdrawRoute(flowEntry)
 
-                    if not self._imported(oldRoute):
-                        self.log.debug("No need to setup dataplane for:%s",
-                                       prefix)
-                        return
+            if not self._imported(oldRoute):
+                self.log.debug("No need to update dataplane for:%s",
+                               prefix)
+                return
 
             if self._skipRouteRemoval(last):
                 self.log.debug("Skipping removal of non-last route because "
