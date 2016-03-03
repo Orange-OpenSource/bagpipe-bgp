@@ -296,6 +296,10 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         # One IP address ->  One MAC address
         self.ipAddress2MacAddress = dict()
 
+        # Redirected instances list from which traffic is attracted (based on
+        # FlowSpec 5-tuple classification)
+        self.redirectedInstances = list()
+
         self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(
             self.instanceId, self.externalInstanceId,
             self.gatewayIP, self.mask, self.instanceLabel, **kwargs)
@@ -664,11 +668,30 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                       self.macAddress2LocalPortData)
         self.log.info("ipAddress2MacAddress: %s", self.ipAddress2MacAddress)
 
+    @utils.synchronized
+    def registerRedirectedInstance(self, instanceId):
+        if instanceId not in self.redirectedInstances:
+            self.redirectedInstances.append(instanceId)
+
+    @utils.synchronized
+    def unregisterRedirectedInstance(self, instanceId):
+        self.redirectedInstances.remove(instanceId)
+
+    @utils.synchronized
     @logDecorator.log
-    def trafficRedirected(self, redirectRT, rules, redirectPort):
-        self.log.debug("Traffic redirected to VRF importing route target %s "
-                       "based on rules %s and port", redirectRT, rules,
-                       redirectPort)
+    def stopIfNoRedirectedInstance(self):
+        self.log.debug("redirectedInstances: %s", self.redirectedInstances)
+        if not self.redirectedInstances:
+            self._stop()
+            return True
+
+        return False
+
+    @logDecorator.log
+    def redirectTraffic(self, redirectRT, rules, redirectPort):
+        self.log.debug("Redirect traffic to VPN instance importing route "
+                       "target %s based on rules %s and port", redirectRT,
+                       rules, redirectPort)
         classifier = TrafficClassifier()
         classifier.mapRedirectRules2TrafficClassifier(rules)
 
@@ -685,14 +708,16 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         )
 
     @logDecorator.log
-    def trafficIndirected(self, redirectRT):
-        self.log.debug("Traffic indirected from VRF importing route target "
-                       "%s ", redirectRT)
+    def stopRedirectTraffic(self, redirectRT):
+        self.log.debug("Stop redirect traffic to VPN instance importing route "
+                       "target %s ", redirectRT)
 
         if redirectRT in self.redirectRT2classifierAndPort:
-            classifier = self.redirectRT2classifierAndPort[redirectRT].get('classifier')
+            classifier = (
+                self.redirectRT2classifierAndPort[redirectRT].get('classifier')
+            )
         else:
-            self.log.error("trafficIndirected called for redirect route "
+            self.log.error("stopRedirectTraffic called for redirect route "
                            "target %s, but doesn't exist", redirectRT)
             raise Exception("BGP component bug, check its logs")
 

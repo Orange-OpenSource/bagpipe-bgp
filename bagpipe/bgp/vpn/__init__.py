@@ -367,9 +367,8 @@ class VPNManager(LookingGlass):
             del self.vpnInstances[externalInstanceId]
 
     @logDecorator.logInfo
-    def trafficRedirectToVPN(self, redirectedInstance, redirectRT, rules):
-        instanceType = redirectedInstance.type
-        externalInstanceId = "redirect-to-%s-%s" % (instanceType,
+    def redirectTrafficToVPN(self, redirectedId, redirectedType, redirectRT):
+        externalInstanceId = "redirect-to-%s-%s" % (redirectedType,
                                                     redirectRT.replace(":", "_"))
 
         log.info("Retrieve VPN instance %s for traffic redirection to route "
@@ -377,43 +376,44 @@ class VPNManager(LookingGlass):
 
         # Retrieve redirect VPN instance or create new one if does not exist
         try:
-            redirectVpnInstance = self.vpnInstances[externalInstanceId]
-            if (redirectVpnInstance.type != instanceType):
+            redirectInstance = self.vpnInstances[externalInstanceId]
+            if (redirectInstance.type != redirectedType):
                 raise Exception("Trying to redirect traffic to an existing "
                                 "instance of a different type (existing: %s, "
                                 "asked: %s)"
-                                % (redirectVpnInstance.type, instanceType))
+                                % (redirectInstance.type, redirectedType))
         except KeyError:
             # Convert route target string to RouteTarget dictionary
             importRTs = convertRouteTargets([redirectRT])
 
-            redirectVpnInstance = self._createVPNInstance(
-                externalInstanceId, instanceType, importRTs, [],
+            redirectInstance = self._createVPNInstance(
+                externalInstanceId, redirectedType, importRTs, [],
                 "127.0.0.1", "24", False, None)
 
         redirectPort = (
-            self.getRedirectPort(redirectVpnInstance.externalInstanceId)
+            self.getRedirectPort(redirectInstance.externalInstanceId)
         )
 
-        redirectedInstance.trafficRedirected(redirectRT, rules, redirectPort)
+        redirectInstance.registerRedirectedInstance(redirectedId)
+        return redirectPort
 
     @logDecorator.logInfo
-    def trafficIndirectFromVPN(self, redirectedInstance, redirectRT):
-        instanceType = redirectedInstance.type
-        externalInstanceId = "redirect-to-%s-%s" % (instanceType,
+    def stopRedirectTrafficToVPN(self, redirectedId, redirectedType,
+                                 redirectRT):
+        externalInstanceId = "redirect-to-%s-%s" % (redirectedType,
                                                     redirectRT.replace(":", "_"))
 
-        # Retrieve VPN instance or raise exception if does not exist
+        # Retrieve redirect VPN instance or raise exception if does not exist
         try:
-            redirectVpnInstance = self.vpnInstances[externalInstanceId]
+            redirectInstance = self.vpnInstances[externalInstanceId]
         except KeyError:
-            log.error("Try to indirect traffic from non existing VPN instance "
-                      "%s", externalInstanceId)
+            log.error("Try to stop traffic redirection to non existing VPN "
+                      "instance %s", externalInstanceId)
             raise exc.VPNNotFound(externalInstanceId)
 
-        redirectedInstance.trafficIndirected(redirectRT)
+        redirectInstance.unregisterRedirectedInstance(redirectedId)
 
-        if redirectVpnInstance.stopIfEmpty():
+        if redirectInstance.stopIfNoRedirectedInstance():
             del self.vpnInstances[externalInstanceId]
 
     @logDecorator.logInfo

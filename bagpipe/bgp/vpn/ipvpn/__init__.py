@@ -237,8 +237,11 @@ class VRF(VPNInstance, LookingGlass):
             #FIXME: check if there are multiple redirect RT
             for ecom in newRoute.extendedCommunities(TrafficRedirect):
                 redirectRT = "%s:%s" % (ecom.asn, ecom.target)
-                self.vpnManager.trafficRedirectToVPN(self, redirectRT,
-                                                     newRoute.nlri.rules)
+                redirectPort = self.vpnManager.redirectTrafficToVPN(
+                    self.externalInstanceId, self.type, redirectRT
+                )
+                self.redirectTraffic(redirectRT, newRoute.nlri.rules,
+                                     redirectPort)
         else:
             if self.readvertise:
                 # check if this is a route we need to re-advertise
@@ -273,11 +276,14 @@ class VRF(VPNInstance, LookingGlass):
 
         prefix = entry
 
-        if isinstance(oldRoute.nlri, Flow):
+        if isinstance(oldRoute.nlri, Flow) and last:
             #FIXME: check if there are multiple redirect RT
             for ecom in oldRoute.extendedCommunities(TrafficRedirect):
                 redirectRT = "%s:%s" % (ecom.asn, ecom.target)
-                self.vpnManager.trafficIndirectFromVPN(self, redirectRT)
+                self.stopRedirectTraffic(redirectRT)
+                self.vpnManager.stopRedirectTrafficToVPN(
+                    self.externalInstanceId, self.type, redirectRT
+                )
         else:
             if self.readvertise and last:
                 # check if this is a route we were re-advertising
