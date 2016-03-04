@@ -168,7 +168,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
     @logDecorator.logInfo
     def vifPlugged(self, macAddress, ipAddress, localPort, label):
-        # Plug localPort only into EVPN bridge (Created by dataplane driver)
+        # Plug localPort only if bridge was created by us
         if BRIDGE_NAME_PREFIX in self.bridge_name:
             self.log.debug("Plugging localPort %s into EVPN bridge %s",
                            localPort['linuxif'], self.bridge_name)
@@ -176,10 +176,16 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
                              (self.bridge_name, localPort['linuxif']),
                              raiseExceptionOnError=False)
 
+        self._runCommand("bridge fdb replace %s dev %s" %
+                         (macAddress, localPort['linuxif']))
+
     @logDecorator.logInfo
     def vifUnplugged(self, macAddress, ipAddress, localPort, label,
                      lastEndpoint=True):
-        # Unplug localPort only from EVPN bridge (Created by dataplane driver)
+        self._runCommand("bridge fdb del %s dev %s" %
+                         (macAddress, localPort['linuxif']))
+
+        # unplug localPort only if bridge was created by us
         if BRIDGE_NAME_PREFIX in self.bridge_name:
             self.log.debug("Unplugging localPort %s from EVPN bridge %s",
                            localPort['linuxif'], self.bridge_name)
