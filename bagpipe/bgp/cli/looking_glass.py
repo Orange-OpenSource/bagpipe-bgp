@@ -146,7 +146,7 @@ e.g.: %prog vpns instances"""
         if response.getcode() == 200:
             data = json.load(response)
 
-            if ("href" in data):
+            if (isinstance(data, dict) and "href" in data):
                 target_url_bis = data["href"]
                 response_bis = urllib2.urlopen(target_url_bis)
                 if response.getcode() == 200:
