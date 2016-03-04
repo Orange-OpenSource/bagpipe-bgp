@@ -28,6 +28,7 @@ from bagpipe.bgp.common.looking_glass import LookingGlass, \
 
 from bagpipe.bgp.common import logDecorator
 from bagpipe.bgp.common.utils import getBoolean
+from bagpipe.bgp.common.net_utils import get_device_mac
 
 from bagpipe.exabgp.message.update.attribute.communities import Encapsulation
 
@@ -82,7 +83,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
         # Find ethX MPLS interface MAC address
         if not self.driver.useGRE:
-            self.mplsIfMacAddress = self._find_dev_mac_address(
+            self.mplsIfMacAddress = get_device_mac(
+                self._runCommand,
                 self.driver.mpls_interface)
         else:
             self.mplsIfMacAddress = None
@@ -135,8 +137,9 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         self.arpNetNSPort = self.driver.find_ovs_port(ovsbr_to_proxyarp_ns)
 
         # Find gateway ("network namespace to OVS" port) MAC address
-        self.gwMacAddress = self._find_ns_dev_mac_address(
-            self.arpNetNS, PROXYARP2OVS_IF)
+        self.gwMacAddress = get_device_mac(self._runCommand,
+                                           PROXYARP2OVS_IF,
+                                           self.arpNetNS)
 
         # Create OVS patch ports
         self.log.debug(
@@ -242,19 +245,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         """ Extract MAC address from command output """
         return re.search(r"([0-9A-F]{2}[:-]){5}([0-9A-F]{2})", output,
                          re.IGNORECASE).group()
-
-    def _find_dev_mac_address(self, dev_name):
-        """ Find device MAC address """
-        (output, _) = self._runCommand("ifconfig %s | grep HWaddr" % dev_name)
-
-        return self._extract_mac_address(output[0])
-
-    def _find_ns_dev_mac_address(self, ns_name, dev_name):
-        """ Find device MAC address in specified network namespace """
-        (output, _) = self._runCommand(
-            "ip netns exec %s ifconfig %s | grep HWaddr" % (ns_name, dev_name))
-
-        return self._extract_mac_address(output[0])
 
     def _find_remote_mac_address(self, remote_ip):
         """ Find MAC address for a remote IP address """
@@ -525,7 +515,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 Encapsulation(Encapsulation.VXLAN) in encaps):
             label_action = "set_field:%d->tunnel_id" % label
         else:
-            label_action = "push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" % label
+            label_action = ("push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" %
+                            label)
 
         # Check if prefix is from a local VRF
         if self.driver.getLocalAddress() == str(remotePE):
@@ -608,7 +599,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         }
 
     def getLGOVSFlows(self, pathPrefix):
-        tables = set([self.driver.ovs_table_incoming, self.driver.ovs_table_vrfs])
+        tables = set([self.driver.ovs_table_incoming,
+                      self.driver.ovs_table_vrfs])
         output = []
         for table in tables:
             output += self._runCommand(
@@ -646,8 +638,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     (on a debian or ubuntu system, this can be done part of the ovs bridge
     definition in /etc/network/interfaces, as post-up commands)
 
-    The 'ovs_table_vrfs' (resp. 'ovs_table_incoming') config parameters can be used
-    to specify which OVS table will host the rules for traffic from VRFs
+    The 'ovs_table_vrfs' (resp. 'ovs_table_incoming') config parameters can be
+    used to specify which OVS table will host the rules for traffic from VRFs
     (resp. for incoming traffic). Beware, this dataplane driver will
     *not* take care of setting up rules so that MPLS traffic or the traffic
     from attached ports is matched against rules in these tables.

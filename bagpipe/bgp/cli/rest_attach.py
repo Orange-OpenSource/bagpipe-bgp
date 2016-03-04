@@ -27,6 +27,7 @@ from copy import copy
 from netaddr.ip import IPNetwork
 
 from bagpipe.bgp.common.run_command import runCommand
+from bagpipe.bgp.common.net_utils import get_device_mac
 
 import logging
 
@@ -69,18 +70,6 @@ def create_veth_pair(vpn_interface, ns_interface, ns_name):
 
 def get_vpn2ns_if_name(namespace):
     return (VPN2NS_INTERFACE_PREFIX + namespace)[:LINUX_DEV_LEN]
-
-
-def getNetNSInterfaceMac(namespace, interface):
-    # options.mac is the MAC address of the ns2vpn interface
-    cmd = "ip netns exec %s ip -o link show %s | perl -pe 's|.* " \
-        "link/ether ([^ ]+) .*|$1|' 2>/dev/null"
-    (output, _) = runCommand(log, cmd % (namespace, interface))
-    if "does not exist" in output[0]:
-        raise Exception("special netns interface does not exist: %s" % output)
-    mac = output[0]
-
-    return mac
 
 
 def createSpecialNetNSPort(options):
@@ -257,7 +246,8 @@ def main():
             createSpecialNetNSPort(options)
 
         options.port = options.if2netns
-        options.mac = getNetNSInterfaceMac(options.netns, options.if2vpn)
+        options.mac = get_device_mac(lambda *args: runCommand(log, *args),
+                                     options.if2vpn, options.netns)
 
         print "Local port: %s (%s)" % (options.port, options.mac)
         runCommand(log, "ip link show %s" % options.port)
