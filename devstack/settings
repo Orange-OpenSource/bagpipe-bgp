@@ -1,4 +1,4 @@
-BAGPIPE_DIR=$DEST/bagpipe-bgp
+BAGPIPE_DIR=${BAGPIPE_DIR:-$DEST/bagpipe-bgp}
 
 BAGPIPE_CONF_DIR=/etc/bagpipe-bgp
 BAGPIPE_CONF=$BAGPIPE_CONF_DIR/bgp.conf
