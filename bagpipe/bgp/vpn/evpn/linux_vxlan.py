@@ -180,9 +180,6 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     @logDecorator.logInfo
     def vifUnplugged(self, macAddress, ipAddress, localPort, label,
                      lastEndpoint=True):
-        self._runCommand("bridge fdb del %s dev %s" %
-                         (macAddress, localPort['linuxif']))
-
         # unplug localPort only if bridge was created by us
         if BRIDGE_NAME_PREFIX in self.bridge_name:
             self.log.debug("Unplugging localPort %s from EVPN bridge %s",
