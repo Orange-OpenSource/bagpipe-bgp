@@ -390,12 +390,9 @@ class VPNManager(LookingGlass):
                 externalInstanceId, redirectedType, importRTs, [],
                 "127.0.0.1", "24", False, None)
 
-        redirectPort = (
-            self.getRedirectPort(redirectInstance.externalInstanceId)
-        )
+            redirectInstance.registerRedirectedInstance(redirectedId)
 
-        redirectInstance.registerRedirectedInstance(redirectedId)
-        return redirectPort
+        return redirectInstance
 
     @logDecorator.logInfo
     def stopRedirectTrafficToVPN(self, redirectedId, redirectedType,
