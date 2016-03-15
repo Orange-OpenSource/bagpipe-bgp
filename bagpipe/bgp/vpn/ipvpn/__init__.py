@@ -166,7 +166,7 @@ class VRF(VPNInstance, LookingGlass):
 
         return self.synthesizeRedirectBGPRoute(rules)
 
-    def _advertiseDefault(self, route, label):
+    def _advertiseRouteOrDefault(self, route, label):
         if self.attractTraffic:
             if len(self.readvertised) == 0:
                 self.log.debug("Advertising default route from VRF to "
@@ -178,7 +178,7 @@ class VRF(VPNInstance, LookingGlass):
             routeEntry = self._routeForReAdvertisement(route, label)
             self._advertiseRoute(routeEntry)
 
-    def _withdrawDefault(self, route, label):
+    def _withdrawRouteOrDefault(self, route, label):
         if self.attractTraffic:
             if len(self.readvertised) == 1:
                 self.log.debug("Stop advertising default route from VRF to "
@@ -199,7 +199,7 @@ class VRF(VPNInstance, LookingGlass):
             self.log.debug("Start re-advertising %s from VRF, with label %s",
                            nlri, label)
             # need a distinct RD for each route...
-            self._advertiseDefault(route, label)
+            self._advertiseRouteOrDefault(route, label)
 
         self.readvertised.add(route)
 
@@ -211,7 +211,7 @@ class VRF(VPNInstance, LookingGlass):
         for label in self._getLocalLabels():
             self.log.debug("Stop re-advertising %s from VRF, with label %s",
                            nlri, label)
-            self._withdrawDefault(route, label)
+            self._withdrawRouteOrDefault(route, label)
 
         self.readvertised.remove(route)
 
@@ -224,14 +224,14 @@ class VRF(VPNInstance, LookingGlass):
         for route in self.readvertised:
             self.log.debug("Re-advertising %s with this port as next hop",
                            route.nlri)
-            self._advertiseDefault(route, label)
+            self._advertiseRouteOrDefault(route, label)
 
     def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
         label = self.macAddress2LocalPortData[macAddress]['label']
         for route in self.readvertised:
             self.log.debug("Stop re-advertising %s with this port as next hop",
                            route.nlri)
-            self._withdrawDefault(route, label)
+            self._withdrawRouteOrDefault(route, label)
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
                                  advertiseSubnet)
