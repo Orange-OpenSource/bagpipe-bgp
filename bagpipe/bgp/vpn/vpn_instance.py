@@ -110,6 +110,11 @@ class TrafficClassifier(object):
         return (isinstance(other, self.__class__) and
                 self.__dict__ == other.__dict__)
 
+    def __hash__(self):
+        return hash((self.sourcePrefix, self.sourcePort,
+                     self.destinationPrefix, self.destinationPort,
+                     self.protocol))
+
     def _interpretPortRule(self, rule):
         if len(rule) == 1:
             op = rule[0].operations
