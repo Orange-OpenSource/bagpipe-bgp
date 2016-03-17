@@ -379,9 +379,9 @@ class VPNManager(LookingGlass):
 
             redirectInstance = self._createVPNInstance(
                 externalInstanceId, redirectedType, importRTs, [],
-                "127.0.0.1", "24", False, None)
+                "127.0.0.1", "24", None, None)
 
-            redirectInstance.registerRedirectedInstance(redirectedId)
+        redirectInstance.registerRedirectedInstance(redirectedId)
 
         return redirectInstance
 
