@@ -249,10 +249,16 @@ class LookingGlass(object):
                               secondSegment, targetCallback, restOfPath)
                     try:
                         target = targetCallback(secondSegment)
+                        if target is None:
+                            log.error("No delegation target for '%s' at '%s' ",
+                                      secondSegment, newPathPrefix)
+                            raise NoSuchLookingGlassObject(
+                                newPathPrefix, secondSegment)
                         if not isinstance(target, LookingGlass):
                             log.error("Delegation target for '%s' at '%s' "
-                                      "does not implement LookingGlass!",
-                                      secondSegment, newPathPrefix)
+                                      "does not implement LookingGlass (%s)!",
+                                      secondSegment, newPathPrefix,
+                                      type(target))
                             raise NoSuchLookingGlassObject(
                                 newPathPrefix, secondSegment)
                         return target.getLookingGlassInfo(newerPathPrefix,
