@@ -196,7 +196,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                           " the router-id advertized in Open (different from"
                           " peerAddress == %s)", self.name,
                           received_open.router_id.ip, self.peerAddress)
-            self.name = "BGP-%s/%s" % (self.peerAddress,
+            self.name = "BGP-%s:%s" % (self.peerAddress,
                                        received_open.router_id.ip)
 
         try:
