@@ -604,7 +604,7 @@ class RouteTableManager(Thread, LookingGlass):
 
     def getLGWorkerFromPathItem(self, pathItem):
         # TODO(tmmorin): do a hash-lookup instead of looping the list
-        for worker in self._source2entries.keys():
+        for worker in self._worker2matches.keys():
             if worker.name == pathItem:
                 return worker
 
