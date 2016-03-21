@@ -134,6 +134,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         neighbor.local_as = ASN(self.config['my_as'])
         neighbor.peer_as = ASN(self.config['peer_as'])
         neighbor.local_address = IP.create(self.localAddress)
+        neighbor.md5_ip = IP.create(self.localAddress)
         neighbor.peer_address = IP.create(self.peerAddress)
         neighbor.hold_time = HoldTime(DEFAULT_HOLDTIME)
         neighbor.api = defaultdict(list)
