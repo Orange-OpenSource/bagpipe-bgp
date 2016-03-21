@@ -19,6 +19,8 @@ import logging
 import uuid
 import time
 
+import urllib
+
 import traceback
 
 import re
@@ -265,7 +267,8 @@ class RESTAPI(LookingGlass):
         return self.looking_glass('/')
 
     def looking_glass(self, path):
-        urlPathElements = [elem for elem in path.split('/') if elem is not '']
+        urlPathElements = [urllib.unquote(elem)
+                           for elem in path.split('/') if elem is not '']
 
         pathPrefix = "%s://%s/%s" % (
             request.environ['wsgi.url_scheme'],  # http
