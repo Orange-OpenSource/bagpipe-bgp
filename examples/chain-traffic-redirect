@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# 5-tuple classfied chain setup with two-directions traffic combined and default routes announced at
+# 5-tuple classified chain setup with two-directions traffic combined and default routes announced at
 # intermediate hops (Ingress VRF between hops configured to statically announce a 0.0.0.0/0)
 #
 # This script will setup network namespaces SVM1 ("service VM1") and SVM2 so that
@@ -9,8 +9,11 @@
 #
 #                 destination
 #                   port 80
-# VM1-------net1 -------------> SVM1 ---- SVM2 ---- net2-----VM2
-#  .1      11.0.0                                  12.0.0    .1
+#                -------------> |------|    |------| ------------->
+# VM1-------net1                | SVM1 |----| SVM2 |                net2-----VM2
+# .1      11.0.0 <------------- |------|    |------| <------------- 12.0.0    .1
+#                                                        source
+#                                                        port 80
 #
 # Route targets....
 #
@@ -39,6 +42,7 @@ hop21_1=$as:211
 ## hop_redirect: redirect hop
 
 redirect_hop12_0=$as:300
+redirect_hop21_0=$as:400
 
 
 source $(dirname $0)/generic-functions
@@ -101,8 +105,9 @@ r_a bagpipe-rest-attach --attach --port to-svm2-h0 --mac 52:54:00:99:99:99 --net
 ## attach x2:
 r_a bagpipe-rest-attach --attach --port netns:to-svm2-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.1/24 --netns svm2 --if2vpn x2 \
 	--import $as:2 \
-	--readv-from-rt $as:1 --readv-to-rt $hop21_0
- 
+	--readv-from-rt $as:1 --readv-to-rt $redirect_hop21_0 \
+	--redirect-rt $hop21_0 --source-port 80
+
 r_a ./setup-cross-routing svm2 x2 200.0.0.254 h0 40.0.0.254
 
 
@@ -125,13 +130,13 @@ r_a ip netns exec net1vm1 ping 12.0.0.1 -c 5 -W 1
 r_b ip netns exec net2vm2 screen -m -d "sh -c \"echo -n '\\n\\n---- SUCCESS !!! ----\\n\\n' | nc -l -p 80 -q 1\""
 r_a ip netns exec net1vm1 nc -nv 12.0.0.1 80
 
-
 r_a bagpipe-looking-glass vpns instances net1vm1 dataplane flows
 r_a bagpipe-looking-glass vpns instances redirect-to-ipvpn-64512_300 dataplane flows
 r_b bagpipe-looking-glass vpns instances x1 dataplane flows
 r_b bagpipe-looking-glass vpns instances h01 dataplane flows
 r_a bagpipe-looking-glass vpns instances h02 dataplane flows
 r_a bagpipe-looking-glass vpns instances x2 dataplane flows
+r_b bagpipe-looking-glass vpns instances redirect-to-ipvpn-64512_400 dataplane flows
 r_b bagpipe-looking-glass vpns instances net2vm2 dataplane flows
 
 r_both bagpipe-looking-glass logs
