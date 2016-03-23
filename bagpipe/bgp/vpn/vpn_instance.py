@@ -21,6 +21,8 @@ import re
 
 from abc import ABCMeta, abstractmethod
 
+from collections import defaultdict
+
 from copy import copy
 
 from threading import Thread
@@ -107,6 +109,11 @@ class TrafficClassifier(object):
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and
                 self.__dict__ == other.__dict__)
+
+    def __hash__(self):
+        return hash((self.sourcePrefix, self.sourcePort,
+                     self.destinationPrefix, self.destinationPort,
+                     self.protocol))
 
     def _interpretPortRule(self, rule):
         if len(rule) == 1:
@@ -298,7 +305,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
         # Redirected instances list from which traffic is attracted (based on
         # FlowSpec 5-tuple classification)
-        self.redirectedInstances = list()
+        self.redirectedInstances = set()
 
         self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(
             self.instanceId, self.externalInstanceId,
@@ -670,8 +677,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     @utils.synchronized
     def registerRedirectedInstance(self, instanceId):
-        if instanceId not in self.redirectedInstances:
-            self.redirectedInstances.append(instanceId)
+        self.redirectedInstances.add(instanceId)
 
     @utils.synchronized
     def unregisterRedirectedInstance(self, instanceId):
@@ -690,7 +696,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     @logDecorator.log
     def redirectTraffic(self, redirectRT, rules, redirectPort):
         self.log.debug("Redirect traffic to VPN instance importing route "
-                       "target %s based on rules %s and port", redirectRT,
+                       "target %s based on rules %s and port %s", redirectRT,
                        rules, redirectPort)
         classifier = TrafficClassifier()
         classifier.mapRedirectRules2TrafficClassifier(rules)
@@ -698,32 +704,32 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         self.dataplane.addDataplaneForTrafficClassifier(classifier,
                                                         redirectPort)
 
-        if not hasattr(self, 'redirectRT2classifierAndPort'):
-            # One redirect route target -> One traffic classifier and one
-            # redirect port tuple
-            self.redirectRT2classifierAndPort = dict()
+        if not hasattr(self, 'redirectRT2classifiers'):
+            # One redirect route target -> Multiple traffic classifiers (One
+            # per prefix)
+            self.redirectRT2classifiers = defaultdict(set)
 
-        self.redirectRT2classifierAndPort[redirectRT] = (
-            dict(classifier=classifier, port=redirectPort)
-        )
+        self.redirectRT2classifiers[redirectRT].add(classifier)
 
     @logDecorator.log
-    def stopRedirectTraffic(self, redirectRT):
+    def stopRedirectTraffic(self, redirectRT, rules):
         self.log.debug("Stop redirect traffic to VPN instance importing route "
-                       "target %s ", redirectRT)
+                       "target %s based on rules %s", redirectRT, rules)
+        classifier = TrafficClassifier()
+        classifier.mapRedirectRules2TrafficClassifier(rules)
 
-        if redirectRT in self.redirectRT2classifierAndPort:
-            classifier = (
-                self.redirectRT2classifierAndPort[redirectRT].get('classifier')
-            )
+        if (redirectRT in self.redirectRT2classifiers and
+                classifier in self.redirectRT2classifiers[redirectRT]):
+            self.dataplane.removeDataplaneForTrafficClassifier(classifier)
+            self.redirectRT2classifiers[redirectRT].remove(classifier)
+
+            if not self.redirectRT2classifiers[redirectRT]:
+                del self.redirectRT2classifiers[redirectRT]
         else:
             self.log.error("stopRedirectTraffic called for redirect route "
-                           "target %s, but doesn't exist", redirectRT)
+                           "target %s and classifier %s, but doesn't exist",
+                           redirectRT, classifier)
             raise Exception("BGP component bug, check its logs")
-
-        self.dataplane.removeDataplaneForTrafficClassifier(classifier)
-
-        del self.redirectRT2classifierAndPort[redirectRT]
 
     def _checkEncaps(self, route):
         '''

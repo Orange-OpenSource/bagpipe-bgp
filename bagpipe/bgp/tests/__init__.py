@@ -49,6 +49,11 @@ RT4 = RouteTarget(64512, 40)
 RT5 = RouteTarget(64512, 50)
 
 
+def _routeTarget2String(rt):
+    assert isinstance(rt, RouteTarget)
+    return "%s:%s" % (rt.asn, rt.number)
+
+
 class TestNLRI(object):
 
     def __init__(self, desc):
@@ -92,7 +97,7 @@ class BaseTestBagPipeBGP():
 
     def _newRouteEvent(self, eventType, nlri, rts, source, nh, lp=0,
                        replacedRouteEntry=None,
-                       afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn), 
+                       afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn),
                        **kwargs):
         attributes = Attributes()
         attributes.add(NextHop(nh))
@@ -116,6 +121,32 @@ class BaseTestBagPipeBGP():
         self._wait()
 
         return routeEvent
+
+    def _newFlowEvent(self, eventType, nlri, to_rts, attract_rts, source,
+                      afi=AFI(AFI.ipv4), safi=SAFI(SAFI.flow_vpn),
+                      **kwargs):
+        attributes = Attributes()
+
+        ecommunities = ExtendedCommunities()
+        ecommunities.communities.append(
+            TrafficRedirect(ASN(int(to_rts[0].asn)), int(to_rts[0].number))
+        )
+
+        attributes.add(ecommunities)
+
+        flowEvent = RouteEvent(eventType,
+                               RouteEntry(nlri, attract_rts, attributes,
+                                          source),
+                               source)
+
+        self.eventTargetWorker.enqueue(flowEvent)
+
+        log.info("*** Emitting FlowSpec event to %s: %s",
+                 self.eventTargetWorker, flowEvent)
+
+        self._wait()
+
+        return flowEvent
 
     def _revertEvent(self, event):
         if event.type == RouteEvent.ADVERTISE:

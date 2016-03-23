@@ -231,15 +231,6 @@ class VPNManager(LookingGlass):
             runCommand(log, "ovs-vsctl del-port %s" % ipvpn_if)
             runCommand(log, "ip link delete %s" % ipvpn_if)
 
-    def getRedirectPort(self, externalInstanceId):
-        try:
-            vrf = self.vpnInstances[externalInstanceId]
-            return vrf.dataplane.getRedirectPort()
-        except KeyError:
-            log.error("Try to get patch port from non existing VRF %s",
-                      externalInstanceId)
-            raise exc.VPNNotFound(externalInstanceId)
-
     @logDecorator.logInfo
     def _createVPNInstance(self, externalInstanceId, instanceType, importRTs,
                            exportRTs, gatewayIP, mask, readvertise,
@@ -388,14 +379,11 @@ class VPNManager(LookingGlass):
 
             redirectInstance = self._createVPNInstance(
                 externalInstanceId, redirectedType, importRTs, [],
-                "127.0.0.1", "24", False, None)
-
-        redirectPort = (
-            self.getRedirectPort(redirectInstance.externalInstanceId)
-        )
+                "127.0.0.1", "24", None, None)
 
         redirectInstance.registerRedirectedInstance(redirectedId)
-        return redirectPort
+
+        return redirectInstance
 
     @logDecorator.logInfo
     def stopRedirectTrafficToVPN(self, redirectedId, redirectedType,
