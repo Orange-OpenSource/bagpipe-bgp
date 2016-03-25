@@ -30,16 +30,8 @@ function create_bagpipe_conf {
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN ovs_bridge $BAGPIPE_MPLS_BR
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_EVPN dataplane_driver ${BAGPIPE_DATAPLANE_DRIVER_EVPN:-DummyDataplaneDriver}
 
-	# copy log config template depending
-	cp $BAGPIPE_DIR/config/log.conf.debug-template $BAGPIPE_LOG_CONF
-
-	# configure the log conf so that stuff is also logged to the console
-	iniset $BAGPIPE_LOG_CONF handlers keys rotatingFile,console
-	iniset $BAGPIPE_LOG_CONF handler_console class StreamHandler
-	iniset $BAGPIPE_LOG_CONF handler_console args "(sys.stdout,)"
-	iniset $BAGPIPE_LOG_CONF handler_console formatter standard
-	iniset $BAGPIPE_LOG_CONF handler_rotatingFile args "('$DEST/logs/bagpipe-bgp.log','a',1024*1024*5,5)"
-	sed -i s/handlers=rotatingFile/handlers=rotatingFile,console/ $BAGPIPE_LOG_CONF
+	# copy log config template
+	cp $BAGPIPE_DIR/config/log.conf.console-template $BAGPIPE_LOG_CONF
 }
 
 # Initialize databases, etc.
