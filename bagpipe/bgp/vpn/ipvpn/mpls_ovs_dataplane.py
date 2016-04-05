@@ -655,7 +655,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
             (o, _) = self._runCommand("ovs-ofctl -V | head -1 |"
                                       " awk '{print $4}'")
             self.ovsRelease = o[0]
-            self.log.info("OVS kernel module %s", self.ovsRelease)
+            self.log.info("OVS release: %s", self.ovsRelease)
         except:
             self.log.warning("Could not determine OVS release")
             self.ovsRelease = None
