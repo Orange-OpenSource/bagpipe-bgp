@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from distutils.version import StrictVersion
 
 from bagpipe.bgp.common import logDecorator
 
@@ -309,17 +308,6 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     def _initReal(self, config):
         self.config = config
         self.log.info("Really initializing %s", self.__class__.__name__)
-
-        o = self._runCommand("uname -r")
-        kernelRelease = o[0][0].split("-")[0]
-
-        if (StrictVersion(kernelRelease) <
-                StrictVersion(LinuxVXLANDataplaneDriver.requiredKernel)):
-            self.log.warning("%s requires at least Linux kernel %s (you are"
-                             " running %s)" %
-                             (self.__class__.__name__,
-                              LinuxVXLANDataplaneDriver.requiredKernel,
-                              kernelRelease))
 
         self._runCommand("modprobe vxlan")
 

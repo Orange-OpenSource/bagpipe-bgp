@@ -19,10 +19,14 @@ from abc import ABCMeta, abstractmethod
 
 import socket
 
+from distutils.version import StrictVersion
+
+
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.bgp.common.looking_glass import \
-    LookingGlassLocalLogger, LGMap, LookingGlassReferences
+from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
+from bagpipe.bgp.common.looking_glass import LGMap
+from bagpipe.bgp.common.looking_glass import LookingGlassReferences
 
 from bagpipe.bgp.common.run_command import runCommand
 
@@ -58,6 +62,19 @@ class DataplaneDriver(LookingGlassLocalLogger):
         except socket.error:
             raise Exception("malformed local_address: '%s'" %
                             self.local_address)
+
+        # Linux kernel version check
+        if self.requiredKernel:
+            o = self._runCommand("uname -r")
+            self.kernelRelease = o[0][0].split("-")[0]
+
+            if (StrictVersion(self.kernelRelease) <
+                    StrictVersion(self.requiredKernel)):
+                self.log.warning("%s requires at least Linux kernel %s"
+                                 " (you are running %s)" %
+                                 (self.__class__.__name__,
+                                  self.requiredKernel,
+                                  self.kernelRelease))
 
         # skipped if instantiated with init=False, to be used for cleanup
         if init:
@@ -125,7 +142,8 @@ class DataplaneDriver(LookingGlassLocalLogger):
             "name": (LGMap.VALUE, self.__class__.__name__),
             "local_address": (LGMap.VALUE, self.local_address),
             "supported_encaps": (LGMap.VALUE, encaps),
-            "config": (LGMap.VALUE, self.config)
+            "config": (LGMap.VALUE, self.config),
+            "kernel_release": (LGMap.VALUE, self.kernelRelease)
         }
 
 

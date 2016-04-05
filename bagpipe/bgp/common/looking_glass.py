@@ -248,6 +248,7 @@ class LookingGlass(object):
                               "and follow up getLookingGlassInfo(...'%s')",
                               secondSegment, targetCallback, restOfPath)
                     try:
+                        #TODO: catch errors
                         target = targetCallback(secondSegment)
                         if target is None:
                             log.error("No delegation target for '%s' at '%s' ",
@@ -282,6 +283,7 @@ class LookingGlass(object):
                                                                  [pathItem])}
             elif mappingType == LGMap.SUBITEM:
                 log.debug("   Subitem => callback %s(...)", mappingTarget)
+                #TODO: catch errors
                 info[pathItem] = mappingTarget()
             elif mappingType == LGMap.VALUE:
                 info[pathItem] = mappingTarget
