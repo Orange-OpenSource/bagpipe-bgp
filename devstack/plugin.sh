@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Save trace setting
-XTRACE=$(set +o | grep xtrace)
+_XTRACE_BAGPIPE_BGP=$(set +o | grep xtrace)
 set +o xtrace
 
 # Set config files, create data dirs, etc
@@ -188,5 +188,6 @@ if [[ "$1" == "clean" ]]; then
 		cleanup_bagpipe
 fi
 
-set +x
-$xtrace
+# restore xtrace state
+${_XTRACE_BAGPIPE_BGP}
+
