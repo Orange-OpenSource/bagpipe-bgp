@@ -71,7 +71,6 @@ class PMSITunnel(Attribute):
     def __init__ (self,subtype,label=NO_LABEL,flags=0,packedTunnelId=None):
         if label==None: label=NO_LABEL
         if not isinstance(label,LabelStackEntry): raise Exception("label should be of LabelStackEntry type (is: %s)" % type(label))
-        if label.bottomOfStack: raise Exception("label.bottomOfStack should not be set")
         self.subtype = subtype
         self.label = label
         self.pmsi_flags = flags
