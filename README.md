@@ -69,10 +69,6 @@ Different options can be considered:
  * BGP implementations in other opensource projects would possibly be suitable, but we did not explore i
    these exhaustively:
 
-    * there has been some work to allow the use of OpenContrail's BGP implementation as a Route Reflector; 
-      although this is currently unfinished, we have done rough hacks to confirm the feasibility and the
-      interoperability
-
     * [GoBGP](http://osrg.github.io/gobgp/) team has sucessfully deployed a setup with [GoBGP as a RR for bagpipe-bgp PE implementations,
       with E-VPN](https://github.com/osrg/gobgp/blob/master/docs/sources/evpn.md)
 
@@ -80,6 +76,9 @@ Different options can be considered:
 
     * Quagga is supposed to support IP VPNs (untested AFAIK)
 
+    * there has been some work to allow the use of OpenContrail's BGP implementation as a Route Reflector; 
+      although this is currently unfinished, we have done rough hacks to confirm the feasibility and the
+      interoperability
 
 <a name="config"></a>
 Configuration
@@ -127,12 +126,14 @@ currently be used for IP VPNs:
   calling BaGPipe BGP API to attach them (details in
    [mpls\_ovs\_dataplane.py](bagpipe/bgp/vpn/ipvpn/mpls_ovs_dataplane.py#L578))
 
-* (the MPLSLinuxDataplaneDriver is based on an unmaintained MPLS stack for the Linux 
-3.7 kernel, and should be considered *obsolete* ; see [mpls\_linux\_dataplane.py](bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L245))
+* the MPLSLinuxDataplaneDriver relies on the native MPLS stack of the Linux kernel,
+  it currenly requires a kernel 4.4+ and uses the pyroute2 module that allows
+  defining all states via Netlink rather than by executing 'ip' commands
+  (details in [mpls\_linux\_dataplane.py](bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L354))
 
 For E-VPN, the `linux_vxlan.LinuxVXLANDataplaneDriver` is usable without any 
 particular additional configuration, and simply requires a Linux kernel >=3.10
-with VXLAN compiled-in or provided as a module ([linux_vxlan.py](bagpipe/bgp/vpn/evpn/linux_vxlan.py#L269)).
+([linux_vxlan.py](bagpipe/bgp/vpn/evpn/linux_vxlan.py#L269)).
 
 Usage
 -----
