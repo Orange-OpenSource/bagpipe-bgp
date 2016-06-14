@@ -158,10 +158,18 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 elif action == ACTION.NOW:
                     time.sleep(0.1)
 
-                if self.shouldStop or action == ACTION.CLOSE:
+                if self.shouldStop:
+                    self.log.debug("We're closing, raise StoppedException")
                     raise StoppedException()
+
+                if action == ACTION.CLOSE:
+                    self.log.debug("Socket status is CLOSE, "
+                                   "raise InitiateConnectionException")
+                    raise InitiateConnectionException()
         except Interrupted:
-            raise StoppedException()
+            self.log.debug("Connect was interrupted, "
+                           "raise InitiateConnectionException")
+            raise InitiateConnectionException()
         except LostConnection as e:
             raise
         # FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
