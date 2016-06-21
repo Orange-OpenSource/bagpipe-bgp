@@ -84,18 +84,15 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
         self.log.info("VRF %d: Initializing VRF interface %s",
                       self.instanceId, self.vrf_if)
-        if self.vrf_if in self.ip.by_name:
-            self.log.debug("VRF if already exists, flushing routes...")
 
         self.flush_routes()
         ### make sure we don't fallback into other routing tables ##
+        # FIXME: this leaves a window between flush and add default where
+        #        traffic can leak
         self.ip.routes.add({'dst': 'default',
                             'table': self.rt_table,
                             'type': 'unreachable'}).commit()
 
-            #FIXME: also clear ip rules -- not needed, they do not change
-            # how to avoid adding them again ?
-        #else:
         self.log.debug("Creating VRF interface...")
 
         # Create VRF interface
@@ -147,9 +144,13 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
     @logDecorator.logInfo
     def cleanup(self):
-        # refuse to cleanup if there are still connected vifs
-        assert(len(self.ip.interfaces[self.vrf_if].ports)==0)
-        self.ip.interfaces[self.vrf_if].remove()
+        # bring down and disconnect all interfaces from vrf interface
+        with self.ip.interfaces[self.vrf_if_idx] as vrf:
+            for interface in vrf.ports:
+                with self.ip.interfaces[interface] as i:
+                    i.down()
+                vrf.del_port(interface)
+            vrf.remove()
         ipr.flush_rules(iifname=self.vrf_if)
         ipr.flush_rules(oifname=self.vrf_if)
         self.flush_routes()
@@ -166,7 +167,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
         # ip link set dev localport master vrf_interface
         with self.ip.interfaces[self.vrf_if_idx] as vrf:
-            vrf.add_port(self.ip.interfaces[interface])
+            vrf.add_port(interface)
 
         with self.ip.interfaces[interface] as i:
             i.up()
@@ -222,7 +223,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
         # ip link set dev localport master vrf_interface
         with self.ip.interfaces[self.vrf_if_idx] as i:
-            i.del_port(self.ip.interfaces[interface])
+            i.del_port(interface)
 
         # Unconfigure gateway address on this port
         # FIXME: that would need to be per vif port
@@ -238,32 +239,12 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
             r.remove()
 
     def _read_mpls_in(self, label):
-        #NOTE: to do with IPDB ?
-        mpls_routes = ipr.get_routes(family=AF_MPLS)
-        for route in mpls_routes:
-            match = False
-            route_label = None
-            via = None
-            oif = None
-            for attr in route['attrs']:
-                if attr[0] == 'RTA_DST':
-                    route_label = attr[1][0]['label']
-                    if route_label == label:
-                        match = True
-                elif attr[0] == 'RTA_VIA':
-                    via = attr[1]['addr']
-                elif attr[0] == 'RTA_OIF':
-                    oif = attr[1]
-            if match:
-                if oif and via:
-                    return (oif, via)
-                else:
-                    raise Exception("Label found, but missing via or oif "
-                                    "(via %s, oif %s)", via, oif)
-        raise Exception('Forwarding state not found for label %d'
-                        ' (%s,%s)', label, via, oif)
-        self.log.debug("Found %s,%s for %d", oif, via, label)
-        return (oif, via)
+        routes = [r for r in self.ip.routes.tables["mpls"]
+                  if r['dst'] == label]
+        assert(len(routes)==1)
+        res = (routes[0]['oif'], routes[0]['via']['addr'])
+        self.log.debug("Found %s for %d with IPDB", res, label)
+        return res
 
     def _nh(self, remotePE, label, encaps):
         mpls = True
@@ -272,10 +253,13 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 # if remotePE is ourselves
                 # we lookup the route for the label and deliver directly
                 # to this oif/gateway
-                # FIXME: issue of maybe having follow on label release ?
-                #raise Exception("local MPLS shortcut not supported yet")
                 (oif, gateway) = self._read_mpls_in(label)
                 mpls = False
+                # FIXME: does not work yet, from this table,
+                #        'gateway' is considered unreachable
+                #        we could drop 'gateway' and just keep oif
+                #        but this would only work for connected routes
+                raise Exception("local MPLS shortcut not supported yet")
             except Exception as e:
                 self.log.debug(e)
                 gateway = '127.0.0.1'
