@@ -17,8 +17,6 @@
 import logging
 import socket
 
-import re
-
 from abc import ABCMeta, abstractmethod
 
 from collections import defaultdict
@@ -44,7 +42,6 @@ from exabgp.reactor.protocol import AFI, SAFI
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
-from exabgp.bgp.message.update.attribute.attribute import Attribute
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 
 from exabgp.bgp.message.open.asn import ASN
@@ -436,7 +433,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         try:
             net = IPNetwork(ipAddressPrefix)
             (ipAddress, mask) = (str(net.ip), net.prefixlen)
-        except netaddr.core.AddrFormatError as e:
+        except netaddr.core.AddrFormatError:
             raise APIException("Bogus IP prefix: %s" % ipAddressPrefix)
 
         return (ipAddress, mask)
