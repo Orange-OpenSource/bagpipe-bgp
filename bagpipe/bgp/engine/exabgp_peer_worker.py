@@ -33,8 +33,6 @@ from bagpipe.bgp.engine.bgp_peer_worker import DEFAULT_HOLDTIME
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
 
-from bagpipe.bgp.engine import ipvpn
-
 from bagpipe.bgp.common.looking_glass import LookingGlass
 
 from exabgp.reactor.peer import Peer
@@ -55,6 +53,7 @@ from exabgp.bgp.message.open.holdtime import HoldTime
 
 from exabgp.bgp.message import NOP
 from exabgp.bgp.message import Notification
+from exabgp.bgp.message import Notify
 from exabgp.bgp.message import Update
 from exabgp.bgp.message import KeepAlive
 
@@ -115,13 +114,36 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         self.rtc_active = False
         self._activeFamilies = []
 
-    def _toIdle(self):
+    #### hooks into BGPPeerWorker state changes ####
+
+    def _stopAndClean(self):
+        super(ExaBGPPeerWorker, self)._stopAndClean()
+
         self._activeFamilies = []
 
         if self.peer is not None:
-            self.log.info("Stopping peer before reinit")
+            self.log.info("Clearing peer")
+            if self.peer._outgoing.proto:
+                self.peer._outgoing.proto.close()
             self.peer.stop()
             self.peer = None
+
+    def _toEstablished(self):
+        super(ExaBGPPeerWorker, self)._toEstablished()
+
+        if self.rtc_active:
+            self.log.debug("RTC active, subscribing to all RTC routes")
+            # subscribe to RTC routes, to be able to propagate them from
+            # internal workers to this peer
+            self._subscribe(AFI(AFI.ipv4), SAFI(SAFI.rtc))
+        else:
+            self.log.debug("RTC inactive, subscribing to all active families")
+            # if we don't use RTC with our peer, then we need to see events for
+            # all routes of all active families, to be able to send them to him
+            for (afi, safi) in self._activeFamilies:
+                self._subscribe(afi, safi)
+
+    #### implementation of BGPPeerWorker abstract methods ####
 
     def _initiateConnection(self):
         self.log.debug("Initiate ExaBGP connection to %s from %s",
@@ -139,7 +161,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
         neighbor.hold_time = HoldTime(DEFAULT_HOLDTIME)
         neighbor.api = defaultdict(list)
 
-        for afi_safi in self.__class__.enabledFamilies:
+        for afi_safi in self.enabledFamilies:
             neighbor.add_family(afi_safi)
 
         if self.config['enable_rtc']:
@@ -165,14 +187,19 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 if action == ACTION.CLOSE:
                     self.log.debug("Socket status is CLOSE, "
                                    "raise InitiateConnectionException")
-                    raise InitiateConnectionException()
+                    raise InitiateConnectionException("Socket is closed")
         except Interrupted:
             self.log.debug("Connect was interrupted, "
                            "raise InitiateConnectionException")
-            raise InitiateConnectionException()
+            raise InitiateConnectionException("Connect was interrupted")
+        except Notify as e:
+            self.log.debug("Notify: %s", e)
+            if (e.code, e.subcode) == (1,1):
+                raise OpenWaitTimeout(str(e))
+            else:
+                raise Exception("Notify received: %s" % e)
         except LostConnection as e:
             raise
-        # FIXME: catch exception on opensent timeout and throw OpenWaitTimeout
 
         # check the capabilities of the session just established...
 
@@ -215,25 +242,14 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                 self.log.warning(
                     "enable_rtc True but peer not configured for RTC")
 
-    def _toEstablished(self):
-        BGPPeerWorker._toEstablished(self)
-
-        if self.rtc_active:
-            self.log.debug("RTC active, subscribing to all RTC routes")
-            # subscribe to RTC routes, to be able to propagate them from
-            # internal workers to this peer
-            self._subscribe(AFI(AFI.ipv4), SAFI(SAFI.rtc))
-        else:
-            self.log.debug("RTC inactive, subscribing to all active families")
-            # if we don't use RTC with our peer, then we need to see events for
-            # all routes of all active families, to be able to send them to him
-            for (afi, safi) in self._activeFamilies:
-                self._subscribe(afi, safi)
-
     def _receiveLoopFun(self):
 
         try:
             select.select([self.protocol.connection.io], [], [], 2)
+
+            if not self.protocol.connection:
+                raise Exception("lost connection")
+
             message = self.protocol.read_message().next()
 
             if message.ID != NOP.ID:
@@ -333,11 +349,6 @@ class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
                            "route %s: %s", r, e)
             self.log.warning("%s", traceback.format_exc())
             return ''
-
-    def stop(self):
-        if self.peer is not None:
-            self.peer.stop()
-        BGPPeerWorker.stop(self)
 
     # Looking Glass ###############
 

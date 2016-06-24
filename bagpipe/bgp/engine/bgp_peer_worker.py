@@ -19,8 +19,8 @@ from abc import ABCMeta, abstractmethod
 
 from threading import Thread, Event, Timer
 
+import random
 import time
-from time import sleep
 
 import logging
 import traceback
@@ -31,11 +31,15 @@ from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
 
 Init = "InitEvent"
-ReInit = "ReInit"
+ConnectNow = "ConnectNow"
 SendKeepAlive = "Send KeepAlive"
 KeepAliveReceived = "KeepAlive-received"
 
 DEFAULT_HOLDTIME = 180
+
+ERROR_RETRY_TIMER = 20
+KA_EXPIRY_RETRY_TIMER = 5
+CONNECT_RETRY_TIMER = 5
 
 
 class FSM(object):
@@ -97,6 +101,16 @@ class OpenWaitTimeout(Exception):
     pass
 
 
+class ToIdle(object):
+
+    def __init__(self, delay):
+        # add 50% random delay to avoid reconnect bursts
+        self.delay = delay*random.uniform(1,1.5)
+
+    def repr(self):
+        return "ToIdle(%s)" % self.delay
+
+
 class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
@@ -131,12 +145,12 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
         self.fsm = FSM(self)
 
         self.log.debug("Init %s", self.name)
-        self.enqueue(Init)
+        self.enqueue(ConnectNow)
 
     def stop(self):
-        Worker.stop(self)
-        self._stopLoops.set()
+        super(BGPPeerWorker, self).stop()
         self.shouldStop = True
+        self._stopAndClean()
 
     def _setHoldTime(self, holdtime):
         '''
@@ -150,20 +164,20 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
     # called by _eventQueueProcessorLoop
     def _onEvent(self, event):
 
-        if event == Init:
-            self._initiate()
+        self.log.debug("event: %s", event)
 
-        elif event == ReInit:
-            self._reinitiate()
+        if event == ConnectNow:
+            self._connect()
+
+        elif isinstance(event, ToIdle):
+            self._toIdle(event.delay)
 
         elif isinstance(event, RouteEvent):
             if (self.fsm.state == FSM.Established):
                 self._send(self._updateForRouteEvent(event))
             else:
-                # FIXME: this is possibly not correct yet: why did we received
-                # this event  ? what do we do with it ?
-                raise Exception(
-                    "cannot process routeEvent in '%s' state" % self.fsm.state)
+                raise Exception("cannot process routeEvent in '%s' state"
+                                % self.fsm.state)
 
         elif event == SendKeepAlive:
             self._send(self._keepAliveMessageData())
@@ -177,35 +191,29 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
     def _stopped(self):
         self.fsm.state = FSM.Idle
 
-    def _initiate(self):
-        self.log.info("Initiating")
-        self._initiateConnectionAndThreads()
-
-    def _initiateConnectionAndThreads(self):
+    def _connect(self):
         self._resetLocalLGLogs()
+
         # initiate connection
+        self.log.debug("connecting now")
 
         self.fsm.state = FSM.Connect
 
         try:
             self._initiateConnection()
         except (InitiateConnectionException, OpenWaitTimeout) as e:
-            self.log.warning(
-                "%s while initiating connection: %s", e.__class__.__name__, e)
-            self.enqueue(ReInit)
+            self.log.warning("%s while initiating connection: %s",
+                             e.__class__.__name__, e)
+            self._toActive()
             return
-            # FIXME: we should transition to Active or Idle state depending how
-            # many times we already tried
         except StoppedException:
-            self.log.info("Stopped during connection init")
+            self.log.info("Thread stopped during connection init")
             return
         except Exception as e:
             self.log.warning("Exception while initiating connection: %s", e)
             if self.log.isEnabledFor(logging.DEBUG):
                 self.log.debug("%s", traceback.format_exc())
-            self.enqueue(ReInit)
-            # FIXME: we should transition to Active or Idle state depending how
-            # many times we already tried
+            self._toActive()
             return
 
         self._stopLoops.clear()
@@ -220,17 +228,24 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
 
         self._toEstablished()
 
+    def _toActive(self):
+        self.fsm.state = FSM.Active
+        self._stopAndClean()
+        self.initConnectTimer(CONNECT_RETRY_TIMER)
+
     def _toEstablished(self):
         self.fsm.state = FSM.Established
 
-    def _toIdle(self):
-        pass
-
-    def _reinitiate(self):
-        self.log.info("Re-initiating")
-
+    def _toIdle(self, delay_before_connect=0):
         self.fsm.state = FSM.Idle
+        self._stopAndClean()
 
+        if delay_before_connect:
+            self.initConnectTimer(delay_before_connect)
+        else:
+            self.enqueue(ConnectNow)
+
+    def _stopAndClean(self):
         self._stopLoops.set()
 
         if self.sendKATimer:
@@ -240,20 +255,12 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
 
         self._cleanup()
 
-        self._toIdle()
-
-        # TODO(tmmorin): read BGP specs to get the retries timers right
-        # TODO(tmmorin): replace with a timer that injects an event, so that we
-        # avoid sleeping which make us miss any stop event
-        sleep(10)
-
-        self._initiateConnectionAndThreads()
-
     def isEstablished(self):
         return (self.fsm.state == FSM.Established)
 
     def _receiveLoop(self):
         self.log.info("Start receive loop")
+        self._stopLoops.clear()
         while not self._stopLoops.isSet():
             try:
                 loopResult = self._receiveLoopFun()
@@ -264,8 +271,8 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
                     self.log.warning("receiveLoopFun returned 2 (error), "
                                      "aborting receiveLoop and reinitializing")
                     # FIXME: use (Worker.)enqueueHighPriority so that
-                    # ReInit is treated before other events
-                    self.enqueue(ReInit)
+                    # ToIdle is treated before other events
+                    self.enqueue(ToIdle(ERROR_RETRY_TIMER))
                     break
                 else:
                     # everything went fine
@@ -276,23 +283,30 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
                 if self.log.isEnabledFor(logging.WARNING):
                     self.log.warning("%s", traceback.format_exc())
                 # FIXME: use (Worker.)enqueueHighPriority so that
-                # ReInit is treated before other events
-                self.enqueue(ReInit)
+                # ToIdle is treated before other events
+                self.enqueue(ToIdle(ERROR_RETRY_TIMER))
                 break
 
         self.log.info("End receive loop")
+
+    # Connect retry timer #####
+    def initConnectTimer(self, delay):
+        self.log.debug("Init connect timer (%ds)", delay)
+        self.connectTimer = Timer(delay, self.enqueue, [ConnectNow])
+        self.connectTimer.name = "%s:connectTimer" % self.name
+        self.connectTimer.start()
 
     # Sending keep-alive's #####
 
     def initSendKeepAliveTimer(self):
         self.log.debug("Init sendKA timer (%ds)", self.katPeriod)
-        self.sendKATimer = Timer(
-            self.katPeriod, BGPPeerWorker.sendKeepAliveTrigger, [self])
+        self.sendKATimer = Timer(self.katPeriod,
+                                 self.sendKeepAliveTrigger)
         self.sendKATimer.name = "%s:sendKATimer" % self.name
         self.sendKATimer.start()
 
     def sendKeepAliveTrigger(self):
-        self.log.debug("Trigger send KeepAlive")
+        self.log.debug("Trigger to send KeepAlive")
         self.enqueue(SendKeepAlive)
         self.initSendKeepAliveTimer()
 
@@ -301,19 +315,15 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
     def initKeepAliveReceptionTimer(self):
         self.log.debug(
             "Init Keepalive reception timer (%ds)", self.katExpiryTime)
-        self.KAReceptionTimer = Timer(
-            self.katExpiryTime, BGPPeerWorker.onKeepAliveExpired, [self])
+        self.KAReceptionTimer = Timer(self.katExpiryTime,
+                                      self.enqueue,
+                                      [ToIdle(KA_EXPIRY_RETRY_TIMER)])
         self.KAReceptionTimer.start()
 
     def onKeepAliveReceived(self):
         self.log.debug("Keepalive received")
         self.KAReceptionTimer.cancel()
         self.initKeepAliveReceptionTimer()
-
-    def onKeepAliveExpired(self):
-        self.log.error("KeepAlive expired, re-init")
-        self.fsm.state = FSM.Idle
-        self.enqueue(ReInit)
 
     # Abstract methods
 
