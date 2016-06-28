@@ -196,7 +196,8 @@ class RouteEntry(LookingGlass):
             attDict[repr(Attribute.CODE(attribute.ID))] = str(attribute)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
-               "attributes": attDict
+               "attributes": attDict,
+               "next_hop": self.nexthop
                }
 
         if self.source:
