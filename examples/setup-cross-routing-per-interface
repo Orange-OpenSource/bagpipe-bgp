@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# to be used in network setup scripts, e.g:
+# /etc/network/interfaces
+# 
+# iface eth0 inet dhcp
+#     post-up /usr/local/sbin/setup-cross-routing-per-interface 12 eth1
+#
+# iface eth1 inet dhcp
+#     post-up /usr/local/sbin/setup-cross-routing-per-interface 11 eth0
+#
+
+if_a=$IFACE
+gw_a=$(grep "option routers" /var/lib/dhcp/dhclient.$if_a.leases | sed -e 's/[^0-9.]//g' | tail -1)
+
+table_to=$1
+shift
+
+if_b=$1
+shift
+
+ip route add table $table_to default via $gw_a dev $if_a
+ip rule add iif $if_b table $table_to prio 1000
+sysctl -w "net.ipv4.conf.$if_a.forwarding=1"
