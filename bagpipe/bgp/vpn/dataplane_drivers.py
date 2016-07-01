@@ -177,11 +177,12 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
 
     @abstractmethod
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                        encaps):
+                                        encaps, lbConsistentHashOrder=0):
         pass
 
     @abstractmethod
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
+    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
+                                         encaps, lbConsistentHashOrder=0):
         pass
 
     def _runCommand(self, *args, **kwargs):
@@ -215,11 +216,12 @@ class DummyVPNInstanceDataplane(VPNInstanceDataplane):
 
     @logDecorator.log
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                        encaps):
+                                        encaps, lbConsistentHashOrder=0):
         pass
 
     @logDecorator.log
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
+    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
+                                         encaps, lbConsistentHashOrder=0):
         pass
 
     @logDecorator.log
