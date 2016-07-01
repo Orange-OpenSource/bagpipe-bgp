@@ -20,6 +20,8 @@ import sys
 import traceback
 import logging
 
+from collections import defaultdict
+
 
 def import_class(import_str):
     """Returns a class from a string including module and class"""
@@ -81,3 +83,15 @@ def plural(x):
         return "s"
     else:
         return ""
+
+
+def invert_dict_of_sets(d):
+    '''
+    return inverted dict of sets from original dict containing sets of
+    non-unique hashable items
+    '''
+    new_d = defaultdict(set)
+    for k in d:
+        for v in d[k]:
+            new_d[v].add(k)
+    return new_d

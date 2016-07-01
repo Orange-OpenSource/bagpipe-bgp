@@ -170,13 +170,10 @@ class EVI(VPNInstance, LookingGlass):
 
         self._advertiseRoute(self.multicastRouteEntry)
 
-    def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label):
+    def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label, rd):
         # Generate BGP route and advertise it...
 
         assert(prefixLen == 32)
-
-        rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
-                                             self.instanceId)
 
         # label parameter ignored, we need to use instance label
         nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8,
