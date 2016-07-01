@@ -184,7 +184,7 @@ class RESTAPI(LookingGlass):
                                                   # interface name will be
                                                   # assumed as already plugged
                                                   # into the evpn
-                    }
+                    },
             }
             if local_port is not a list, it is assumed to be a name of a linux
             interface (string)
@@ -206,8 +206,10 @@ class RESTAPI(LookingGlass):
                             toward these Route Targets, with an action
                             consisting in redirecting to a VRF with an RT
                             of "readvertise: to_rt"
-        }
-
+        },
+        'lb_consistent_hash_order': # optional, will result in the VRF to load
+                                      balance traffic between all plugged
+                                      ports, based on this relative order
         """
 
         try:
@@ -220,19 +222,23 @@ class RESTAPI(LookingGlass):
 
         try:
             log.debug('Local port attach received: %s', attach_params)
-            self.vpnManager.plugVifToVPN(attach_params['vpn_instance_id'],
-                                         attach_params['vpn_type'],
-                                         attach_params['import_rt'],
-                                         attach_params['export_rt'],
-                                         attach_params['mac_address'],
-                                         attach_params['ip_address'],
-                                         attach_params['gateway_ip'],
-                                         attach_params['local_port'],
-                                         attach_params.get('linuxbr'),
-                                         attach_params.get('advertise_subnet',
-                                                           False),
-                                         attach_params.get('readvertise'),
-                                         attach_params.get('attract_traffic'))
+            self.vpnManager.plugVifToVPN(
+                attach_params['vpn_instance_id'],
+                attach_params['vpn_type'],
+                attach_params['import_rt'],
+                attach_params['export_rt'],
+                attach_params['mac_address'],
+                attach_params['ip_address'],
+                attach_params['gateway_ip'],
+                attach_params['local_port'],
+                attach_params.get('linuxbr'),
+                attach_params.get('advertise_subnet',
+                                  False),
+                attach_params.get('readvertise'),
+                attach_params.get('attract_traffic'),
+                attach_params.get('lb_consistent_hash_order',
+                                  0)
+            )
         except APIException as e:
             log.warning('attach_localport: API parameter error: %s', e)
             abort(400, "API parameter error: %s" % e)
@@ -254,13 +260,14 @@ class RESTAPI(LookingGlass):
 
         try:
             log.debug('Local port detach received: %s', detach_params)
-            self.vpnManager.unplugVifFromVPN(detach_params['vpn_instance_id'],
-                                             detach_params['mac_address'],
-                                             detach_params['ip_address'],
-                                             detach_params['local_port'],
-                                             detach_params.get(
-                                                 'advertise_subnet', False),
-                                             )
+            self.vpnManager.unplugVifFromVPN(
+                detach_params['vpn_instance_id'],
+                detach_params['mac_address'],
+                detach_params['ip_address'],
+                detach_params['local_port'],
+                detach_params.get('advertise_subnet',
+                                  False)
+            )
         except APIException as e:
             log.warning('detach_localport: API parameter error: %s', e)
             abort(400, "API parameter error: %s" % e)

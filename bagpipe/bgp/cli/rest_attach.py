@@ -223,7 +223,10 @@ def main():
                       type="string", help="Traffic classifier IP protocol "
                       "filter",
                       action="callback", callback=classifier_callback)
-
+    parser.add_option("--lb-consistent-hash-order",
+                      dest="lb_consistent_hash_order",
+                      default=0, type="int",
+                      help="Load Balancing consistent hash sort order")
     (options, _) = parser.parse_args()
 
     if not(options.operation):
@@ -333,18 +336,21 @@ def main():
             parser.error("Need to specify --redirect-rt and at least one "
                          "traffic classifier option")
 
-    json_data = json.dumps({"import_rt":  importRTs,
-                            "export_rt":  exportRTs,
-                            "local_port":  local_port,
-                            "vpn_instance_id":  options.vpn_instance_id,
-                            "vpn_type":    options.network_type,
-                            "gateway_ip":  options.gw_ip,
-                            "mac_address": options.mac,
-                            "ip_address":  options.ip,
-                            "advertise_subnet": options.advertiseSubnet,
-                            "readvertise": readvertise,
-                            "attract_traffic": attract_traffic
-                            })
+    json_data = json.dumps(
+        {"import_rt":  importRTs,
+         "export_rt":  exportRTs,
+         "local_port":  local_port,
+         "vpn_instance_id":  options.vpn_instance_id,
+         "vpn_type":    options.network_type,
+         "gateway_ip":  options.gw_ip,
+         "mac_address": options.mac,
+         "ip_address":  options.ip,
+         "advertise_subnet": options.advertiseSubnet,
+         "readvertise": readvertise,
+         "attract_traffic": attract_traffic,
+         "lb_consistent_hash_order": options.lb_consistent_hash_order
+         }
+    )
 
     print "request: %s" % json_data
 
