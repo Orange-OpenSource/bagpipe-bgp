@@ -26,6 +26,8 @@ from copy import copy
 
 from netaddr.ip import IPNetwork
 
+from bagpipe.bgp.common import constants as consts
+
 from bagpipe.bgp.common.run_command import runCommand
 from bagpipe.bgp.common.net_utils import get_device_mac
 
@@ -36,13 +38,9 @@ import logging
 
 DEFAULT_VPN_INSTANCE_ID = "bagpipe-test"
 
-NS2VPN_INTERFACE_PREFIX = "tovpn-"
-VPN2NS_INTERFACE_PREFIX = "tons-"
+VPN2NS_INTERFACE_PREFIX = "ns-"
 
 NS2VPN_DEFAULT_IFNAME = "tovpn"
-
-
-LINUX_DEV_LEN = 15
 
 # Needed so that the OVS bridge kernel interface can hava a high enough MTU
 DEFAULT_MTU = 9000
@@ -72,7 +70,7 @@ def create_veth_pair(vpn_interface, ns_interface, ns_name):
 
 
 def get_vpn2ns_if_name(namespace):
-    return (VPN2NS_INTERFACE_PREFIX + namespace)[:LINUX_DEV_LEN]
+    return (VPN2NS_INTERFACE_PREFIX + namespace)[:consts.LINUX_DEV_LEN]
 
 
 def createSpecialNetNSPort(options):
