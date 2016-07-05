@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import errno
+
 import json
 
 from netaddr.ip import IPNetwork
@@ -29,18 +31,20 @@ from bagpipe.bgp.vpn.ipvpn import IPVPN
 from bagpipe.bgp.common.looking_glass import LookingGlass, \
     LookingGlassLocalLogger, LGMap
 
+from bagpipe.bgp.common import constants as consts
 from bagpipe.bgp.common import logDecorator
 
 from socket import AF_INET
+from socket import AF_INET6
 from pyroute2.common import AF_MPLS
 
 from pyroute2 import IPDB
 from pyroute2 import IPRoute
 from pyroute2.netlink.rtnl import ndmsg
+from pyroute2.netlink import exceptions as nl_exceptions
 
 ipr = IPRoute()
 
-LINUX_DEV_LEN = 14
 VRF_INTERFACE_PREFIX = "bvrf-"
 
 RT_TABLE_BASE = 1000
@@ -78,7 +82,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
         self.ip = self.driver.ip
 
         self.vrf_if = ("%s%d" % (VRF_INTERFACE_PREFIX,
-                                 self.instanceId))[:LINUX_DEV_LEN]
+                                 self.instanceId))[:consts.LINUX_DEV_LEN]
 
         self.rt_table = RT_TABLE_BASE + self.instanceId
 
@@ -86,12 +90,6 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
                       self.instanceId, self.vrf_if)
 
         self.flush_routes()
-        ### make sure we don't fallback into other routing tables ##
-        # FIXME: this leaves a window between flush and add default where
-        #        traffic can leak
-        self.ip.routes.add({'dst': 'default',
-                            'table': self.rt_table,
-                            'type': 'unreachable'}).commit()
 
         self.log.debug("Creating VRF interface...")
 
@@ -107,33 +105,29 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
         # Create ip rule for VRF route table
         # TODO: do in IPDB, when possible (check: what if
         #       rule exist, but is not known by IPDB?)
-        ipr.flush_rules(iifname=self.vrf_if)
-        ipr.flush_rules(oifname=self.vrf_if)
-        ipr.rule('add', priority=100, iifname=self.vrf_if, table=self.rt_table,
-                 action='FR_ACT_TO_TBL')
-        ipr.rule('add', priority=100, oifname=self.vrf_if, table=self.rt_table,
-                 action='FR_ACT_TO_TBL')
-        #FIXME: to do for v6 as well, or v6 traffic will leak...
+        for family in AF_INET, AF_INET6:
+            ipr.flush_rules(family=family,
+                            iifname=self.vrf_if)
+            ipr.flush_rules(family=family,
+                            oifname=self.vrf_if)
 
-        # an alternative to the unreachable route above, would be to use
-        # an ip rule, but I haven't got this to work yet
-        # the rules are always hit, whatever the priority
-        #         ipr.rule('add', priority=101, iifname=self.vrf_if,
-        #                  action='FR_ACT_UNREACHABLE')
-        #         ipr.rule('add', priority=101, oifname=self.vrf_if,
-        #                  action='FR_ACT_UNREACHABLE')
-        # the commands above result in :
-        # 101:    from all iif vrf-1 lookup main unreachable
-        # 101:    from all oif vrf-1 lookup main unreachable
-        # the "lookup main" is unexpected and the result is a failed lookup for the packet
-        #
-        #         self._runCommand("ip rule add prio 101 iif %s unreachable" %
-        #                          self.vrf_if)
-        #         self._runCommand("ip rule add prio 101 iif %s unreachable" %
-        #                          self.vrf_if)
+            ipr.rule('add', family=family,
+                     priority=100, iifname=self.vrf_if, table=self.rt_table,
+                     action='FR_ACT_TO_TBL')
+            ipr.rule('add', family=family,
+                     priority=100, oifname=self.vrf_if, table=self.rt_table,
 
-        #TODO: map instance Label ?
-        #  relevant only if it is advertised, which we don't do yet
+                     action='FR_ACT_TO_TBL')
+
+            # if VRF traffic does not match any route,
+            # lookups must *not* fallback to main/default
+            # routing table
+            ipr.rule('add', family=family,
+                     priority=101, iifname=self.vrf_if,
+                     action='FR_ACT_UNREACHABLE')
+            ipr.rule('add', family=family,
+                     priority=101, oifname=self.vrf_if,
+                     action='FR_ACT_UNREACHABLE')
 
     def add_route(self, route):
         route.update({'proto': RT_PROT_BAGPIPE})
@@ -188,9 +182,19 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
         broadcastIP = str(IPNetwork("%s/%s" % (self.gatewayIP, self.mask)
                                     ).broadcast)
 
-        ipr.addr('add', index=self.ip.interfaces[interface].index,
-                 address=self.gatewayIP, mask=self.mask,
-                 broadcast=broadcastIP)
+        try:
+            ipr.addr('add', index=self.ip.interfaces[interface].index,
+                     address=self.gatewayIP, mask=self.mask,
+                     broadcast=broadcastIP)
+        except nl_exceptions.NetlinkError as x:
+            if x.code == errno.EEXIST:
+                # the route already exists, fine
+                self.log.warning("route %s already exists on %s",
+                                 self.gatewayIP,
+                                 interface)
+                pass
+            else:
+                raise
 
         # Configure mapping for incoming MPLS traffic
         # with this port label
@@ -201,7 +205,15 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
                        'addr': ipAddress}
                }
 
-        self.add_route(req)
+        try:
+            self.add_route(req)
+        except nl_exceptions.NetlinkError as x:
+            if x.code == errno.EEXIST:
+                # the route already exists, fine
+                self.log.warning("MPLS state for %d already exists", label)
+                pass
+            else:
+                raise
 
     @logDecorator.logInfo
     def vifUnplugged(self, macAddress, ipAddress, localPort, label,
@@ -249,21 +261,17 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
     def _nh(self, remotePE, label, encaps):
         mpls = True
         if str(remotePE) == self.driver.getLocalAddress():
-            try:
-                # if remotePE is ourselves
-                # we lookup the route for the label and deliver directly
-                # to this oif/gateway
-                (oif, gateway) = self._read_mpls_in(label)
-                mpls = False
-                # FIXME: does not work yet, from this table,
-                #        'gateway' is considered unreachable
-                #        we could drop 'gateway' and just keep oif
-                #        but this would only work for connected routes
-                raise Exception("local MPLS shortcut not supported yet")
-            except Exception as e:
-                self.log.debug(e)
-                gateway = '127.0.0.1'
-                oif = self.ip.interfaces['lo'].index
+            # FIXME: does not work yet, from this table,
+            #        'gateway' is considered unreachable
+            #        we could drop 'gateway' and just keep oif
+            #        but this would only work for connected routes
+            # if remotePE is ourselves
+            # we lookup the route for the label and deliver directly
+            # to this oif/gateway
+            # (oif, gateway) = self._read_mpls_in(label)
+            # mpls = False
+            gateway = '127.0.0.1'
+            oif = self.ip.interfaces['lo'].index
         else:
             gateway = remotePE
             oif = self.driver.mpls_interface_index
@@ -286,6 +294,10 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
                                         encaps):
         prefix = str(prefix)
+
+        if prefix == "0.0.0.0/0":
+            prefix = 'default'
+
         try:
             with self._getRoute(prefix) as r:
                 self.log.debug("a route to %s already exists, adding nexthop",
@@ -302,20 +314,21 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
     @logDecorator.logInfo
     def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri):
         prefix = str(prefix)
+
+        if prefix == "0.0.0.0/0":
+            prefix = 'default'
+
         try:
             with self._getRoute(prefix) as r:
                 #FIXME: encap info is missing here
                 if r['multipath']:
                     r.del_nh(self._nh(remotePE, label, None))
-                else:
+                else: # last route
                     r.remove()
-                # NOTE: if the nexthop wass a direct/local, how
-                #       can we retrieve it since its probably gone now...?
-                #       will route be 'dead', what if there were many..?
-                #       use weight as a way to balance and as a refcount?
+
         except KeyError:
-            self.log.debug("no route found on "
-                           "removeDataplaneForRemoteEndpoint")
+            self.log.warning("no route found on "
+                             "removeDataplaneForRemoteEndpoint for %s", prefix)
 
     ## LG ##
 
