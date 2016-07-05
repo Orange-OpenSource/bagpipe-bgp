@@ -28,6 +28,8 @@ import json
 
 from bottle import request, response, abort, Bottle
 
+from bagpipe.bgp.common import constants as consts
+
 from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap, \
     NoSuchLookingGlassObject, LookingGlassReferences
 
@@ -115,6 +117,11 @@ class RESTAPI(LookingGlass):
                 'evpn' in params['local_port']):
             abort(400, "Mandatory key is missing in local_port parameter"
                   "(linuxif, or evpn)")
+
+        if len(params['local_port'].get('linuxif','')) > consts.LINUX_DEV_LEN:
+            abort(400, "interface name '%s' exceeds the maximum length (%d)" %
+                  (params['local_port'].get('linuxif',''),
+                   consts.LINUX_DEV_LEN))
 
         if not isinstance(params.get('advertise_subnet', False), bool):
             abort(400, "'advertise_subnet' must be a boolean")
