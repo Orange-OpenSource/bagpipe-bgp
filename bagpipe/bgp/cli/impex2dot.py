@@ -100,7 +100,7 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
 
     parser.add_option(
         "--server", dest="servers", default=[], action="append",
-        help="IP address of a BaGPipe BGP instances (default: 127.0.0.1)")
+        help="IP address of a BaGPipe BGP instances (default: localhost)")
 
     parser.add_option(
         "--port", dest="port", type="int", default=BAGPIPE_PORT,
@@ -114,6 +114,7 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
 
     if len(options.servers) == 0:
         options.servers = ["127.0.0.1"]
+        #options.servers = ["localhost"]
 
     ports = set()
     dests = set()
@@ -135,16 +136,18 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
     print '    subgraph ipvpns {'
     print '        rank=same;'
     for (server, vpn, _) in filter(lambda x: x[2] == 'VRF', vpns):
-        print ('        %s [label="{<0>VRF\\n%s\\n[%s]|<readv>}",'
+        server_spec = ("\\n[%s]" % server) if server != 'localhost' else ''
+        print ('        %s [label="{<0>VRF\\n%s%s|<readv>}",'
                'shape="record"];' % (vpn_uid(server, vpn), vpn_short(vpn),
-                                     server))
+                                     server_spec))
     print '    }'
 
     print '    subgraph evpns {'
     for (server, vpn, _) in filter(lambda x: x[2] == 'EVI', vpns):
-        print ('        %s [label="EVI\\n%s\\n[%s]",'
-               'shape="box"];' % (vpn_uid(server, vpn), vpn_short(vpn),
-                                  server))
+        server_spec = ("\\n[%s]" % server) if server != 'localhost' else ''
+        print ('        %s [label="{<0>EVI\\n%s%s}",'
+               'shape="record"];' % (vpn_uid(server, vpn), vpn_short(vpn),
+                                  server_spec))
     print '    }'
 
     for (server, vpn, _) in vpns:
@@ -225,7 +228,7 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
             print ('    port_%s_%s -> dest_%s_%s [style=dashed,'
                    'dir=none,color="gray"'
                    ',weight=5];' %
-                   (server, normalize(port), normalize(server), dest))
+                   (normalize(server), normalize(port), normalize(server), dest))
             dests.add((server, dest))
 
     for (server, dest) in dests:
