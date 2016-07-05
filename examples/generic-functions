@@ -61,6 +61,9 @@ function clean_start {
 }
 
 function wait_ready {
+	if [[ $hostA == $hostB ]]; then
+		return 0
+	fi
 	while (test $(r_a bagpipe-looking-glass summary BGP_established_peers) -eq 0); do
 		echo .
 	        sleep 1
