@@ -60,7 +60,8 @@ def create_veth_pair(vpn_interface, ns_interface, ns_name):
                (ns_name, ns_interface), raiseExceptionOnError=False)
     runCommand(log, "ip link delete %s" %
                vpn_interface, raiseExceptionOnError=False)
-    runCommand(log, "ip link add %s type veth peer name %s netns %s" %
+    runCommand(log,
+               "ip link add %s type veth peer name %s netns %s mtu 65535" %
                (vpn_interface, ns_interface, ns_name),
                raiseExceptionOnError=False)
     runCommand(log, "ip link set dev %s up" % vpn_interface)

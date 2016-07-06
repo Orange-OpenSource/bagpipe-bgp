@@ -191,7 +191,7 @@ class VPNManager(LookingGlass):
             runCommand(log, "ip link delete %s" %
                        ipvpn_if, acceptableReturnCodes=[0, 1])
 
-            runCommand(log, "ip link add %s type veth peer name %s" %
+            runCommand(log, "ip link add %s type veth peer name %s mtu 65535" %
                        (evpn_if, ipvpn_if))
 
             runCommand(log, "ip link set %s up" % evpn_if)

@@ -200,12 +200,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
                                    proxyarp_ns_to_ovsbr):
         """ Create a pair of veth devices, one end being created in the ARP
         netns """
-        try:
-            mtu = self.config["ovsbr_interfaces_mtu"]
-        except KeyError:
-            mtu = DEFAULT_ARPNS_IF_MTU
-        self.log.info("Will create %s interface with MTU %s (see ovsbr"
-                      "_interfaces_mtu in config)", ovsbr_to_proxyarp_ns, mtu)
 
         try:
             self._runCommand("ip netns exec %s ip link del %s" %
@@ -215,8 +209,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
             self._runCommand("ip link del %s" % ovsbr_to_proxyarp_ns,
                              raiseExceptionOnError=False,
                              acceptableReturnCodes=[0, 1])
-            self._runCommand("ip link add %s mtu %s type veth peer name %s "
-                             "netns %s" % (ovsbr_to_proxyarp_ns, mtu,
+            self._runCommand("ip link add %s mtu 65535 type veth peer name %s "
+                             "netns %s" % (ovsbr_to_proxyarp_ns,
                                            proxyarp_ns_to_ovsbr,
                                            self.arpNetNS),
                              acceptableReturnCodes=[0, 2])
