@@ -64,7 +64,7 @@ class DataplaneDriver(LookingGlassLocalLogger):
                             self.local_address)
 
         # Linux kernel version check
-        if self.requiredKernel:
+        if getattr(self, 'requiredKernel', None):
             o = self._runCommand("uname -r")
             self.kernelRelease = o[0][0].split("-")[0]
 
