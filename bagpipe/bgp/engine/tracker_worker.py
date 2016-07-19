@@ -106,9 +106,6 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
 
         self._compareRoutes = compareRoutes
 
-    def getBestRoutesForTrackedEntry(self, entry):
-        return self.trackedEntry2bestRoutes.get(entry, set())
-
     @logDecorator.log
     def _onEvent(self, routeEvent):
         newRoute = routeEvent.routeEntry
@@ -136,9 +133,15 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
 
             withdrawnBestRoutes = []
 
-            try:
-                bestRoutes = self.trackedEntry2bestRoutes[entry]
+            bestRoutes = self.trackedEntry2bestRoutes.get(entry)
 
+            if bestRoutes is None:
+                self.log.debug("We had no route for this entry (%s)")
+                self.trackedEntry2bestRoutes[entry] = set([newRoute])
+                bestRoutes = set()
+                self.log.debug("Calling newBestRoute")
+                self._callNewBestRoute(entry, filteredNewRoute)
+            else:
                 if routeEvent.replacedRoute is not None:
                     self.log.debug("Will remove replaced route from allRoutes"
                                    " and bestRoutes: %s",
@@ -232,20 +235,12 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                     else:
                         self.log.debug("Not calling _newBestRoute since we had"
                                        " received a similar route already")
-
                 else:
                     self.log.debug("The route is no better than current "
                                    "best ones")
 
                     if callNewBestRoute4All:
                         self._callNewBestRouteForRoutes(entry, bestRoutes)
-
-            except (KeyError, StopIteration) as e:
-                self.log.debug("We had no route for this entry (%s)", e)
-                self.trackedEntry2bestRoutes[entry] = set([newRoute])
-                bestRoutes = set()
-                self.log.debug("Calling newBestRoute")
-                self._callNewBestRoute(entry, filteredNewRoute)
 
             # We need to call self._bestRouteRemoved for routes that where
             # implicitly withdrawn, but only if they don't have an equal route
@@ -295,22 +290,18 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                 # remove the route from bestRoutes
                 bestRoutes.remove(withdrawnRoute)
 
-                withdrawnRouteIsLast = True
+                withdrawnRouteIsLast = False
                 if len(bestRoutes) == 0:
                     # we don't have any best route left...
                     self._recomputeBestRoutes(allRoutes, bestRoutes)
 
                     if len(bestRoutes) > 0:
                         self._callNewBestRouteForRoutes(entry, bestRoutes)
-                        withdrawnRouteIsLast = False
                     else:
                         self.log.debug("Cleanup allRoutes and bestRoutes")
+                        withdrawnRouteIsLast = True
                         del self.trackedEntry2bestRoutes[entry]
                         del self.trackedEntry2routes[entry]
-                else:
-                    # we still have some best routes, no new best route
-                    # call to do
-                    withdrawnRouteIsLast = False
 
                 self.log.debug("Calling bestRouteRemoved...?")
                 # We need to call self._bestRouteRemoved, but only if the
@@ -347,23 +338,14 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
         newBestRoutes = []
         for route in allRoutes:
             if len(newBestRoutes) == 0:
-                # self.log.debug("first route, thus our current best:
-                # %s",route)
                 newBestRoutes = [route]
                 continue
 
             comparison = self._compareRoutes(self, route, newBestRoutes[0])
-            # self.log.debug("Route comparison: %s vs %s == %d",(route,
-            # newBestRoutes[0],comparison) )
             if comparison > 0:
-                # self.log.debug("better, replaces our current best: %s",route)
                 newBestRoutes = [route]
             elif comparison == 0:
-                # self.log.debug("as good as our current best: %s",route)
                 newBestRoutes.append(route)
-            else:
-                # self.log.debug("no better than our current best: %s",route)
-                pass
 
         bestRoutes.clear()
         bestRoutes.update(newBestRoutes)
@@ -431,17 +413,17 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
     def _dumpState(self):
         if self.log.isEnabledFor(logging.DEBUG):
             self.log.debug("--- trackedEntry2routes ---")
-            for entry in self.trackedEntry2routes:
+            for (entry, routes) in self.trackedEntry2routes.iteritems():
                 self.log.debug(
                     "  Entry: %s", TrackerWorker._displayEntry(entry))
-                for route in self.trackedEntry2routes[entry]:
+                for route in routes:
                     self.log.debug("    Route: %s", route)
 
             self.log.debug("--- trackedEntry2bestRoutes ---")
-            for entry in self.trackedEntry2bestRoutes:
+            for (entry, bRoutes) in self.trackedEntry2bestRoutes.iteritems():
                 self.log.debug(
                     "  Entry: %s", TrackerWorker._displayEntry(entry))
-                for route in self.trackedEntry2bestRoutes[entry]:
+                for route in bRoutes:
                     self.log.debug("    Route: %s", route)
 
             self.log.debug("--- ---")
