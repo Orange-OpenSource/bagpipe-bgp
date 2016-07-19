@@ -126,12 +126,8 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
 
         self._dumpState()
 
-        try:
-            allRoutes = self.trackedEntry2routes[entry]
-        except KeyError:
-            self.log.debug("Initiating trackedEntry2routes[entry]")
-            allRoutes = []
-            self.trackedEntry2routes[entry] = allRoutes
+
+        allRoutes = self.trackedEntry2routes.setdefault(entry, [])
 
         self.log.debug("We currently have %d route%s for this entry",
                        len(allRoutes), plural(allRoutes))
@@ -276,6 +272,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
 
             self.log.debug("Removing route from allRoutes for this entry")
 
+            # let's update known routes for this entry
             try:
                 allRoutes.remove(withdrawnRoute)
             except ValueError:
@@ -283,61 +280,60 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
                 self.log.error("Withdraw received for an entry for which we"
                                " had no route ??? (not supposed to happen)")
 
-            try:
-                bestRoutes = self.trackedEntry2bestRoutes[entry]
+            # let's now update best routes
+            bestRoutes = self.trackedEntry2bestRoutes.get(entry)
 
-                if withdrawnRoute in bestRoutes:
-                    self.log.debug("The event received is about a route which"
-                                   " is among the best routes for this entry")
-                    # remove the route from bestRoutes
-                    bestRoutes.remove(withdrawnRoute)
-
-                    withdrawnRouteIsLast = True
-                    if len(bestRoutes) == 0:
-                        # we don't have any best route left...
-                        self._recomputeBestRoutes(allRoutes, bestRoutes)
-
-                        if len(bestRoutes) > 0:
-                            self._callNewBestRouteForRoutes(entry, bestRoutes)
-                            withdrawnRouteIsLast = False
-                        else:
-                            self.log.debug("Cleanup allRoutes and bestRoutes")
-                            del self.trackedEntry2bestRoutes[entry]
-                            del self.trackedEntry2routes[entry]
-                    else:
-                        # we still have some best routes, no new best route
-                        # call to do
-                        withdrawnRouteIsLast = False
-
-                    self.log.debug("Calling bestRouteRemoved...?")
-                    # We need to call self._bestRouteRemoved, but only if the
-                    # withdrawn route does not have an equal route in
-                    # bestRoutes (in the sense of FilteredRouteEntry)
-                    filteredWithdrawnRoute = FilteredRouteEntry(withdrawnRoute)
-                    if (filteredWithdrawnRoute not
-                            in filteredRoutes(bestRoutes)):
-                        self.log.debug("Calling bestRouteRemoved: %s(last:%s)",
-                                       filteredWithdrawnRoute,
-                                       withdrawnRouteIsLast)
-                        self._callBestRouteRemoved(entry,
-                                                   filteredWithdrawnRoute,
-                                                   withdrawnRouteIsLast)
-                    else:
-                        self.log.debug("No need to call bestRouteRemved: %s",
-                                       filteredWithdrawnRoute)
-
-                else:
-                    self.log.debug("The event received is not related to any "
-                                   "of the best routes for this entry")
-                    # no need to update our best route list
-                    pass
-
-            except (KeyError, ValueError) as e:
+            if bestRoutes is None:
                 # we did not have any route for this entry
                 self.log.error("Withdraw received for an entry for which we "
                                "had no route: not supposed to happen! (%s)", e)
-            except Exception:
-                raise
+                return
+
+            if withdrawnRoute in bestRoutes:
+                self.log.debug("The event received is about a route which"
+                               " is among the best routes for this entry")
+                # remove the route from bestRoutes
+                bestRoutes.remove(withdrawnRoute)
+
+                withdrawnRouteIsLast = True
+                if len(bestRoutes) == 0:
+                    # we don't have any best route left...
+                    self._recomputeBestRoutes(allRoutes, bestRoutes)
+
+                    if len(bestRoutes) > 0:
+                        self._callNewBestRouteForRoutes(entry, bestRoutes)
+                        withdrawnRouteIsLast = False
+                    else:
+                        self.log.debug("Cleanup allRoutes and bestRoutes")
+                        del self.trackedEntry2bestRoutes[entry]
+                        del self.trackedEntry2routes[entry]
+                else:
+                    # we still have some best routes, no new best route
+                    # call to do
+                    withdrawnRouteIsLast = False
+
+                self.log.debug("Calling bestRouteRemoved...?")
+                # We need to call self._bestRouteRemoved, but only if the
+                # withdrawn route does not have an equal route in
+                # bestRoutes (in the sense of FilteredRouteEntry)
+                filteredWithdrawnRoute = FilteredRouteEntry(withdrawnRoute)
+                if (filteredWithdrawnRoute not
+                        in filteredRoutes(bestRoutes)):
+                    self.log.debug("Calling bestRouteRemoved: %s(last:%s)",
+                                   filteredWithdrawnRoute,
+                                   withdrawnRouteIsLast)
+                    self._callBestRouteRemoved(entry,
+                                               filteredWithdrawnRoute,
+                                               withdrawnRouteIsLast)
+                else:
+                    self.log.debug("No need to call bestRouteRemved: %s",
+                                   filteredWithdrawnRoute)
+
+            else:
+                self.log.debug("The event received is not related to any "
+                               "of the best routes for this entry")
+                # no need to update our best route list
+                pass
 
         self.log.info("We now have %d route%s for this entry.", len(allRoutes),
                       plural(allRoutes))
