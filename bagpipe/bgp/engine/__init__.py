@@ -38,9 +38,7 @@ import types
 
 import logging
 
-from bagpipe.bgp.common.looking_glass import LookingGlass
-from bagpipe.bgp.common.looking_glass import LookingGlassReferences
-from bagpipe.bgp.common.looking_glass import LGMap
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.common import logDecorator
 
@@ -58,7 +56,7 @@ from exabgp.reactor.protocol import AFI, SAFI
 log = logging.getLogger(__name__)
 
 
-class RouteEntry(LookingGlass):
+class RouteEntry(lg.LookingGlassMixin):
     """A route entry describes a BGP route, i.e. the association of:
 * a BGP NLRI of a specific type (e.g. a VPNv4 route
   like "1.2.3.4:5:192.168.0.5/32")
@@ -202,7 +200,7 @@ class RouteEntry(LookingGlass):
 
         if self.source:
             res["source"] = {"id": self.source.name,
-                             "href": LookingGlassReferences.getAbsolutePath(
+                             "href": lg.getAbsolutePath(
                                  "BGP_WORKERS", pathPrefix, [self.source.name])
                              }
 
@@ -316,7 +314,7 @@ class Unsubscription(_SubUnsubCommon):
         _SubUnsubCommon.__init__(self, afi, safi, routeTarget, worker)
 
 
-class EventSource(LookingGlass):
+class EventSource(lg.LookingGlassMixin):
     '''
     Class for objects that advertise and withdraw routes
     need to have a 'name' attribute
@@ -344,7 +342,7 @@ class EventSource(LookingGlass):
 
     def getLGMap(self):
         return {
-            "adv_routes": (LGMap.SUBTREE, self.getLGRoutes)
+            "adv_routes": (lg.SUBTREE, self.getLGRoutes)
         }
 
     def getLGRoutes(self, pathPrefix):

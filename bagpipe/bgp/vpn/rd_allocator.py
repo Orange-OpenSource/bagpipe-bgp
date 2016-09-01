@@ -23,14 +23,14 @@ import random
 from threading import Lock
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common.looking_glass import LookingGlass
+from bagpipe.bgp.common import looking_glass as lg
 
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 
 log = logging.getLogger(__name__)
 
 
-class RDAllocator(LookingGlass):
+class RDAllocator(lg.LookingGlassMixin):
 
     def __init__(self, prefix):
         self.prefix = prefix

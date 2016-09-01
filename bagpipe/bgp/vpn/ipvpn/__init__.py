@@ -34,7 +34,7 @@ from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
 from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver \
     as _DummyDataplaneDriver
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common import looking_glass as lg
 
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
@@ -64,7 +64,7 @@ class DummyDataplaneDriver(_DummyDataplaneDriver):
     type = IPVPN
 
 
-class VRF(VPNInstance, LookingGlass):
+class VRF(VPNInstance, lg.LookingGlassMixin):
     # component managing a VRF:
     # - calling a driver to instantiate the dataplane
     # - registering to receive routes for the needed route targets
@@ -387,7 +387,7 @@ class VRF(VPNInstance, LookingGlass):
 
     def getLGMap(self):
         return {
-            "readvertised": (LGMap.SUBTREE, self.getLGReadvertisedRoutes),
+            "readvertised": (lg.SUBTREE, self.getLGReadvertisedRoutes),
         }
 
     def getLGReadvertisedRoutes(self, pathPrefix):

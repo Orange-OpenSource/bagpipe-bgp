@@ -31,7 +31,7 @@ import netaddr
 
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
-from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
     compareECMP, compareNoECMP
@@ -243,7 +243,7 @@ class TrafficClassifier(object):
             components[ID](rule)
 
 
-class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
+class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     type = None
@@ -274,9 +274,9 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
                                (self.instanceType, self.instanceId),
                                compareRoutes)
 
-        LookingGlassLocalLogger.__init__(self,
-                                         "%s-%d" % (self.instanceType,
-                                                    self.instanceId))
+        lg.LookingGlassLocalLogger.__init__(self,
+                                            "%s-%d" % (self.instanceType,
+                                                       self.instanceId))
         self.lock = Lock()
 
         self.importRTs = importRTs
@@ -848,14 +848,14 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
     def getLGMap(self):
         return {
-            "external_instance_id":   (LGMap.VALUE, self.externalInstanceId),
-            "dataplane":     (LGMap.DELEGATE, self.dataplane),
-            "route_targets": (LGMap.SUBITEM, self.getRTs),
-            "gateway_ip":    (LGMap.VALUE, self.gatewayIP),
-            "subnet_mask":   (LGMap.VALUE, self.mask),
-            "instance_dataplane_id": (LGMap.VALUE, self.instanceLabel),
-            "ports":         (LGMap.SUBTREE, self.getLGLocalPortData),
-            "readvertise":   (LGMap.SUBITEM, self.getLGReadvertise)
+            "external_instance_id":   (lg.VALUE, self.externalInstanceId),
+            "dataplane":     (lg.DELEGATE, self.dataplane),
+            "route_targets": (lg.SUBITEM, self.getRTs),
+            "gateway_ip":    (lg.VALUE, self.gatewayIP),
+            "subnet_mask":   (lg.VALUE, self.mask),
+            "instance_dataplane_id": (lg.VALUE, self.instanceLabel),
+            "ports":         (lg.SUBTREE, self.getLGLocalPortData),
+            "readvertise":   (lg.SUBITEM, self.getLGReadvertise)
         }
 
     def getLGLocalPortData(self, pathPrefix):

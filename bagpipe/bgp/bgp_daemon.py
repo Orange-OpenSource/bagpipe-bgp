@@ -34,8 +34,7 @@ from ConfigParser import SafeConfigParser, NoSectionError
 from optparse import OptionParser
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common.looking_glass import LookingGlass, \
-    LookingGlassLogHandler
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.engine.bgp_manager import Manager
 from bagpipe.bgp.engine.exabgp_peer_worker import setupExaBGPEnv
@@ -111,7 +110,7 @@ def findDataplaneDrivers(dpConfigs, bgpConfig, isCleaningUp=False):
     return drivers
 
 
-class BgpDaemon(LookingGlass):
+class BgpDaemon(lg.LookingGlassMixin):
 
     def __init__(self, catchAllLGLogHandler, **kwargs):
         self.stdin_path = '/dev/null'
@@ -240,7 +239,7 @@ def daemon_main():
         logging.root.name = "Stopper"
         logging.info("Signal daemon to stop")
 
-    catchAllLogHandler = LookingGlassLogHandler()
+    catchAllLogHandler = lg.LookingGlassLogHandler()
 
     # we inject this catch all log handler in all configured loggers
     for (loggerName, logger) in Logger.manager.loggerDict.iteritems():

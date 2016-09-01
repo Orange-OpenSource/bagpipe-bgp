@@ -28,7 +28,7 @@ import traceback
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine import RouteEvent
 
-from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
+from bagpipe.bgp.common import looking_glass as lg
 
 Init = "InitEvent"
 ConnectNow = "ConnectNow"
@@ -111,7 +111,7 @@ class ToIdle(object):
         return "ToIdle(%s)" % self.delay
 
 
-class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
+class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     '''
@@ -139,8 +139,8 @@ class BGPPeerWorker(Worker, Thread, LookingGlassLocalLogger):
         self.sendKATimer = None
         self.KAReceptionTimer = None
 
-        LookingGlassLocalLogger.__init__(
-            self, self.peerAddress.replace(".", "-"))
+        lg.LookingGlassLocalLogger.__init__(self,
+                                            self.peerAddress.replace(".", "-"))
 
         self.fsm = FSM(self)
 

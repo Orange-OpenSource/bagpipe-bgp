@@ -28,7 +28,7 @@ import socket
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
-from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger, LGMap
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.common.utils import plural
 from bagpipe.bgp.common import logDecorator
@@ -92,12 +92,12 @@ def compareECMP(self, routeA, routeB):
     return 0
 
 
-class TrackerWorker(Worker, LookingGlassLocalLogger):
+class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     def __init__(self, bgpManager, workerName, compareRoutes=compareNoECMP):
         Worker.__init__(self, bgpManager, workerName)
-        LookingGlassLocalLogger.__init__(self)
+        lg.LookingGlassLocalLogger.__init__(self)
 
         # dict: entry -> list of routes:
         self.trackedEntry2routes = dict()
@@ -281,7 +281,7 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
             if bestRoutes is None:
                 # we did not have any route for this entry
                 self.log.error("Withdraw received for an entry for which we "
-                               "had no route: not supposed to happen! (%s)", e)
+                               "had no route: not supposed to happen!")
                 return
 
             if withdrawnRoute in bestRoutes:
@@ -440,8 +440,8 @@ class TrackerWorker(Worker, LookingGlassLocalLogger):
     # Looking glass ###########
 
     def getLGMap(self):
-        return {"received_routes": (LGMap.SUBTREE, self.getLGAllRoutes),
-                "best_routes": (LGMap.SUBTREE, self.getLGBestRoutes)}
+        return {"received_routes": (lg.SUBTREE, self.getLGAllRoutes),
+                "best_routes": (lg.SUBTREE, self.getLGBestRoutes)}
 
     def getLGAllRoutes(self, pathPrefix):
         return self._getLGRoutes(pathPrefix, self.trackedEntry2routes)

@@ -33,8 +33,7 @@ from bagpipe.bgp.vpn.dataplane_drivers import \
 from bagpipe.bgp.vpn.dataplane_drivers import \
     DummyVPNInstanceDataplane as _DummyVPNInstanceDataplane
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap, \
-    LookingGlassReferences
+from bagpipe.bgp.common import looking_glass as lg
 
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.attribute.community.extended.communities \
@@ -128,7 +127,7 @@ class DummyDataplaneDriver(_DummyDataplaneDriver):
 
 # EVI
 
-class EVI(VPNInstance, LookingGlass):
+class EVI(VPNInstance, lg.LookingGlassMixin):
 
     '''
     Implementation an E-VPN instance (EVI) based on RFC7432 and
@@ -299,7 +298,7 @@ class EVI(VPNInstance, LookingGlass):
             return {"gateway_port": {
                     "interface": repr(linuxif),
                     "ipvpn": {"href":
-                              LookingGlassReferences.getAbsolutePath(
+                              lg.getAbsolutePath(
                                   "VPN_INSTANCES", pathPrefix,
                                   [ipvpn.externalInstanceId]),
                               "id": ipvpn.name,

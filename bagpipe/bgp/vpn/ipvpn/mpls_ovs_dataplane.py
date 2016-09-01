@@ -25,9 +25,8 @@ from distutils.version import StrictVersion
 from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
 from bagpipe.bgp.vpn.ipvpn import IPVPN
-from bagpipe.bgp.common.looking_glass import LookingGlass, \
-    LookingGlassLocalLogger, LGMap
 
+from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import logDecorator
 from bagpipe.bgp.common.utils import getBoolean
 from bagpipe.bgp.common.net_utils import get_device_mac
@@ -72,7 +71,7 @@ OVS_DUMP_FLOW_FILTER = "| grep -v NXST_FLOW | perl -pe '"               \
     "'"
 
 
-class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
+class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def __init__(self, *args, **kwargs):
         VPNInstanceDataplane.__init__(self, *args)
@@ -766,7 +765,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
 
     def getLGMap(self):
         return {
-            "flows": (LGMap.SUBTREE, self.getLGOVSFlows)
+            "flows": (lg.SUBTREE, self.getLGOVSFlows)
         }
 
     def getLGOVSFlows(self, pathPrefix):
@@ -783,7 +782,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, LookingGlass):
         return output
 
 
-class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
+class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     """
     Dataplane driver using OpenVSwitch
@@ -825,7 +824,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
     ecmpSupport = True
 
     def __init__(self, config, init=True):
-        LookingGlassLocalLogger.__init__(self)
+        lg.LookingGlassLocalLogger.__init__(self)
         self.log.info("Initializing MPLSOVSVRFDataplane")
 
         try:
@@ -1119,8 +1118,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
 
     def getLGMap(self):
         return {
-            "flows": (LGMap.SUBTREE, self.getLGOVSFlows),
-            "ports": (LGMap.SUBTREE, self.getLGOVSPorts)
+            "flows": (lg.SUBTREE, self.getLGOVSFlows),
+            "ports": (lg.SUBTREE, self.getLGOVSPorts)
         }
 
     def getLookingGlassLocalInfo(self, pathPrefix):

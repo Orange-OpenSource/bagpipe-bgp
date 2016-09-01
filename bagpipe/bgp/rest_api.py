@@ -30,8 +30,7 @@ from bottle import request, response, abort, Bottle
 
 from bagpipe.bgp.common import constants as consts
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap, \
-    NoSuchLookingGlassObject, LookingGlassReferences
+from bagpipe.bgp.common import looking_glass as lg
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class APIException(Exception):
     pass
 
 
-class RESTAPI(LookingGlass):
+class RESTAPI(lg.LookingGlassMixin):
 
     """BGP component REST API."""
 
@@ -72,12 +71,12 @@ class RESTAPI(LookingGlass):
 
         self.startTime = time.time()
 
-        LookingGlassReferences.setRoot(LOOKING_GLASS_BASE)
-        LookingGlassReferences.setReferencePath(
+        lg.setRoot(LOOKING_GLASS_BASE)
+        lg.setReferencePath(
             "BGP_WORKERS", ["bgp", "workers"])
-        LookingGlassReferences.setReferencePath(
+        lg.setReferencePath(
             "VPN_INSTANCES", ["vpns", "instances"])
-        LookingGlassReferences.setReferencePath(
+        lg.setReferencePath(
             "DATAPLANE_DRIVERS", ["vpns", "dataplane", "drivers"])
 
     def ping(self):
@@ -232,12 +231,10 @@ class RESTAPI(LookingGlass):
                 attach_params['gateway_ip'],
                 attach_params['local_port'],
                 attach_params.get('linuxbr'),
-                attach_params.get('advertise_subnet',
-                                  False),
+                attach_params.get('advertise_subnet', False),
                 attach_params.get('readvertise'),
                 attach_params.get('attract_traffic'),
-                attach_params.get('lb_consistent_hash_order',
-                                  0)
+                attach_params.get('lb_consistent_hash_order', 0)
             )
         except APIException as e:
             log.warning('attach_localport: API parameter error: %s', e)
@@ -265,8 +262,7 @@ class RESTAPI(LookingGlass):
                 detach_params['mac_address'],
                 detach_params['ip_address'],
                 detach_params['local_port'],
-                detach_params.get('advertise_subnet',
-                                  False)
+                detach_params.get('advertise_subnet', False)
             )
         except APIException as e:
             log.warning('detach_localport: API parameter error: %s', e)
@@ -299,11 +295,11 @@ class RESTAPI(LookingGlass):
             log.debug("lgInfo: %s", repr(lgInfo))
 
             if lgInfo is None:
-                raise NoSuchLookingGlassObject(pathPrefix, urlPathElements[0])
+                raise lg.NoSuchLookingGlassObject(pathPrefix, urlPathElements[0])
 
             response.content_type = 'application/json'
             return json.dumps(lgInfo)
-        except NoSuchLookingGlassObject as e:
+        except lg.NoSuchLookingGlassObject as e:
             log.info('looking_glass: %s', repr(e))
             abort(404, repr(e))
         except Exception as e:
@@ -315,11 +311,11 @@ class RESTAPI(LookingGlass):
 
     def getLGMap(self):
         return {
-            "summary":  (LGMap.SUBITEM, self.getLGSummary),
-            "config":   (LGMap.DELEGATE, self.daemon),
-            "bgp":      (LGMap.DELEGATE, self.vpnManager.bgpManager),
-            "vpns":     (LGMap.DELEGATE, self.vpnManager),
-            "logs":     (LGMap.SUBTREE, self.getLogs),
+            "summary":  (lg.SUBITEM, self.getLGSummary),
+            "config":   (lg.DELEGATE, self.daemon),
+            "bgp":      (lg.DELEGATE, self.vpnManager.bgpManager),
+            "vpns":     (lg.DELEGATE, self.vpnManager),
+            "logs":     (lg.SUBTREE, self.getLogs),
         }
 
     def getLGSummary(self):

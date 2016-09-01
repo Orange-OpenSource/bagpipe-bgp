@@ -33,7 +33,7 @@ from bagpipe.bgp.engine.bgp_peer_worker import DEFAULT_HOLDTIME
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
 
-from bagpipe.bgp.common.looking_glass import LookingGlass
+from bagpipe.bgp.common import looking_glass as lg
 
 from exabgp.reactor.peer import Peer
 from exabgp.reactor.peer import Interrupted
@@ -95,7 +95,7 @@ TranslateExaBGPState = {ExaFSM.IDLE: FSM.Idle,
                         }
 
 
-class ExaBGPPeerWorker(BGPPeerWorker, LookingGlass):
+class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
     enabledFamilies = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
                        # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),

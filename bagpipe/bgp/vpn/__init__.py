@@ -28,7 +28,7 @@ from bagpipe.bgp.vpn.evpn import EVI
 
 import bagpipe.bgp.common.exceptions as exc
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 from bagpipe.bgp.common.run_command import runCommand
@@ -57,7 +57,7 @@ def convertRouteTargets(orig_list):
     return list_
 
 
-class VPNManager(LookingGlass):
+class VPNManager(lg.LookingGlassMixin):
 
     """
     Creates, and keeps track of, VPN instances (VRFs and EVIs) and passes
@@ -422,23 +422,23 @@ class VPNManager(LookingGlass):
     # Looking Glass hooks ####
 
     def getLGMap(self):
-        class DataplaneLGHook(LookingGlass):
+        class DataplaneLGHook(lg.LookingGlassMixin):
 
             def __init__(self, vpnManager):
                 self.vpnManager = vpnManager
 
             def getLGMap(self):
                 return {
-                    "drivers": (LGMap.COLLECTION, (
+                    "drivers": (lg.COLLECTION, (
                         self.vpnManager.getLGDataplanesList,
                         self.vpnManager.getLGDataplaneFromPathItem)),
-                    "ids": (LGMap.DELEGATE, self.vpnManager.labelAllocator)
+                    "ids": (lg.DELEGATE, self.vpnManager.labelAllocator)
                 }
         dataplaneHook = DataplaneLGHook(self)
         return {
-            "instances": (LGMap.COLLECTION, (self.getLGVPNList,
+            "instances": (lg.COLLECTION, (self.getLGVPNList,
                                              self.getLGVPNFromPathItem)),
-            "dataplane": (LGMap.DELEGATE, dataplaneHook)
+            "dataplane": (lg.DELEGATE, dataplaneHook)
         }
 
     def getLGVPNList(self):

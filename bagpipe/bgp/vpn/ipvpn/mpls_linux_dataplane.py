@@ -28,8 +28,7 @@ from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
 from bagpipe.bgp.vpn.ipvpn import IPVPN
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, \
-    LookingGlassLocalLogger, LGMap
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.common import constants as consts
 from bagpipe.bgp.common import logDecorator
@@ -73,7 +72,7 @@ def proxy_arp(ifname, enable):
     sysctl(['net', 'ipv4', 'conf', ifname, 'proxy_arp_pvlan'], int(enable))
 
 
-class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
+class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def __init__(self, *args, **kwargs):
         VPNInstanceDataplane.__init__(self, *args)
@@ -334,9 +333,9 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
     ## LG ##
 
     def getLGMap(self):
-        return {"routes": (LGMap.SUBTREE, self.getLGRoutes),
-                "route_table": (LGMap.VALUE, self.rt_table),
-                "vrf_if": (LGMap.VALUE, self.vrf_if),
+        return {"routes": (lg.SUBTREE, self.getLGRoutes),
+                "route_table": (lg.VALUE, self.rt_table),
+                "vrf_if": (lg.VALUE, self.vrf_if),
                 }
 
     @logDecorator.logInfo
@@ -346,7 +345,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, LookingGlass):
                 for r in routes]
 
 
-class MPLSLinuxDataplaneDriver(DataplaneDriver, LookingGlass):
+class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     """
     This dataplane driver relies on the MPLS stack in the Linux kernel,
@@ -359,7 +358,7 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, LookingGlass):
     ecmpSupport = True
 
     def __init__(self, config, init=True):
-        LookingGlassLocalLogger.__init__(self)
+        lg.LookingGlassLocalLogger.__init__(self)
 
         self.ip = IPDB()
 
@@ -420,7 +419,7 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, LookingGlass):
 
     def getLGMap(self):
         return {
-                "mpls": (LGMap.SUBTREE, self.getLGMPLSRoutes),
+                "mpls": (lg.SUBTREE, self.getLGMPLSRoutes),
         }
 
     def getLGMPLSRoutes(self, pathPrefix):

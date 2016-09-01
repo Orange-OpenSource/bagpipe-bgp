@@ -29,12 +29,12 @@ from bagpipe.bgp.engine import Subscription
 from bagpipe.bgp.engine import Unsubscription
 from bagpipe.bgp.engine import WorkerCleanupEvent
 
-from bagpipe.bgp.common.looking_glass import LookingGlass
+from bagpipe.bgp.common import looking_glass as lg
 
 log = logging.getLogger(__name__)
 
 
-class Worker(EventSource, LookingGlass):
+class Worker(EventSource, lg.LookingGlassMixin):
 
     """This is the base class for objects that interact with the route table
     manager to produce and consume events related to BGP routes.

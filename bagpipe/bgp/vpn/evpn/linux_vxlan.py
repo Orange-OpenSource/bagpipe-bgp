@@ -20,7 +20,7 @@ from bagpipe.bgp.common import logDecorator
 
 from bagpipe.bgp.common.run_command import runCommand
 
-from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.vpn.evpn import VPNInstanceDataplane
 from bagpipe.bgp.vpn.evpn import EVPN
@@ -293,7 +293,7 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 
     def __init__(self, config, init=True):
-        LookingGlassLocalLogger.__init__(self, __name__)
+        lg.LookingGlassLocalLogger.__init__(self, __name__)
 
         self.log.info("Initializing %s", self.__class__.__name__)
 

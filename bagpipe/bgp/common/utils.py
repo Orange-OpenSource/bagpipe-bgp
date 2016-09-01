@@ -60,13 +60,6 @@ def synchronized(method):
     return synchronized_method
 
 
-def enum(*sequential, **named):
-    enums = dict(zip(sequential, range(len(sequential))), **named)
-    reverse = dict((value, key) for key, value in enums.iteritems())
-    enums['reverse'] = reverse
-    return type('Enum', (), enums)
-
-
 def getBoolean(string):
     '''
     return True is string represents boolean true ("true","yes","on","1"),

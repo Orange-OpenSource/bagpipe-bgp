@@ -23,12 +23,12 @@ import random
 from threading import Lock
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common.looking_glass import LookingGlass
+from bagpipe.bgp.common import looking_glass as lg
 
 log = logging.getLogger(__name__)
 
 
-class LabelAllocator(LookingGlass):
+class LabelAllocator(lg.LookingGlassMixin):
     # Warning: does not reuse labels, will break if more than 2**20-16 labels
     # are requested along the life-cycle
     # FIXME: add code so that all the labels that were cleaned'up will *not*

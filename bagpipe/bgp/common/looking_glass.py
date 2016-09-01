@@ -21,12 +21,14 @@ import re
 
 import urllib
 
-from bagpipe.bgp.common.utils import enum
-
 log = logging.getLogger(__name__)
 
-LGMap = enum('VALUE', 'SUBITEM', 'SUBTREE',
-             'FORWARD', 'COLLECTION', 'DELEGATE')
+VALUE = 'VALUE'
+SUBITEM = 'SUBITEM'
+SUBTREE = 'SUBTREE'
+FORWARD = 'FORWARD'
+COLLECTION = 'COLLECTION'
+DELEGATE = 'DELEGATE'
 
 
 def _splitLGPath(pathPrefix, path):
@@ -39,7 +41,7 @@ def _splitLGPath(pathPrefix, path):
 
 def _getLGLocalInfoRecurse(obj, cls, pathPrefix):
 
-    if cls == LookingGlass:
+    if cls == LookingGlassMixin:
         return {}
 
     log.debug("_getLGLocalInfoRecurse: %s", cls)
@@ -49,7 +51,7 @@ def _getLGLocalInfoRecurse(obj, cls, pathPrefix):
     assert(isinstance(result, dict))
 
     for base in cls.__bases__:
-        if issubclass(base, LookingGlass):
+        if issubclass(base, LookingGlassMixin):
             result.update(
                 _getLGLocalInfoRecurse(obj, base, pathPrefix))
 
@@ -58,7 +60,7 @@ def _getLGLocalInfoRecurse(obj, cls, pathPrefix):
 
 def _getLGMapRecurse(obj, cls):
 
-    if cls == LookingGlass:
+    if cls == LookingGlassMixin:
         return {}
 
     log.debug("_getLGMapRecurse: %s", cls)
@@ -66,7 +68,7 @@ def _getLGMapRecurse(obj, cls):
     result = cls.getLGMap(obj)
 
     for base in cls.__bases__:
-        if issubclass(base, LookingGlass):
+        if issubclass(base, LookingGlassMixin):
             result.update(_getLGMapRecurse(obj, base))
         else:
             log.debug("not recursing into %s", base)
@@ -90,8 +92,13 @@ def _lookupPathInDict(myDict, path):
     else:
         return _lookupPathInDict(myDict[path[0]], path[1:])
 
+def getLGPrefixedPath(pathPrefix, pathItems):
+    fmt = "%s" + ('/%s' * len(pathItems))
+    quotedPathItems = [urllib.quote(pathItem) for pathItem in pathItems]
+    quotedPathItems.insert(0, pathPrefix)
+    return fmt % tuple(quotedPathItems)
 
-class LookingGlass(object):
+class LookingGlassMixin(object):
 
     def _getLGMap(self):
         """not to be overridden: calls getLGMap, on each of the super classes
@@ -167,60 +174,60 @@ class LookingGlass(object):
         if path is None:
             path = []
 
-        (firstSegment, restOfPath,
-         newPathPrefix) = _splitLGPath(pathPrefix, path)
+        (firstSegment, restOfPath, newPathPrefix) = _splitLGPath(pathPrefix,
+                                                                 path)
 
         lgMap = self._getLGMap()
 
         if (firstSegment in lgMap):
             (mappingType, mappingTarget) = lgMap[firstSegment]
             log.debug("Delegation for pathItem '%s': %s:%s ",
-                      firstSegment, LGMap.reverse[mappingType], mappingTarget)
+                      firstSegment, mappingType, mappingTarget)
 
-            if mappingType == LGMap.VALUE:
+            if mappingType == VALUE:
                 return mappingTarget
 
-            if mappingType == LGMap.FORWARD:
+            if mappingType == FORWARD:
                 log.debug(
                     "   Forwarded '%s' to target %s...", path, mappingTarget)
-                if not isinstance(mappingTarget, LookingGlass):
-                    log.error(
-                        "Delegation target for '%s' at '%s' does not "
-                        "implement LookingGlass!", firstSegment, newPathPrefix)
+                if not isinstance(mappingTarget, LookingGlassMixin):
+                    log.error("Delegation target for '%s' at '%s' does not "
+                              "implement LookingGlassMixin!",
+                              firstSegment, newPathPrefix)
                     raise NoSuchLookingGlassObject(
                         newPathPrefix, firstSegment)
                 return mappingTarget.getLookingGlassInfo(pathPrefix, path)
 
-            if mappingType == LGMap.FORWARD:
+            if mappingType == FORWARD:
                 log.debug(
                     "   Forwarded '%s' to target %s...", path, mappingTarget)
-                if not isinstance(mappingTarget, LookingGlass):
-                    log.error(
-                        "Delegation target for '%s' at '%s' does not "
-                        "implement LookingGlass!", firstSegment, newPathPrefix)
+                if not isinstance(mappingTarget, LookingGlassMixin):
+                    log.error("Delegation target for '%s' at '%s' does not "
+                              "implement LookingGlassMixin!",
+                              firstSegment, newPathPrefix)
                     raise NoSuchLookingGlassObject(newPathPrefix, firstSegment)
                 return mappingTarget.getLookingGlassInfo(pathPrefix, path)
 
-            elif mappingType == LGMap.DELEGATE:
+            elif mappingType == DELEGATE:
                 log.debug(
                     "   Delegated '%s' to delegation target %s ...",
                     path, mappingTarget)
-                if not isinstance(mappingTarget, LookingGlass):
-                    log.error(
-                        "Delegation target for '%s' at '%s' does not "
-                        "implement LookingGlass!", firstSegment, newPathPrefix)
+                if not isinstance(mappingTarget, LookingGlassMixin):
+                    log.error("Delegation target for '%s' at '%s' does not "
+                              "implement LookingGlassMixin!",
+                              firstSegment, newPathPrefix)
                     raise NoSuchLookingGlassObject(newPathPrefix, firstSegment)
                 return mappingTarget.getLookingGlassInfo(newPathPrefix,
                                                          restOfPath)
 
-            elif mappingType == LGMap.SUBITEM:
+            elif mappingType == SUBITEM:
                 log.debug("   Sub-item callback: %s", firstSegment)
                 try:
                     return _lookupPathInDict(mappingTarget(), restOfPath)
                 except KeyError as e:
                     raise NoSuchLookingGlassObject(newPathPrefix, str(e))
 
-            elif mappingType == LGMap.SUBTREE:
+            elif mappingType == SUBTREE:
                 log.debug("   Subtree callback: %s(...)", firstSegment)
                 try:
                     return _lookupPathInDict(mappingTarget(newPathPrefix),
@@ -228,7 +235,7 @@ class LookingGlass(object):
                 except KeyError as e:
                     raise NoSuchLookingGlassObject(newPathPrefix, str(e))
 
-            elif mappingType == LGMap.COLLECTION:
+            elif mappingType == COLLECTION:
                 log.debug("   Collection callback...")
 
                 (listCallback, targetCallback) = mappingTarget
@@ -239,8 +246,8 @@ class LookingGlass(object):
                     log.debug("   Getting list elements: %s", listCallback)
                     result = []
                     for x in listCallback():
-                        x["href"] = LookingGlass.getLGPrefixedPath(
-                            pathPrefix, [firstSegment, x["id"]])
+                        x["href"] = getLGPrefixedPath(pathPrefix,
+                                                      [firstSegment, x["id"]])
                         result.append(x)
                     return result
                 else:
@@ -253,20 +260,20 @@ class LookingGlass(object):
                         if target is None:
                             log.error("No delegation target for '%s' at '%s' ",
                                       secondSegment, newPathPrefix)
-                            raise NoSuchLookingGlassObject(
-                                newPathPrefix, secondSegment)
-                        if not isinstance(target, LookingGlass):
-                            log.error("Delegation target for '%s' at '%s' "
-                                      "does not implement LookingGlass (%s)!",
+                            raise NoSuchLookingGlassObject(newPathPrefix,
+                                                           secondSegment)
+                        if not isinstance(target, LookingGlassMixin):
+                            log.error("Delegation target for '%s' at '%s' does"
+                                      " not implement LookingGlassMixin (%s)!",
                                       secondSegment, newPathPrefix,
                                       type(target))
-                            raise NoSuchLookingGlassObject(
-                                newPathPrefix, secondSegment)
+                            raise NoSuchLookingGlassObject(newPathPrefix,
+                                                           secondSegment)
                         return target.getLookingGlassInfo(newerPathPrefix,
                                                           restOfPath)
                     except KeyError:
-                        raise NoSuchLookingGlassObject(
-                            newPathPrefix, secondSegment)
+                        raise NoSuchLookingGlassObject(newPathPrefix,
+                                                       secondSegment)
 
         # firtSegment is None or is not in our map
         # let's build LookingGlassLocalInfo
@@ -274,18 +281,17 @@ class LookingGlass(object):
         for (pathItem, (mappingType, mappingTarget)) in lgMap.iteritems():
             if pathItem in info:
                 log.warning("overriding '%s', present both in "
-                            "LookingGlassLocalInfo and LookingGlass map",
+                            "LookingGlassLocalInfo and LookingGlassMixin map",
                             pathItem)
-            if mappingType in (LGMap.FORWARD, LGMap.DELEGATE, LGMap.SUBTREE,
-                               LGMap.COLLECTION):
-                info[pathItem] = {"href":
-                                  LookingGlass.getLGPrefixedPath(pathPrefix,
-                                                                 [pathItem])}
-            elif mappingType == LGMap.SUBITEM:
+            if mappingType in (FORWARD, DELEGATE, SUBTREE, COLLECTION):
+                info[pathItem] = {"href": getLGPrefixedPath(pathPrefix,
+                                                            [pathItem])
+                                  }
+            elif mappingType == SUBITEM:
                 log.debug("   Subitem => callback %s(...)", mappingTarget)
                 #TODO: catch errors
                 info[pathItem] = mappingTarget()
-            elif mappingType == LGMap.VALUE:
+            elif mappingType == VALUE:
                 info[pathItem] = mappingTarget
             else:
                 log.warning("LGMap not processed for %s", pathItem)
@@ -303,13 +309,6 @@ class LookingGlass(object):
 
         return None
 
-    @staticmethod
-    def getLGPrefixedPath(pathPrefix, pathItems):
-        fmt = "%s" + ('/%s' * len(pathItems))
-        quotedPathItems = [urllib.quote(pathItem) for pathItem in pathItems]
-        quotedPathItems.insert(0, pathPrefix)
-        return fmt % tuple(quotedPathItems)
-
 
 class NoSuchLookingGlassObject(Exception):
 
@@ -326,28 +325,27 @@ class NoSuchLookingGlassObject(Exception):
                                                            self.pathPrefix)
 
 
-class LookingGlassReferences(object):
+# Looking glass reference URLs
+root = ""
+references = {}
 
-    root = ""
-    references = {}
+def setRoot(urlPrefix):
+    global root
+    root = urlPrefix
 
-    @staticmethod
-    def setRoot(urlPrefix):
-        LookingGlassReferences.root = urlPrefix
+def setReferencePath(reference, path):
+    global references
+    references[reference] = path
 
-    @staticmethod
-    def setReferencePath(reference, path):
-        LookingGlassReferences.references[reference] = path
-
-    @staticmethod
-    def getAbsolutePath(reference, pathPrefix, path=None):
-        if path is None:
-            path = []
-        index = pathPrefix.find(LookingGlassReferences.root)
-        absoluteBaseURL = pathPrefix[:index + len(LookingGlassReferences.root)]
-        return LookingGlass.getLGPrefixedPath(
-            absoluteBaseURL,
-            LookingGlassReferences.references[reference] + path)
+def getAbsolutePath(reference, pathPrefix, path=None):
+    global root
+    global references
+    if path is None:
+        path = []
+    index = pathPrefix.find(root)
+    absoluteBaseURL = pathPrefix[:index + len(root)]
+    return getLGPrefixedPath(absoluteBaseURL,
+                             references[reference] + path)
 
 
 class LookingGlassLogHandler(logging.Handler):
@@ -381,7 +379,7 @@ class LookingGlassLogHandler(logging.Handler):
         del self.records[:]
 
 
-class LookingGlassLocalLogger(LookingGlass):
+class LookingGlassLocalLogger(LookingGlassMixin):
 
     """
     For objects subclassing this class, self.log will be a logger derived from
@@ -408,7 +406,7 @@ class LookingGlassLocalLogger(LookingGlass):
             self.log.addHandler(self.lgLogHandler)
 
     def getLGMap(self):
-        return {"logs": (LGMap.SUBTREE, self.getLogs)}
+        return {"logs": (SUBTREE, self.getLogs)}
 
     def getLogs(self, pathPrefix):
         return [{'level': record.levelname,

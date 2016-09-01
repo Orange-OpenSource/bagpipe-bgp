@@ -24,9 +24,7 @@ from distutils.version import StrictVersion
 
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.bgp.common.looking_glass import LookingGlassLocalLogger
-from bagpipe.bgp.common.looking_glass import LGMap
-from bagpipe.bgp.common.looking_glass import LookingGlassReferences
+from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.common.run_command import runCommand
 
@@ -34,7 +32,7 @@ from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
 
-class DataplaneDriver(LookingGlassLocalLogger):
+class DataplaneDriver(lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     dataplaneInstanceClass = None
@@ -45,7 +43,7 @@ class DataplaneDriver(LookingGlassLocalLogger):
     @logDecorator.log
     def __init__(self, config, init=True):
         '''config is a dict'''
-        LookingGlassLocalLogger.__init__(self)
+        lg.LookingGlassLocalLogger.__init__(self)
 
         assert(issubclass(self.dataplaneInstanceClass, VPNInstanceDataplane))
 
@@ -139,21 +137,21 @@ class DataplaneDriver(LookingGlassLocalLogger):
         for encap in self.supportedEncaps():
             encaps.append(repr(encap))
         return {
-            "name": (LGMap.VALUE, self.__class__.__name__),
-            "local_address": (LGMap.VALUE, self.local_address),
-            "supported_encaps": (LGMap.VALUE, encaps),
-            "config": (LGMap.VALUE, self.config),
-            "kernel_release": (LGMap.VALUE, self.kernelRelease)
+            "name": (lg.VALUE, self.__class__.__name__),
+            "local_address": (lg.VALUE, self.local_address),
+            "supported_encaps": (lg.VALUE, encaps),
+            "config": (lg.VALUE, self.config),
+            "kernel_release": (lg.VALUE, self.kernelRelease)
         }
 
 
-class VPNInstanceDataplane(LookingGlassLocalLogger):
+class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     @logDecorator.logInfo
     def __init__(self, dataplaneDriver, instanceId, externalInstanceId,
                  gatewayIP, mask, instanceLabel=None):
-        LookingGlassLocalLogger.__init__(self, repr(instanceId))
+        lg.LookingGlassLocalLogger.__init__(self, repr(instanceId))
         self.driver = dataplaneDriver
         self.config = dataplaneDriver.config
         self.instanceId = instanceId
@@ -192,7 +190,7 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
 
     def getLookingGlassLocalInfo(self, pathPrefix):
         driver = {"id": self.driver.type,
-                  "href": LookingGlassReferences.getAbsolutePath(
+                  "href": lg.getAbsolutePath(
                       "DATAPLANE_DRIVERS", pathPrefix, [self.driver.type])}
         return {
             "driver": driver,

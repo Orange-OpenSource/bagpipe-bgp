@@ -18,8 +18,6 @@
 
 import logging
 
-from bagpipe.bgp.common.looking_glass import LookingGlass
-
 from bagpipe.bgp.engine.route_table_manager import RouteTableManager
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
@@ -27,7 +25,7 @@ from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import EventSource
 
-from bagpipe.bgp.common.looking_glass import LGMap
+from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common.utils import getBoolean
 from bagpipe.bgp.common import logDecorator
 
@@ -39,7 +37,7 @@ from exabgp.protocol.ip import IP
 log = logging.getLogger(__name__)
 
 
-class Manager(EventSource, LookingGlass):
+class Manager(EventSource, lg.LookingGlassMixin):
 
     def __init__(self, _config):
 
@@ -145,10 +143,10 @@ class Manager(EventSource, LookingGlass):
     # Looking Glass Functions ###################
 
     def getLGMap(self):
-        return {"peers":   (LGMap.COLLECTION,
+        return {"peers":   (lg.COLLECTION,
                             (self.getLGPeerList, self.getLGPeerPathItem)),
-                "routes":  (LGMap.FORWARD, self.routeTableManager),
-                "workers": (LGMap.FORWARD, self.routeTableManager), }
+                "routes":  (lg.FORWARD, self.routeTableManager),
+                "workers": (lg.FORWARD, self.routeTableManager), }
 
     def getEstablishedPeersCount(self):
         return reduce(lambda count, peer: count +

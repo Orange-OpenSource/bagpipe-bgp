@@ -31,7 +31,7 @@ from bagpipe.bgp.engine import WorkerCleanupEvent
 from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 
-from bagpipe.bgp.common.looking_glass import LookingGlass, LGMap
+from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import logDecorator
 
 from exabgp.reactor.protocol import AFI, SAFI
@@ -118,7 +118,7 @@ class WorkersAndEntries(object):
 StopEvent = "StopEvent"
 
 
-class RouteTableManager(Thread, LookingGlass):
+class RouteTableManager(Thread, lg.LookingGlassMixin):
 
     """
     This singleton class will dispatch events between Workers.
@@ -542,9 +542,9 @@ class RouteTableManager(Thread, LookingGlass):
     # Looking Glass #####
 
     def getLGMap(self):
-        return {"workers": (LGMap.COLLECTION,
+        return {"workers": (lg.COLLECTION,
                 (self.getLGWorkerList, self.getLGWorkerFromPathItem)),
-                "routes": (LGMap.SUBTREE, self.getLGRoutes)}
+                "routes": (lg.SUBTREE, self.getLGRoutes)}
 
     def getLGRoutes(self, pathPrefix):
         result = {}
