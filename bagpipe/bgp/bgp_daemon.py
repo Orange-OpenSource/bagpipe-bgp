@@ -17,21 +17,17 @@
 
 
 import os.path
-
 import sys
+import signal
+import traceback
 
 from logging import Logger
 import logging.config
 
-# import logging_tree
-
-import traceback
-
-from daemon import runner
-import signal
-
 from ConfigParser import SafeConfigParser, NoSectionError
 from optparse import OptionParser
+
+from daemon import runner
 
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import looking_glass as lg
@@ -155,13 +151,13 @@ class BgpDaemon(lg.LookingGlassMixin):
             self.apiConfig, self, self.vpnManager, self.catchAllLGLogHandler)
         bgpapi.run()
 
-    def stop(self, signum, frame):
-        logging.info("Received signal %(signum)r, stopping...", vars())
+    def stop(self, signum, _):
+        logging.info("Received signal %d, stopping...", signum)
         self.vpnManager.stop()
         self.bgpManager.stop()
         # would need to stop main thread ?
         logging.info("All threads now stopped...")
-        exception = SystemExit("Terminated on signal %(signum)r" % vars())
+        exception = SystemExit("Terminated on signal %d" % signum)
         raise exception
 
     def getLookingGlassLocalInfo(self, pathPrefix):
@@ -222,7 +218,7 @@ def daemon_main():
     (options, _) = parser.parse_args()
 
     action = sys.argv[1]
-    assert(action == "start" or action == "stop")
+    assert action == "start" or action == "stop"
 
     if not os.path.isfile(options.logFile):
         logging.basicConfig()
@@ -244,7 +240,7 @@ def daemon_main():
     # we inject this catch all log handler in all configured loggers
     for (loggerName, logger) in Logger.manager.loggerDict.iteritems():
         if isinstance(logger, Logger):
-            if (not logger.propagate and logger.parent is not None):
+            if not logger.propagate and logger.parent is not None:
                 logging.debug("Adding looking glass log handler to logger: %s",
                               loggerName)
                 logger.addHandler(catchAllLogHandler)

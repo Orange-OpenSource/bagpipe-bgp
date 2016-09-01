@@ -19,6 +19,9 @@ import errno
 
 import json
 
+from socket import AF_INET
+from socket import AF_INET6
+
 from netaddr.ip import IPNetwork
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
@@ -33,8 +36,6 @@ from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import constants as consts
 from bagpipe.bgp.common import logDecorator
 
-from socket import AF_INET
-from socket import AF_INET6
 from pyroute2.common import AF_MPLS
 
 from pyroute2 import IPDB
@@ -49,6 +50,7 @@ VRF_INTERFACE_PREFIX = "bvrf-"
 RT_TABLE_BASE = 1000
 
 RT_PROT_BAGPIPE = 19
+
 
 def json_set_default(obj):
     if isinstance(obj, set):
@@ -199,7 +201,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # with this port label
         req = {'family': AF_MPLS,
                'oif': self.ip.interfaces[interface].index,
-               'dst': label,  #FIXME how to check for BoS?
+               'dst': label,  # FIXME how to check for BoS?
                'via': {'family': AF_INET,
                        'addr': ipAddress}
                }
@@ -252,7 +254,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
     def _read_mpls_in(self, label):
         routes = [r for r in self.ip.routes.tables["mpls"]
                   if r['dst'] == label]
-        assert(len(routes)==1)
+        assert len(routes) == 1
         res = (routes[0]['oif'], routes[0]['via']['addr'])
         self.log.debug("Found %s for %d with IPDB", res, label)
         return res
@@ -280,9 +282,9 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             nh['gateway'] = gateway
 
         if mpls:
-            nh['encap'] =  {'type': 'mpls',
-                            'labels': [{'bos': 1,
-                                        'label': label}]}
+            nh['encap'] = {'type': 'mpls',
+                           'labels': [{'bos': 1,
+                                       'label': label}]}
         self.log.debug("nh: %s", nh)
         return nh
 
@@ -304,9 +306,9 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 r.add_nh(self._nh(remotePE, label, encaps))
         except KeyError:
             self.log.debug("no route to %s yet, creating", prefix)
-            req =  {'table': self.rt_table,
-                    'dst': prefix,
-                    'multipath': [self._nh(remotePE, label, encaps)]}
+            req = {'table': self.rt_table,
+                   'dst': prefix,
+                   'multipath': [self._nh(remotePE, label, encaps)]}
             self.log.debug("adding route: %s", req)
             self.add_route(req)
 
@@ -320,17 +322,17 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         try:
             with self._getRoute(prefix) as r:
-                #FIXME: encap info is missing here
+                # FIXME: encap info is missing here
                 if r['multipath']:
                     r.del_nh(self._nh(remotePE, label, None))
-                else: # last route
+                else:  # last route
                     r.remove()
 
         except KeyError:
             self.log.warning("no route found on "
                              "removeDataplaneForRemoteEndpoint for %s", prefix)
 
-    ## LG ##
+    # Looking Glass ##
 
     def getLGMap(self):
         return {"routes": (lg.SUBTREE, self.getLGRoutes),
@@ -385,7 +387,7 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
         self.mpls_interface_index = self.ip.interfaces[self.mpls_interface
                                                        ].index
-        #for traffic from ourselves:
+        # for traffic from ourselves:
         sysctl('net.mpls.conf.lo.input', 1)
 
         # enable forwarding
@@ -415,12 +417,11 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # we also accept route with no encap specified
         yield Encapsulation(Encapsulation.Type.DEFAULT)
 
-    #### Looking glass ####
+    # Looking glass ####
 
     def getLGMap(self):
-        return {
-                "mpls": (lg.SUBTREE, self.getLGMPLSRoutes),
-        }
+        return {"mpls": (lg.SUBTREE, self.getLGMPLSRoutes),
+                }
 
     def getLGMPLSRoutes(self, pathPrefix):
         return [{r['dst']: json.loads(json.dumps(r, default=json_set_default))}

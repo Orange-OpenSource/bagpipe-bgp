@@ -69,16 +69,16 @@ class RouteEntry(lg.LookingGlassMixin):
                  source=None):
         if attributes is None:
             attributes = Attributes()
-        assert(isinstance(attributes, Attributes))
+        assert isinstance(attributes, Attributes)
         if RTs is not None:
-            assert(isinstance(RTs, list))
-            assert(len(RTs) == 0 or isinstance(RTs[0], RouteTarget))
+            assert isinstance(RTs, list)
+            assert len(RTs) == 0 or isinstance(RTs[0], RouteTarget)
 
         self.source = source
         self.afi = nlri.afi
         self.safi = nlri.safi
-        assert(isinstance(self.afi, AFI))
-        assert(isinstance(self.safi, SAFI))
+        assert isinstance(self.afi, AFI)
+        assert isinstance(self.safi, SAFI)
         self.nlri = nlri
         self.attributes = attributes
         # a list of exabgp.bgp.message.update.attribute.community.
@@ -104,11 +104,9 @@ class RouteEntry(lg.LookingGlassMixin):
 
     def extendedCommunities(self, filter_=None):
         if filter_ is None:
-
             def filter_real(ecom):
                 return True
         elif isinstance(filter_, (types.ClassType, types.TypeType)):
-
             def filter_real(ecom):
                 return isinstance(ecom, filter_)
         else:
@@ -152,7 +150,7 @@ class RouteEntry(lg.LookingGlassMixin):
     def __cmp__(self, other):
         if other is None:
             return -1
-        assert(isinstance(other, RouteEntry))
+        assert isinstance(other, RouteEntry)
         if (self.afi == other.afi and
                 self.safi == other.safi and
                 self.source == other.source and
@@ -187,8 +185,8 @@ class RouteEntry(lg.LookingGlassMixin):
 
             # skip some attributes that we care less about
             if (attribute.ID == Attribute.CODE.AS_PATH or
-               attribute.ID == Attribute.CODE.ORIGIN or
-               attribute.ID == Attribute.CODE.LOCAL_PREF):
+                    attribute.ID == Attribute.CODE.ORIGIN or
+                    attribute.ID == Attribute.CODE.LOCAL_PREF):
                 continue
 
             attDict[repr(Attribute.CODE(attribute.ID))] = str(attribute)
@@ -200,11 +198,12 @@ class RouteEntry(lg.LookingGlassMixin):
 
         if self.source:
             res["source"] = {"id": self.source.name,
-                             "href": lg.getAbsolutePath(
-                                 "BGP_WORKERS", pathPrefix, [self.source.name])
+                             "href": lg.getAbsolutePath("BGP_WORKERS",
+                                                        pathPrefix,
+                                                        [self.source.name])
                              }
 
-        if (self.safi) in [SAFI.mpls_vpn, SAFI.evpn]:
+        if self.safi in [SAFI.mpls_vpn, SAFI.evpn]:
             res["route_targets"] = [str(rt) for rt in self.routeTargets]
 
         return {
@@ -227,7 +226,7 @@ class RouteEvent(object):
     def __init__(self, eventType, routeEntry, source=None):
         assert(eventType == RouteEvent.ADVERTISE or
                eventType == RouteEvent.WITHDRAW)
-        assert(isinstance(routeEntry, RouteEntry))
+        assert isinstance(routeEntry, RouteEntry)
         self.type = eventType
         self.routeEntry = routeEntry
         if source is not None:
@@ -235,11 +234,11 @@ class RouteEvent(object):
             self.routeEntry.source = source
         else:
             self.source = routeEntry.source
-        assert(self.source is not None)
+        assert self.source is not None
         self.replacedRoute = None
 
         # this is required to overwrite the action field in an NLRI
-        # in the case where we generate a withdraw from an existing NLRI 
+        # in the case where we generate a withdraw from an existing NLRI
         # on a replaced route
         # and this spares us the pain of specifying the action
         # when creating an nlri
@@ -254,7 +253,7 @@ class RouteEvent(object):
         RouteEntry '''
         assert(isinstance(replacedRoute, RouteEntry)
                or (replacedRoute is None))
-        assert(replacedRoute != self.routeEntry)
+        assert replacedRoute != self.routeEntry
         self.replacedRoute = replacedRoute
 
     def __repr__(self):
@@ -271,9 +270,9 @@ class RouteEvent(object):
 class _SubUnsubCommon(object):
 
     def __init__(self, afi, safi, routeTarget, worker=None):
-        assert(isinstance(afi, AFI))
-        assert(isinstance(safi, SAFI))
-        assert(routeTarget is None or isinstance(routeTarget, RouteTarget))
+        assert isinstance(afi, AFI)
+        assert isinstance(safi, SAFI)
+        assert routeTarget is None or isinstance(routeTarget, RouteTarget)
         self.afi = afi
         self.safi = safi
         self.routeTarget = routeTarget

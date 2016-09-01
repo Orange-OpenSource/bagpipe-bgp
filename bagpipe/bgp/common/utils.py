@@ -67,8 +67,8 @@ def getBoolean(string):
     '''
     if isinstance(string, bool):
         return string
-    assert(isinstance(string, str))
-    return (string.lower() in ["true", "yes", "on", "1"])
+    assert isinstance(string, str)
+    return string.lower() in ["true", "yes", "on", "1"]
 
 
 def plural(x):

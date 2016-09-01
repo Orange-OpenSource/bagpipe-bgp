@@ -62,26 +62,24 @@ class RESTAPI(lg.LookingGlassMixin):
         self.bottle.post("/attach_localport", callback=self.attach_localport)
         self.bottle.post("/detach_localport", callback=self.detach_localport)
 
-        self.bottle.get("/%s<path:path>" %
-                        LOOKING_GLASS_BASE, callback=self.looking_glass)
-        self.bottle.get("/%s" %
-                        LOOKING_GLASS_BASE, callback=self.looking_glass_root)
+        self.bottle.get("/%s<path:path>" % LOOKING_GLASS_BASE,
+                        callback=self.looking_glass)
+        self.bottle.get("/%s" % LOOKING_GLASS_BASE,
+                        callback=self.looking_glass_root)
 
         self.bottle.error_handler[500] = self.error500
 
         self.startTime = time.time()
 
         lg.setRoot(LOOKING_GLASS_BASE)
-        lg.setReferencePath(
-            "BGP_WORKERS", ["bgp", "workers"])
-        lg.setReferencePath(
-            "VPN_INSTANCES", ["vpns", "instances"])
-        lg.setReferencePath(
-            "DATAPLANE_DRIVERS", ["vpns", "dataplane", "drivers"])
+        lg.setReferencePath("BGP_WORKERS", ["bgp", "workers"])
+        lg.setReferencePath("VPN_INSTANCES", ["vpns", "instances"])
+        lg.setReferencePath("DATAPLANE_DRIVERS",
+                            ["vpns", "dataplane", "drivers"])
 
     def ping(self):
-        log.debug(
-            'Ping received, returning sequence number: %d', self.BGP_SEQ_NUM)
+        log.debug('Ping received, returning sequence number: %d',
+                  self.BGP_SEQ_NUM)
         return "%d" % self.BGP_SEQ_NUM
 
     def _check_attach_parameters(self, params, attach):
@@ -117,9 +115,9 @@ class RESTAPI(lg.LookingGlassMixin):
             abort(400, "Mandatory key is missing in local_port parameter"
                   "(linuxif, or evpn)")
 
-        if len(params['local_port'].get('linuxif','')) > consts.LINUX_DEV_LEN:
+        if len(params['local_port'].get('linuxif', '')) > consts.LINUX_DEV_LEN:
             abort(400, "interface name '%s' exceeds the maximum length (%d)" %
-                  (params['local_port'].get('linuxif',''),
+                  (params['local_port'].get('linuxif', ''),
                    consts.LINUX_DEV_LEN))
 
         if not isinstance(params.get('advertise_subnet', False), bool):

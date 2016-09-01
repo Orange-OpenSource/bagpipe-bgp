@@ -22,6 +22,8 @@ from collections import defaultdict
 
 import traceback
 
+import logging
+
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.bgp_peer_worker import FSM
 from bagpipe.bgp.engine.bgp_peer_worker import KeepAliveReceived
@@ -60,8 +62,6 @@ from exabgp.bgp.message import KeepAlive
 from exabgp.bgp.message import IN
 
 from exabgp.bgp.fsm import FSM as ExaFSM
-
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -102,8 +102,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                        (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
                        (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn))]
 
-    def __init__(self, routeTableManager, name, peerAddress, config):
-        BGPPeerWorker.__init__(self, routeTableManager, name, peerAddress)
+    def __init__(self, routeTableManager, peerAddress, config):
+        BGPPeerWorker.__init__(self, routeTableManager, peerAddress)
 
         self.config = config
         self.localAddress = self.config['local_address']
@@ -114,7 +114,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         self.rtc_active = False
         self._activeFamilies = []
 
-    #### hooks into BGPPeerWorker state changes ####
+    # hooks into BGPPeerWorker state changes
 
     def _stopAndClean(self):
         super(ExaBGPPeerWorker, self)._stopAndClean()
@@ -143,7 +143,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             for (afi, safi) in self._activeFamilies:
                 self._subscribe(afi, safi)
 
-    #### implementation of BGPPeerWorker abstract methods ####
+    # implementation of BGPPeerWorker abstract methods
 
     def _initiateConnection(self):
         self.log.debug("Initiate ExaBGP connection to %s from %s",
@@ -194,7 +194,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             raise InitiateConnectionException("Connect was interrupted")
         except Notify as e:
             self.log.debug("Notify: %s", e)
-            if (e.code, e.subcode) == (1,1):
+            if (e.code, e.subcode) == (1, 1):
                 raise OpenWaitTimeout(str(e))
             else:
                 raise Exception("Notify received: %s" % e)
@@ -271,7 +271,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         if message.ID == NOP.ID:
             return 1
         if message.ID == Update.ID:
-            if (self.fsm.state != FSM.Established):
+            if self.fsm.state != FSM.Established:
                 raise Exception("Update received but not in Established state")
             # more below
         elif message.ID == KeepAlive.ID:
@@ -304,7 +304,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         elif action == IN.WITHDRAWN:
             self._withdrawRoute(routeEntry)
         else:
-            assert(False)
+            raise Exception("unsupported action ??? (%s)" % action)
 
         # TODO(tmmorin): move RTC code out-of the peer-specific code
         if (nlri.afi, nlri.safi) == (AFI(AFI.ipv4),
@@ -324,7 +324,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                     elif action == IN.WITHDRAWN:
                         self._unsubscribe(afi, safi, nlri.rt)
                     else:
-                        assert(False)
+                        raise Exception("unsupported action ??? (%s)" % action)
 
     def _send(self, data):
         # (error if state not the right one for sending updates)

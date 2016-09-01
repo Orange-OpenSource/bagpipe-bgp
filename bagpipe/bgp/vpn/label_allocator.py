@@ -27,6 +27,8 @@ from bagpipe.bgp.common import looking_glass as lg
 
 log = logging.getLogger(__name__)
 
+MAX_LABEL = 2**20-1
+
 
 class LabelAllocator(lg.LookingGlassMixin):
     # Warning: does not reuse labels, will break if more than 2**20-16 labels
@@ -35,8 +37,8 @@ class LabelAllocator(lg.LookingGlassMixin):
     # be reused in a short time
 
     def __init__(self):
-        self.currentLabel = random.randint(
-            100, 200)  # Labels below 16 are reserved
+        # (Labels below 16 are reserved)
+        self.currentLabel = random.randint(100, 200)
         # using a random start value will illustrate during demos and tests
         # that the label for a VRF does not
         # need be the same on all compute nodes
@@ -47,7 +49,7 @@ class LabelAllocator(lg.LookingGlassMixin):
     @utils.synchronized
     def getNewLabel(self, description):
 
-        if (self.currentLabel == 2 ** 20):
+        if self.currentLabel == MAX_LABEL+1:
             # Looking forward to the day will hit this one:
             log.error("All the 2^20 possible labels have been used at least "
                       "once, and this piece of code doesn't know how to reuse "

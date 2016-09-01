@@ -8,36 +8,11 @@ Copyright (c) 2009-2015 Orange. All rights reserved.
 """
 
 import unittest
-# 
-# from exabgp.reactor.protocol import AFI, SAFI
-# 
-# from exabgp.bgp.message.update import Attributes
-# 
-# from exabgp.bgp.message.update.attribute.localpref import LocalPreference
-# from exabgp.bgp.message.update.attribute.community.extended.communities \
-#     import ExtendedCommunities
-# from exabgp.bgp.message.update.attribute.community.extended \
-#     import RouteTargetASN2Number as RouteTarget
-# from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-#     import Encapsulation
-#
-# from exabgp.bgp.message.update.nlri.ipvpn import IPVPN
-# from exabgp.bgp.message.update.nlri.evpn.mac import MAC as EVPNMAC
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-# from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
-# from exabgp.bgp.message.update.nlri.qualifier.esi import ESI
-# from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
-# from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
-# 
-# from exabgp.protocol.ip import IP
-# 
-from exabgp.bgp.message import OUT
-# 
-# from exabgp.configuration.setup import environment
-# environment.setup('')
 
 from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
-# def IPVPNRouteFactory(afi, safi, prefix, label, rd, nexthop):
+
+from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
+from exabgp.bgp.message import OUT
 
 from exabgp.reactor.protocol import AFI
 
@@ -105,4 +80,3 @@ class TestNLRIs(unittest.TestCase):
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
-

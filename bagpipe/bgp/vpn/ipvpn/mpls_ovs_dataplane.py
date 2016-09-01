@@ -18,9 +18,9 @@
 import os
 import re
 
-from netaddr.ip import IPNetwork
-
 from distutils.version import StrictVersion
+
+from netaddr.ip import IPNetwork
 
 from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver

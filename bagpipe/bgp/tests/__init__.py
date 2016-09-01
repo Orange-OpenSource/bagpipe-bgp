@@ -17,7 +17,6 @@
 import time
 
 import logging
-import socket
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
@@ -31,8 +30,6 @@ from exabgp.bgp.message.update.attribute.community.extended.communities \
     import ExtendedCommunities
 from exabgp.bgp.message.update.attribute.community.extended \
     import TrafficRedirect
-from exabgp.bgp.message.update.attribute.community.extended import \
-    ExtendedCommunities
 from exabgp.bgp.message.update.attribute.community.extended import \
     RouteTargetASN2Number as RouteTarget
 from exabgp.bgp.message.update import Attributes

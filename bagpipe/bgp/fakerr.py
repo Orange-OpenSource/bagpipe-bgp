@@ -71,7 +71,7 @@ class FakeRR(basic.LineReceiver):
                 self.factory.ready = False
                 self.factory.buffer = []
 
-    def connectionLost(self, reason):
+    def connectionLost(self, reason=protocol.Protocol.connectionLost):
         print "Lost peer %s" % self.transport.getPeer().host
         try:
             self.factory.clients.remove(self)

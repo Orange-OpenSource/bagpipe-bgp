@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
+
 import os
 import sys
 
@@ -23,6 +25,8 @@ import json
 
 from optparse import OptionParser
 from copy import copy
+
+import logging
 
 from netaddr.ip import IPNetwork
 
@@ -34,7 +38,6 @@ from bagpipe.bgp.common.net_utils import get_device_mac
 from bagpipe.bgp.vpn.ipvpn import IPVPN
 from bagpipe.bgp.vpn.evpn import EVPN
 
-import logging
 
 DEFAULT_VPN_INSTANCE_ID = "bagpipe-test"
 
@@ -54,20 +57,22 @@ log.addHandler(consoleHandler)
 
 log.setLevel(logging.WARNING)
 
+run_log_command = functools.partial(runCommand, log)
+
 
 def create_veth_pair(vpn_interface, ns_interface, ns_name):
-    runCommand(log, "ip netns exec %s ip link delete %s" %
-               (ns_name, ns_interface), raiseExceptionOnError=False)
-    runCommand(log, "ip link delete %s" %
-               vpn_interface, raiseExceptionOnError=False)
-    runCommand(log,
-               "ip link add %s type veth peer name %s netns %s mtu 65535" %
-               (vpn_interface, ns_interface, ns_name),
-               raiseExceptionOnError=False)
-    runCommand(log, "ip link set dev %s up" % vpn_interface)
-    runCommand(log, "ip link set dev %s mtu %d" % (vpn_interface, DEFAULT_MTU))
-    runCommand(log, "ip netns exec %s ip link set dev %s up" %
-               (ns_name, ns_interface))
+    run_log_command("ip netns exec %s ip link delete %s" %
+                    (ns_name, ns_interface), raiseExceptionOnError=False)
+    run_log_command("ip link delete %s" %
+                    vpn_interface, raiseExceptionOnError=False)
+    run_log_command(
+        "ip link add %s type veth peer name %s netns %s mtu 65535" %
+        (vpn_interface, ns_interface, ns_name),
+        raiseExceptionOnError=False)
+    run_log_command("ip link set dev %s up" % vpn_interface)
+    run_log_command("ip link set dev %s mtu %d" % (vpn_interface, DEFAULT_MTU))
+    run_log_command("ip netns exec %s ip link set dev %s up" %
+                    (ns_name, ns_interface))
 
 
 def get_vpn2ns_if_name(namespace):
@@ -78,36 +83,36 @@ def createSpecialNetNSPort(options):
     print "Will plug local namespace %s into network" % options.netns
 
     # create namespace
-    runCommand(log, "ip netns add %s" %
-               options.netns, raiseExceptionOnError=False)
+    run_log_command("ip netns add %s" %
+                    options.netns, raiseExceptionOnError=False)
 
     # create veth pair and move one into namespace
     if options.ovs_vlan:
         create_veth_pair(options.if2netns, "ns2vpn-raw", options.netns)
 
-        runCommand(log, "ip netns exec %s ip link add link ns2vpn-raw "
-                   "name %s type vlan id %d"
-                   % (options.netns, options.if2vpn, options.ovs_vlan))
-        runCommand(log, "ip netns exec %s ip link set %s up"
-                   % (options.netns, options.if2vpn))
+        run_log_command("ip netns exec %s ip link add link ns2vpn-raw "
+                        "name %s type vlan id %d"
+                        % (options.netns, options.if2vpn, options.ovs_vlan))
+        run_log_command("ip netns exec %s ip link set %s up"
+                        % (options.netns, options.if2vpn))
     else:
         create_veth_pair(options.if2netns, options.if2vpn, options.netns)
 
     if options.mac:
-        runCommand(log, "ip netns exec %s ip link set %s address %s"
-                   % (options.netns, options.if2vpn, options.mac))
+        run_log_command("ip netns exec %s ip link set %s address %s"
+                        % (options.netns, options.if2vpn, options.mac))
 
-    runCommand(log, "ip netns exec %s ip addr add %s dev %s" %
-               (options.netns, options.ip, options.if2vpn),
-               raiseExceptionOnError=False)
+    run_log_command("ip netns exec %s ip addr add %s dev %s" %
+                    (options.netns, options.ip, options.if2vpn),
+                    raiseExceptionOnError=False)
 
-    runCommand(log, "ip netns exec %s ip route add default dev %s via %s" %
-               (options.netns, options.if2vpn, options.gw_ip),
-               raiseExceptionOnError=False)
+    run_log_command("ip netns exec %s ip route add default dev %s via %s" %
+                    (options.netns, options.if2vpn, options.gw_ip),
+                    raiseExceptionOnError=False)
 
-    runCommand(log, "ip netns exec %s ip link set %s mtu 1420" %
-               (options.netns, options.if2vpn),
-               raiseExceptionOnError=False)
+    run_log_command("ip netns exec %s ip link set %s mtu 1420" %
+                    (options.netns, options.if2vpn),
+                    raiseExceptionOnError=False)
 
 
 def classifier_callback(option, opt_str, value, parser):
@@ -283,11 +288,11 @@ def main():
             createSpecialNetNSPort(options)
 
         options.port = options.if2netns
-        options.mac = get_device_mac(lambda *args: runCommand(log, *args),
+        options.mac = get_device_mac(run_log_command,
                                      options.if2vpn, options.netns)
 
         print "Local port: %s (%s)" % (options.port, options.mac)
-        runCommand(log, "ip link show %s" % options.port)
+        run_log_command("ip link show %s" % options.port)
 
     local_port = {}
     if options.port[:5] == "evpn:":
@@ -303,11 +308,11 @@ def main():
         if (options.ovs_preplug and options.network_type == IPVPN):
             print "pre-plugging %s into %s" % (options.port,
                                                options.bridge)
-            runCommand(log, "ovs-vsctl del-port %s %s" %
-                       (options.bridge, options.port),
-                       raiseExceptionOnError=False)
-            runCommand(log, "ovs-vsctl add-port %s %s" %
-                       (options.bridge, options.port))
+            run_log_command("ovs-vsctl del-port %s %s" %
+                            (options.bridge, options.port),
+                            raiseExceptionOnError=False)
+            run_log_command("ovs-vsctl add-port %s %s" %
+                            (options.bridge, options.port))
 
             local_port['ovs'] = {'port_name': options.port,
                                  'plugged': True}

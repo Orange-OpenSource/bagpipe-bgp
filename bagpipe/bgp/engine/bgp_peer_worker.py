@@ -105,7 +105,7 @@ class ToIdle(object):
 
     def __init__(self, delay):
         # add 50% random delay to avoid reconnect bursts
-        self.delay = delay*random.uniform(1,1.5)
+        self.delay = delay*random.uniform(1, 1.5)
 
     def repr(self):
         return "ToIdle(%s)" % self.delay
@@ -118,12 +118,11 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
     Partially abstract class for a Worker implementing the BGP protocol.
     '''
 
-    def __init__(self, routeTableManager, name, peerAddress):
+    def __init__(self, routeTableManager, peerAddress):
         # call super
         Thread.__init__(self)
         self.setDaemon(True)
-        self.name = "BGP-%s" % peerAddress
-        Worker.__init__(self, routeTableManager, self.name)
+        Worker.__init__(self, routeTableManager, "BGP-%s" % peerAddress)
 
         self.peerAddress = peerAddress
 
@@ -157,7 +156,7 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
         holdtime in seconds
         keepAlive expected, or sent, every holdtime/3 second
         '''
-        assert(holdtime > 30)
+        assert holdtime > 30
         self.katPeriod = int(holdtime / 3.0)
         self.katExpiryTime = self.katPeriod * 3
 
@@ -173,7 +172,7 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
             self._toIdle(event.delay)
 
         elif isinstance(event, RouteEvent):
-            if (self.fsm.state == FSM.Established):
+            if self.fsm.state == FSM.Established:
                 self._send(self._updateForRouteEvent(event))
             else:
                 raise Exception("cannot process routeEvent in '%s' state"
@@ -256,7 +255,7 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
         self._cleanup()
 
     def isEstablished(self):
-        return (self.fsm.state == FSM.Established)
+        return self.fsm.state == FSM.Established
 
     def _receiveLoop(self):
         self.log.info("Start receive loop")

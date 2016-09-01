@@ -123,7 +123,6 @@ class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
 
         self._dumpState()
 
-
         allRoutes = self.trackedEntry2routes.setdefault(entry, [])
 
         self.log.debug("We currently have %d route%s for this entry",
@@ -431,8 +430,8 @@ class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
     @staticmethod
     def _displayEntry(entry):
         if (isinstance(entry, tuple) and len(entry) > 0 and
-            (isinstance(entry[0], type) or
-             isinstance(entry[0], types.ClassType))):
+                (isinstance(entry[0], type) or
+                 isinstance(entry[0], types.ClassType))):
             return repr(tuple([entry[0].__name__] + list(entry[1:])))
         else:
             return repr(entry)

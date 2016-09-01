@@ -56,8 +56,8 @@ class OVSBridgePortNotFound(Exception):
 class RemotePEMACAddressNotFound(Exception):
 
     def __init__(self, ipAddress):
-        self.message = "MAC address for %s could not"\
-            "be found. CAUTION: Need direct MPLS/Eth connection" % ipAddress
+        self.message = ("MAC address for %s could not "
+            "be found. CAUTION: Need direct MPLS/Eth connection" % ipAddress)
 
     def __str__(self):
         return repr(self.message)

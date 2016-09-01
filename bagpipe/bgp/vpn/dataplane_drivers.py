@@ -21,11 +21,8 @@ import socket
 
 from distutils.version import StrictVersion
 
-
 from bagpipe.bgp.common import logDecorator
-
 from bagpipe.bgp.common import looking_glass as lg
-
 from bagpipe.bgp.common.run_command import runCommand
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
@@ -45,7 +42,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         '''config is a dict'''
         lg.LookingGlassLocalLogger.__init__(self)
 
-        assert(issubclass(self.dataplaneInstanceClass, VPNInstanceDataplane))
+        assert issubclass(self.dataplaneInstanceClass, VPNInstanceDataplane)
 
         self.config = config
 
@@ -62,17 +59,16 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
                             self.local_address)
 
         # Linux kernel version check
+        o = self._runCommand("uname -r")
+        self.kernelRelease = o[0][0].split("-")[0]
         if getattr(self, 'requiredKernel', None):
-            o = self._runCommand("uname -r")
-            self.kernelRelease = o[0][0].split("-")[0]
-
             if (StrictVersion(self.kernelRelease) <
                     StrictVersion(self.requiredKernel)):
                 self.log.warning("%s requires at least Linux kernel %s"
-                                 " (you are running %s)" %
-                                 (self.__class__.__name__,
-                                  self.requiredKernel,
-                                  self.kernelRelease))
+                                 " (you are running %s)",
+                                 self.__class__.__name__,
+                                 self.requiredKernel,
+                                 self.kernelRelease)
 
         # skipped if instantiated with init=False, to be used for cleanup
         if init:

@@ -33,35 +33,20 @@ from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 from bagpipe.bgp.common import looking_glass as lg
 
+from bagpipe.bgp.engine.flowspec import FlowRouteFactory
 from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
     compareECMP, compareNoECMP
-
 from bagpipe.bgp.engine import RouteEntry
 
+from bagpipe.bgp.rest_api import APIException
+
 from exabgp.reactor.protocol import AFI, SAFI
-
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-
 from exabgp.bgp.message.open.asn import ASN
-
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended \
-    import ConsistentHashSortOrder
-from exabgp.bgp.message.update.attribute.community.extended \
-    import TrafficRedirect
-
-from bagpipe.bgp.engine.flowspec import FlowRouteFactory
-
-from exabgp.bgp.message.update.nlri.flow import (
-    FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
-    Flow6Source, Flow4Destination, Flow6Destination, NumericOperator)
+from exabgp.bgp.message.update.attribute.community import extended as ec
+from exabgp.bgp.message.update.nlri import flow
 
 from exabgp.protocol import Protocol
 
-from bagpipe.bgp.rest_api import APIException
 
 log = logging.getLogger(__name__)
 
@@ -130,9 +115,9 @@ class TrafficClassifier(object):
                 port_range = int(port)
         else:
             port_range = ()
-            for index in range(len(rule)):
-                op = rule[index].operations
-                port = rule[index].value
+            for elem in rule:
+                op = elem.operations
+                port = elem.value
                 if op == '>=' or op == '<=':
                     port_range += int(port)
                 elif op == '>':
@@ -154,22 +139,22 @@ class TrafficClassifier(object):
 
             if int(port_min) == 0:
                 # Operator <
-                port_rules.append(flow_object(NumericOperator.LT,
+                port_rules.append(flow_object(flow.NumericOperator.LT,
                                               port_max))
             elif int(port_max) == 65535:
                 # Operator >
-                port_rules.append(flow_object(NumericOperator.GT,
+                port_rules.append(flow_object(flow.NumericOperator.GT,
                                               port_min))
             else:
                 # Operator >=
-                gt_eq_op = (NumericOperator.GT | NumericOperator.EQ)
+                gt_eq_op = (flow.NumericOperator.GT | flow.NumericOperator.EQ)
                 # Operator &<=
-                lt_eq_op = (NumericOperator.AND | NumericOperator.LT |
-                            NumericOperator.EQ)
+                lt_eq_op = (flow.NumericOperator.AND | flow.NumericOperator.LT |
+                            flow.NumericOperator.EQ)
                 port_rules.append(flow_object(gt_eq_op, port_min))
                 port_rules.append(flow_object(lt_eq_op, port_max))
         else:
-            port_rules.append(flow_object(NumericOperator.EQ,
+            port_rules.append(flow_object(flow.NumericOperator.EQ,
                                           port_range))
 
         return port_rules
@@ -198,36 +183,40 @@ class TrafficClassifier(object):
         if self.sourcePrefix:
             ip, mask = self.sourcePrefix.split('/')
             if IPNetwork(self.sourcePrefix).version == 4:
-                rules.append(Flow4Source(socket.inet_pton(socket.AF_INET, ip),
-                                         int(mask)))
+                rules.append(flow.Flow4Source(socket.inet_pton(socket.AF_INET,
+                                                               ip),
+                                              int(mask)))
             elif IPNetwork(self.sourcePrefix).version == 6:
-                rules.append(Flow6Source(socket.inet_pton(socket.AF_INET6, ip),
-                                         int(mask), 0))  # TODO: IPv6 offset ??
+                # TODO: IPv6 offset ??
+                rules.append(flow.Flow6Source(socket.inet_pton(socket.AF_INET6,
+                                                               ip),
+                                              int(mask), 0))
 
         if self.destinationPrefix:
             ip, mask = self.destinationPrefix.split('/')
             if IPNetwork(self.destinationPrefix).version == 4:
                 rules.append(
-                    Flow4Destination(socket.inet_pton(socket.AF_INET, ip),
-                                     int(mask))
+                    flow.Flow4Destination(socket.inet_pton(socket.AF_INET, ip),
+                                          int(mask))
                 )
             elif IPNetwork(self.destinationPrefix).version == 6:
+                # TODO: IPv6 offset ??
                 rules.append(
-                    Flow6Destination(socket.inet_pton(socket.AF_INET6, ip),
-                                     int(mask), 0)
-                )  # TODO: IPv6 offset ??
+                    flow.Flow6Destination(socket.inet_pton(socket.AF_INET6, ip),
+                                          int(mask), 0)
+                )
 
         if self.sourcePort:
             rules += self._constructPortRules(self.sourcePort,
-                                              FlowSourcePort)
+                                              flow.FlowSourcePort)
 
         if self.destinationPort:
             rules += self._constructPortRules(self.destinationPort,
-                                              FlowDestinationPort)
+                                              flow.FlowDestinationPort)
 
         if self.protocol:
-            rules.append(FlowIPProtocol(NumericOperator.EQ,
-                                        Protocol.named(self.protocol)))
+            rules.append(flow.FlowIPProtocol(flow.NumericOperator.EQ,
+                                             Protocol.named(self.protocol)))
 
         return rules
 
@@ -287,8 +276,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
-        assert(isinstance(self.afi, AFI))
-        assert(isinstance(self.safi, SAFI))
+        assert isinstance(self.afi, AFI)
+        assert isinstance(self.safi, SAFI)
 
         self.dataplaneDriver = dataplaneDriver
 
@@ -387,10 +376,10 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         return False
 
     def isEmpty(self):
-        return (not self.localPort2Endpoints)
+        return not self.localPort2Endpoints
 
     def hasEnpoint(self, linuxif):
-        return (self.localPort2Endpoints.get(linuxif) is not None)
+        return self.localPort2Endpoints.get(linuxif) is not None
 
     def hasOnlyOneEndpoint(self):
         return (len(self.localPort2Endpoints) == 1 and
@@ -454,14 +443,14 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         return (ipAddress, mask)
 
     def _genEncapExtendedCommunities(self):
-        ecommunities = ExtendedCommunities()
+        ecommunities = ec.ExtendedCommunities()
         for encap in self.dataplaneDriver.supportedEncaps():
-            if not isinstance(encap, Encapsulation):
+            if not isinstance(encap, ec.Encapsulation):
                 raise Exception("dataplaneDriver.supportedEncaps() should "
                                 "return a list of Encapsulation objects (%s)",
                                 type(encap))
 
-            if encap != Encapsulation(Encapsulation.Type.DEFAULT):
+            if encap != ec.Encapsulation(ec.Encapsulation.Type.DEFAULT):
                 ecommunities.communities.append(encap)
         # FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
@@ -479,13 +468,14 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         rd = routeDistinguisher if routeDistinguisher else self.instanceRD
         routeEntry = self.generateVifBGPRoute(macAddress, ipPrefix, prefixLen,
                                               label, rd)
-        assert(isinstance(routeEntry, RouteEntry))
+        assert isinstance(routeEntry, RouteEntry)
 
         routeEntry.attributes.add(self._genEncapExtendedCommunities())
         routeEntry.setRouteTargets(self.exportRTs)
 
-        ecommunities = ExtendedCommunities()
-        ecommunities.communities.append(ConsistentHashSortOrder(lbConsistentHashOrder))
+        ecommunities = ec.ExtendedCommunities()
+        ecommunities.communities.append(
+            ec.ConsistentHashSortOrder(lbConsistentHashOrder))
         routeEntry.attributes.add(ecommunities)
 
         self.log.debug("Synthesized Vif route entry: %s", routeEntry)
@@ -499,15 +489,15 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         routeEntry = RouteEntry(nlri)
 
-        assert(isinstance(routeEntry, RouteEntry))
+        assert isinstance(routeEntry, RouteEntry)
 
-        ecommunities = ExtendedCommunities()
+        ecommunities = ec.ExtendedCommunities()
 
         # checked at __init__:
-        assert(len(self.readvertiseToRTs) == 1)
+        assert len(self.readvertiseToRTs) == 1
         rt = self.readvertiseToRTs[0]
         ecommunities.communities.append(
-            TrafficRedirect(ASN(int(rt.asn)), int(rt.number))
+            ec.TrafficRedirect(ASN(int(rt.asn)), int(rt.number))
         )
 
         routeEntry.attributes.add(ecommunities)
@@ -528,7 +518,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                            "consistency")
             portData = self.macAddress2LocalPortData[macAddress]
 
-            if (portData.get("port_info") != localPort):
+            if portData.get("port_info") != localPort:
                 raise APIException("Port information is not consistent. MAC "
                                    "address cannot be bound to two different"
                                    "ports. Previous plug for port %s "
@@ -593,9 +583,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                 self.localPort2Endpoints[localPort['linuxif']] = list()
 
             self.localPort2Endpoints[localPort['linuxif']].append(
-                {'mac': macAddress, 'ip': ipAddressPrefix
-                 # FIXME: maybe add prefix len for the LG
-                 }
+                {'mac': macAddress, 'ip': ipAddressPrefix}
             )
             self.endpoint2RD[(macAddress, ipAddressPrefix)] = endpoint_rd
             self.macAddress2LocalPortData[macAddress] = portData
@@ -635,8 +623,10 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                      lbConsistentHashOrder=0):
         # Verify port and endpoint (MAC address, IP address) tuple consistency
         portData = self.macAddress2LocalPortData.get(macAddress)
-        if (not portData or (ipAddressPrefix in self.ipAddress2MacAddress and
-                macAddress not in self.ipAddress2MacAddress[ipAddressPrefix])):
+        if (not portData or
+                (ipAddressPrefix in self.ipAddress2MacAddress and
+                 macAddress not in self.ipAddress2MacAddress[ipAddressPrefix])
+                 ):
             self.log.error("vifUnplugged called for endpoint (%s, %s), but no "
                            "consistent informations or was not plugged yet",
                            macAddress, ipAddressPrefix)
@@ -648,7 +638,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         label = portData.get('label')
         endpoint_rd = self.endpoint2RD[(macAddress, ipAddressPrefix)]
         localPort = portData.get('port_info')
-        if (not label or not localPort):
+        if not label or not localPort:
             self.log.error("vifUnplugged called for endpoint (%s, %s), but "
                            "port data (%s, %s) is incomplete",
                            macAddress, ipAddressPrefix, label, localPort)
@@ -658,8 +648,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             # Parse address/mask
             (ipPrefix, prefixLen) = self._parseIPAddressPrefix(ipAddressPrefix)
 
-            lastEndpoint = len(self.localPort2Endpoints[localPort['linuxif']
-                                                        ]) <= 1
+            lastEndpoint = len(
+                self.localPort2Endpoints[localPort['linuxif']]) <= 1
 
             if not advertiseSubnet and prefixLen != 32:
                 self.log.debug("Using /32 instead of /%d", prefixLen)
@@ -698,7 +688,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             self.vpnManager.rdAllocator.release(endpoint_rd)
 
             if not lastEndpoint:
-                if not any([endpoint['mac'] == macAddress for endpoint
+                if not any([endpoint['mac'] == macAddress
+                            for endpoint
                             in self.localPort2Endpoints[localPort['linuxif']]]
                            ):
                     del self.macAddress2LocalPortData[macAddress]
@@ -802,13 +793,13 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         '''
         advEncaps = None
         try:
-            advEncaps = route.extendedCommunities(Encapsulation)
+            advEncaps = route.extendedCommunities(ec.Encapsulation)
             self.log.debug("Advertized Encaps: %s", advEncaps)
         except KeyError:
             self.log.debug("no encap advertized, let's use default")
 
         if not advEncaps:
-            advEncaps = [Encapsulation(Encapsulation.Type.DEFAULT)]
+            advEncaps = [ec.Encapsulation(ec.Encapsulation.Type.DEFAULT)]
 
         goodEncaps = set(advEncaps) & set(
             self.dataplaneDriver.supportedEncaps())

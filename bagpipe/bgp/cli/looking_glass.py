@@ -90,8 +90,7 @@ def pretty_print_recurse(data, indent, recursiveRequests, url,
                 stdout.write("\n")
                 alreadyANewLine = True
 
-            for i in range(len(data)):
-                value = data[i]
+            for (i, value) in enumerate(data):
                 stdout.write("%s* " % (" " * indent))
                 if isinstance(value, dict) or isinstance(value, list):
                     pretty_print_recurse(value, indent + INDENT_INCREMENT,

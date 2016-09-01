@@ -17,13 +17,10 @@
 
 from abc import ABCMeta, abstractmethod
 
-import logging
-import socket
-
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 
-from bagpipe.bgp.engine import RouteEvent, RouteEntry
+from bagpipe.bgp.engine import RouteEntry
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
 from bagpipe.bgp.vpn.dataplane_drivers import \
@@ -35,12 +32,10 @@ from bagpipe.bgp.vpn.dataplane_drivers import \
 
 from bagpipe.bgp.common import looking_glass as lg
 
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
 
 from exabgp.protocol.ip import IP
 
+from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 

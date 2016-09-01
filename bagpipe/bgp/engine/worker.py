@@ -55,7 +55,7 @@ class Worker(EventSource, lg.LookingGlassMixin):
         self._pleaseStop = Event()
 
         self.name = workerName
-        assert(self.name is not None)
+        assert self.name is not None
 
         EventSource.__init__(self, self.routeTableManager)
 
@@ -95,12 +95,12 @@ class Worker(EventSource, lg.LookingGlassMixin):
             # log.debug("%s worker waiting on queue",self.name )
             event = self._dequeue()
 
-            if (event == Worker.stopEvent):
+            if event == Worker.stopEvent:
                 log.debug("StopEvent, breaking queue processor loop")
                 self._pleaseStop.set()
                 break
 
-            # log.debug("%s worker calling _onEvent for %s",self.name,event)
+            # log.debug("%s worker calling _onEvent for %s", self.name, event)
             try:
                 self._onEvent(event)
             except Exception as e:

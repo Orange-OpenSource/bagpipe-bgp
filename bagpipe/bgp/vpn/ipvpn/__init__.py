@@ -15,16 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import logging
-import socket
-
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import logDecorator
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 
-from bagpipe.bgp.engine import RouteEvent
 from bagpipe.bgp.engine import RouteEntry
 
 from bagpipe.bgp.engine.flowspec import Flow
@@ -37,24 +32,18 @@ from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver \
 from bagpipe.bgp.common import looking_glass as lg
 
 from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-from exabgp.bgp.message.update.attribute.attribute import Attribute
-from _collections import defaultdict
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended.rt \
+from exabgp.bgp.message.update.attribute.community.extended \
+    import ConsistentHashSortOrder
+from exabgp.bgp.message.update.attribute.community.extended \
     import RouteTarget as RTExtCom
+from exabgp.bgp.message.update.attribute.community.extended \
+    import TrafficRedirect
 from exabgp.bgp.message.update.attribute.community.extended.rt_record\
     import RTRecord
 
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
 
-from exabgp.bgp.message.update import Attribute
-from exabgp.bgp.message.update.attribute.community.extended \
-    import TrafficRedirect
-from exabgp.bgp.message.update.attribute.community.extended \
-    import ConsistentHashSortOrder
 
 IPVPN = "ipvpn"
 
@@ -81,7 +70,7 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
         self.readvertised = set()
 
     def _nlriFrom(self, prefix, label, rd):
-        assert(rd is not None)
+        assert rd is not None
 
         return IPVPNRouteFactory(self.afi, prefix, label, rd,
                                  self.dataplaneDriver.getLocalAddress())
@@ -97,8 +86,8 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             yield portData['label']
 
     def _imported(self, route):
-        return (len(set(route.routeTargets).intersection(
-                    set(self.importRTs))) > 0)
+        return len(set(route.routeTargets).intersection(set(self.importRTs))
+                   ) > 0
 
     def _toReadvertise(self, route):
         # Only re-advertise IP VPN routes (e.g. not Flowspec routes)
@@ -124,8 +113,9 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
                            .intersection(set(rtRecords)))
             return False
 
-        return (len(set(route.routeTargets).intersection(
-                    set(self.readvertiseFromRTs))) > 0)
+        return len(
+            set(route.routeTargets).intersection(set(self.readvertiseFromRTs))
+            ) > 0
 
     def _routeForReAdvertisement(self, route, label, rd, lbConsistentHashOrder,
                                  doDefault=False):
@@ -144,7 +134,8 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
 
         eComs = self._genEncapExtendedCommunities()
         eComs.communities += finalRTRecords
-        eComs.communities.append(ConsistentHashSortOrder(lbConsistentHashOrder))
+        eComs.communities.append(
+            ConsistentHashSortOrder(lbConsistentHashOrder))
         attributes.add(eComs)
 
         entry = RouteEntry(nlri, self.readvertiseToRTs, attributes)
@@ -192,7 +183,7 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
         nlri = route.nlri
 
         self.log.debug("Start re-advertising %s from VRF", nlri.cidr.prefix())
-        for localPort, endpoints in self.localPort2Endpoints.iteritems():
+        for _, endpoints in self.localPort2Endpoints.iteritems():
             for endpoint in endpoints:
                 portData = self.macAddress2LocalPortData[endpoint['mac']]
                 label = portData['label']
@@ -216,7 +207,7 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
         nlri = route.nlri
 
         self.log.debug("Stop re-advertising %s from VRF", nlri.cidr.prefix())
-        for localPort, endpoints in self.localPort2Endpoints.iteritems():
+        for _, endpoints in self.localPort2Endpoints.iteritems():
             for endpoint in endpoints:
                 portData = self.macAddress2LocalPortData[endpoint['mac']]
                 label = portData['label']
@@ -235,7 +226,8 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
         self.readvertised.remove(route)
 
     def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
-                   advertiseSubnet, lbConsistentHashOrder):
+                   advertiseSubnet=False,
+                   lbConsistentHashOrder=0):
         VPNInstance.vifPlugged(self, macAddress, ipAddressPrefix, localPort,
                                advertiseSubnet, lbConsistentHashOrder)
 
@@ -248,12 +240,16 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
                                           lbConsistentHashOrder)
 
             if self.attractTraffic:
-                flowEntry = self._routeForRedirectPrefix(route.nlri.cidr.prefix())
+                flowEntry = self._routeForRedirectPrefix(
+                    route.nlri.cidr.prefix())
                 self._advertiseRoute(flowEntry)
 
-    def vifUnplugged(self, macAddress, ipAddressPrefix, advertiseSubnet):
+    def vifUnplugged(self, macAddress, ipAddressPrefix,
+                     advertiseSubnet=False,
+                     lbConsistentHashOrder=0):
         label = self.macAddress2LocalPortData[macAddress]['label']
-        lbConsistentHashOrder = self.macAddress2LocalPortData[macAddress]["lbConsistentHashOrder"]
+        lbConsistentHashOrder = (self.macAddress2LocalPortData[macAddress]
+                                 ["lbConsistentHashOrder"])
         rd = self.endpoint2RD[(macAddress, ipAddressPrefix)]
         for route in self.readvertised:
             self.log.debug("Stop re-advertising %s with this port as next hop",
@@ -262,7 +258,8 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
                                          lbConsistentHashOrder)
 
             if self.attractTraffic and self.hasOnlyOneEndpoint():
-                flowEntry = self._routeForRedirectPrefix(route.nlri.cidr.prefix())
+                flowEntry = self._routeForRedirectPrefix(
+                    route.nlri.cidr.prefix())
                 self._withdrawRoute(flowEntry)
 
         VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
@@ -285,8 +282,6 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
     def _newBestRoute(self, entry, newRoute):
 
         if isinstance(newRoute.nlri, Flow):
-            rule = entry
-
             if len(newRoute.extendedCommunities(TrafficRedirect)) == 1:
                 trafficRedirect = newRoute.extendedCommunities(TrafficRedirect)
                 redirectRT = "%s:%s" % (trafficRedirect[0].asn,
@@ -317,7 +312,7 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             if not encaps:
                 return
 
-            assert(len(newRoute.nlri.labels.labels) == 1)
+            assert len(newRoute.nlri.labels.labels) == 1
 
             lbConsistentHashOrder = 0
             if newRoute.extendedCommunities(ConsistentHashSortOrder):
@@ -334,8 +329,6 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
     def _bestRouteRemoved(self, entry, oldRoute, last):
 
         if isinstance(oldRoute.nlri, Flow):
-            rule = entry
-
             if len(oldRoute.extendedCommunities(TrafficRedirect)) == 1:
                 if last:
                     trafficRedirect = oldRoute.extendedCommunities(
@@ -371,7 +364,7 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             if not encaps:
                 return
 
-            assert(len(oldRoute.nlri.labels.labels) == 1)
+            assert len(oldRoute.nlri.labels.labels) == 1
 
             lbConsistentHashOrder = 0
             if oldRoute.extendedCommunities(ConsistentHashSortOrder):
@@ -383,7 +376,7 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
                 oldRoute.nlri.labels.labels[0], oldRoute.nlri, encaps,
                 lbConsistentHashOrder)
 
-    ### Looking glass ###
+    # Looking glass ###
 
     def getLGMap(self):
         return {
@@ -393,4 +386,3 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
     def getLGReadvertisedRoutes(self, pathPrefix):
         return [route.getLookingGlassLocalInfo(pathPrefix)
                 for route in self.readvertised]
-

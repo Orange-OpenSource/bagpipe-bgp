@@ -37,6 +37,10 @@ from exabgp.protocol.ip import IP
 log = logging.getLogger(__name__)
 
 
+# SAFIs for which RFC4684 is effective
+RTC_SAFIS = (SAFI.mpls_vpn, SAFI.evpn)
+
+
 class Manager(EventSource, lg.LookingGlassMixin):
 
     def __init__(self, _config):
@@ -79,8 +83,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
                               self.config['peers'].strip().split(",")]
             for peerAddress in peersAddresses:
                 log.debug("Creating a peer worker for %s", peerAddress)
-                peerWorker = ExaBGPPeerWorker(self, None, peerAddress,
-                                              self.config)
+                peerWorker = ExaBGPPeerWorker(self, peerAddress, self.config)
                 self.peers[peerAddress] = peerWorker
                 peerWorker.start()
 
@@ -112,7 +115,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
     @logDecorator.log
     def rtcAdvertisementForSub(self, sub):
-        if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
+        if sub.safi in RTC_SAFIS:
             event = RouteEvent(RouteEvent.ADVERTISE,
                                self._subscription2RTCRouteEntry(sub),
                                self)
@@ -121,7 +124,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
     @logDecorator.log
     def rtcWithdrawalForSub(self, sub):
-        if (sub.safi in (SAFI.mpls_vpn, SAFI.evpn)):
+        if sub.safi in RTC_SAFIS:
             event = RouteEvent(RouteEvent.WITHDRAW,
                                self._subscription2RTCRouteEntry(sub),
                                self)

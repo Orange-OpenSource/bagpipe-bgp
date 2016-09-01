@@ -113,8 +113,7 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
     (options, _) = parser.parse_args()
 
     if len(options.servers) == 0:
-        options.servers = ["127.0.0.1"]
-        #options.servers = ["localhost"]
+        options.servers = ["localhost"]
 
     ports = set()
     dests = set()
@@ -147,7 +146,7 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
         server_spec = ("\\n[%s]" % server) if server != 'localhost' else ''
         print ('        %s [label="{<0>EVI\\n%s%s}",'
                'shape="record"];' % (vpn_uid(server, vpn), vpn_short(vpn),
-                                  server_spec))
+                                     server_spec))
     print '    }'
 
     for (server, vpn, _) in vpns:

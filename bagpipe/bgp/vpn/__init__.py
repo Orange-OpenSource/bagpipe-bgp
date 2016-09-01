@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 
 def convertRouteTargets(orig_list):
-    assert(isinstance(orig_list, list))
+    assert isinstance(orig_list, list)
     list_ = []
     for rt in orig_list:
         if rt == '':
@@ -99,13 +99,11 @@ class VPNManager(lg.LookingGlassMixin):
 
     def _formatIpAddressPrefix(self, ipAddress):
         if re.match(r'([12]?\d?\d\.){3}[12]?\d?\d\/[123]?\d', ipAddress):
-            address = ipAddress
+            return ipAddress
         elif re.match(r'([12]?\d?\d\.){3}[12]?\d?\d', ipAddress):
-            address = ipAddress + "/32"
+            return ipAddress + "/32"
         else:
             raise exc.MalformedIPAddress
-
-        return address
 
     @utils.synchronized
     def getInstanceId(self):
@@ -125,7 +123,7 @@ class VPNManager(lg.LookingGlassMixin):
         The EVPN instance will be notified so that it forwards traffic
         destinated to the gateway on the interface toward the IPVPN.
         """
-        assert('evpn' in localPort)
+        assert 'evpn' in localPort
 
         if 'id' not in localPort['evpn']:
             raise Exception("Missing parameter 'id' :an external EVPN "
@@ -138,7 +136,7 @@ class VPNManager(lg.LookingGlassMixin):
             raise Exception("The specified evpn instance does not exist (%s)"
                             % localPort['evpn'])
 
-        if (evpn.type != EVPN):
+        if evpn.type != EVPN:
             raise Exception("The specified instance to plug is not an evpn"
                             "instance (is %s instead)" % evpn.type)
 
@@ -146,7 +144,7 @@ class VPNManager(lg.LookingGlassMixin):
             (evpn_if, ipvpn_if, evpn, managed) = \
                 self._evpn_ipvpn_ifs[ipvpnInstance]
 
-            if not (localPort['evpn']['id'] == evpn.externalInstanceId):
+            if not localPort['evpn']['id'] == evpn.externalInstanceId:
                 raise Exception('Trying to plug into an IPVPN a new E-VPN '
                                 'while one is already plugged in')
             else:
@@ -161,13 +159,13 @@ class VPNManager(lg.LookingGlassMixin):
             raise Exception("Trying to plug E-VPN into an IPVPN, but this EVPN"
                             " is already plugged into an IPVPN")
 
-        if ('linuxif' in localPort and localPort['linuxif']):
+        if 'linuxif' in localPort and localPort['linuxif']:
             raise Exception("Cannot specify an attachment with both a linuxif "
                             "and an evpn")
 
         if 'ovs_port_name' in localPort['evpn']:
             try:
-                assert(localPort['ovs']['plugged'])
+                assert localPort['ovs']['plugged']
                 assert(localPort['ovs']['port_name'] or
                        localPort['ovs']['port_number'])
             except:
@@ -305,7 +303,7 @@ class VPNManager(lg.LookingGlassMixin):
         # Retrieve VPN instance or create new one if does not exist
         try:
             vpnInstance = self.vpnInstances[externalInstanceId]
-            if (vpnInstance.type != instanceType):
+            if vpnInstance.type != instanceType:
                 raise Exception("Trying to plug port on an existing instance "
                                 "of a different type (existing: %s, asked: %s)"
                                 % (vpnInstance.type, instanceType))
@@ -372,7 +370,7 @@ class VPNManager(lg.LookingGlassMixin):
         # Retrieve redirect VPN instance or create new one if does not exist
         try:
             redirectInstance = self.vpnInstances[externalInstanceId]
-            if (redirectInstance.type != redirectedType):
+            if redirectInstance.type != redirectedType:
                 raise Exception("Trying to redirect traffic to an existing "
                                 "instance of a different type (existing: %s, "
                                 "asked: %s)"
@@ -437,7 +435,7 @@ class VPNManager(lg.LookingGlassMixin):
         dataplaneHook = DataplaneLGHook(self)
         return {
             "instances": (lg.COLLECTION, (self.getLGVPNList,
-                                             self.getLGVPNFromPathItem)),
+                                          self.getLGVPNFromPathItem)),
             "dataplane": (lg.DELEGATE, dataplaneHook)
         }
 

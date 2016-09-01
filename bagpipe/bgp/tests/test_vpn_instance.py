@@ -47,7 +47,6 @@ from bagpipe.bgp.tests import RT3
 from bagpipe.bgp.tests import RT4
 from bagpipe.bgp.tests import RT5
 from bagpipe.bgp.tests import NLRI1
-from bagpipe.bgp.tests import NLRI2
 from bagpipe.bgp.tests import NH1
 from bagpipe.bgp.tests import BaseTestBagPipeBGP
 from bagpipe.bgp.tests import _routeTarget2String
@@ -65,32 +64,17 @@ from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 from bagpipe.bgp.vpn.ipvpn import VRF
 
 from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
-from exabgp.protocol.ip import IP
 
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
+from exabgp.bgp.message.update.attribute.community.extended \
     import Encapsulation
-from exabgp.bgp.message.update.attribute.community.extended.rt_record\
-    import RTRecord
-from exabgp.bgp.message.update.attribute.community.extended.rt_record\
-    import RTRecordASN2Number
-
-from exabgp.bgp.message.update import Attribute
 from exabgp.bgp.message.update.attribute.community.extended \
     import TrafficRedirect
-from exabgp.bgp.message.update.nlri.flow import (
-    Flow, FlowSourcePort, FlowDestinationPort, FlowIPProtocol, Flow4Source,
-    Flow6Source, Flow4Destination, Flow6Destination, NumericOperator)
+from exabgp.bgp.message.update.nlri import Flow
 from exabgp.bgp.message.update.attribute.community.extended import \
     RouteTargetASN2Number as RouteTarget
 from exabgp.bgp.message.update.attribute.community.extended.rt_record\
     import RTRecord
-from exabgp.bgp.message.update.attribute.community.extended.rt_record\
-    import RTRecordASN2Number
-
-from exabgp.protocol import Protocol
 
 
 log = logging.getLogger()
@@ -928,8 +912,10 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         for index, classifier in enumerate(attendedClassifiers):
             if not classifier:
                 # Skip advertisement to exported route targets
-                if (self.vpnInstance.exportRTs ==
-                    _extractRTFromCall(self.vpnInstance, method, index)):
+                if (self.vpnInstance.exportRTs == _extractRTFromCall(
+                        self.vpnInstance,
+                        method,
+                        index)):
                     continue
 
                 # 1 - re-advertisement of a default route supposed to happen to RT4
@@ -1171,7 +1157,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
         self._configVRFWithAttractTraffic(attractTraffic1)
-        
+
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
@@ -1194,7 +1180,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
         self._configVRFWithAttractTraffic(attractTraffic1)
-        
+
         self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
         self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
@@ -1305,11 +1291,11 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
                             workerA, NH1, 200)
 
         self.assertEqual(3, self.vpnInstance._advertiseRoute.call_count)
-        
+
         self._resetMocks()
 
         self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT1, False, 2)
-        
+
         self._checkAttractTraffic(
             '_advertiseRoute',
             attractTraffic1['redirect_rts'],
@@ -1335,11 +1321,11 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
                             workerA, NH1, 200)
 
         self.assertEqual(3, self.vpnInstance._advertiseRoute.call_count)
-        
+
         self._resetMocks()
 
         self.vpnInstance.vifUnplugged(MAC1, IP1, False)
-        
+
         self._checkAttractTraffic(
             '_withdrawRoute',
             attractTraffic1['redirect_rts'],
@@ -1348,7 +1334,7 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
         self._resetMocks()
 
         self.vpnInstance.vifUnplugged(MAC2, IP2, False)
-        
+
         self._checkAttractTraffic(
             '_withdrawRoute',
             attractTraffic1['redirect_rts'],

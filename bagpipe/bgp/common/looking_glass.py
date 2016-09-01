@@ -48,7 +48,7 @@ def _getLGLocalInfoRecurse(obj, cls, pathPrefix):
 
     result = cls.getLookingGlassLocalInfo(obj, pathPrefix)
 
-    assert(isinstance(result, dict))
+    assert isinstance(result, dict)
 
     for base in cls.__bases__:
         if issubclass(base, LookingGlassMixin):
@@ -80,23 +80,25 @@ def _lookupPathInDict(myDict, path):
 
     log.debug("_lookupPathInDict: %s vs. %s", myDict, path)
 
-    assert(isinstance(path, list))
+    assert isinstance(path, list)
 
     if len(path) == 0:
         log.debug("path len is zero, returning myDict %s", myDict)
         return myDict
 
     # len(path)>0
-    if not (isinstance(myDict, dict)):
+    if not isinstance(myDict, dict):
         raise KeyError(path[0])
     else:
         return _lookupPathInDict(myDict[path[0]], path[1:])
+
 
 def getLGPrefixedPath(pathPrefix, pathItems):
     fmt = "%s" + ('/%s' * len(pathItems))
     quotedPathItems = [urllib.quote(pathItem) for pathItem in pathItems]
     quotedPathItems.insert(0, pathPrefix)
     return fmt % tuple(quotedPathItems)
+
 
 class LookingGlassMixin(object):
 
@@ -179,7 +181,7 @@ class LookingGlassMixin(object):
 
         lgMap = self._getLGMap()
 
-        if (firstSegment in lgMap):
+        if firstSegment in lgMap:
             (mappingType, mappingTarget) = lgMap[firstSegment]
             log.debug("Delegation for pathItem '%s': %s:%s ",
                       firstSegment, mappingType, mappingTarget)
@@ -255,7 +257,7 @@ class LookingGlassMixin(object):
                               "and follow up getLookingGlassInfo(...'%s')",
                               secondSegment, targetCallback, restOfPath)
                     try:
-                        #TODO: catch errors
+                        # TODO: catch errors
                         target = targetCallback(secondSegment)
                         if target is None:
                             log.error("No delegation target for '%s' at '%s' ",
@@ -289,7 +291,7 @@ class LookingGlassMixin(object):
                                   }
             elif mappingType == SUBITEM:
                 log.debug("   Subitem => callback %s(...)", mappingTarget)
-                #TODO: catch errors
+                # TODO: catch errors
                 info[pathItem] = mappingTarget()
             elif mappingType == VALUE:
                 info[pathItem] = mappingTarget
@@ -314,10 +316,10 @@ class NoSuchLookingGlassObject(Exception):
 
     def __init__(self, pathPrefix, path):
         Exception.__init__(self)
-        assert(isinstance(pathPrefix, str))
+        assert isinstance(pathPrefix, str)
         self.pathPrefix = pathPrefix
 
-        assert(isinstance(path, str))
+        assert isinstance(path, str)
         self.path = path
 
     def __repr__(self):
@@ -329,17 +331,17 @@ class NoSuchLookingGlassObject(Exception):
 root = ""
 references = {}
 
+
 def setRoot(urlPrefix):
     global root
     root = urlPrefix
 
+
 def setReferencePath(reference, path):
-    global references
     references[reference] = path
 
+
 def getAbsolutePath(reference, pathPrefix, path=None):
-    global root
-    global references
     if path is None:
         path = []
     index = pathPrefix.find(root)
@@ -398,9 +400,9 @@ class LookingGlassLocalLogger(LookingGlassMixin):
             name = self.__module__  # + "." + self.__class__.__name__
             if appendToName:
                 name += "." + appendToName
-            elif (hasattr(self, 'instanceId')):
+            elif hasattr(self, 'instanceId'):
                 name += ".%d" % self.instanceId
-            elif (hasattr(self, 'name')):
+            elif hasattr(self, 'name'):
                 name += ".%s" % re.sub("[. ]", "-", self.name).lower()
             self.log = logging.getLogger(name)
             self.log.addHandler(self.lgLogHandler)

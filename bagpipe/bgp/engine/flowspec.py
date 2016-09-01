@@ -4,9 +4,6 @@ from exabgp.bgp.message.update.nlri.nlri import NLRI
 from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
 
-import logging
-log = logging.getLogger(__name__)
-
 
 @NLRI.register(AFI.ipv4, SAFI.flow_vpn, force=True)
 @NLRI.register(AFI.ipv6, SAFI.flow_vpn, force=True)
