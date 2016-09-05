@@ -33,7 +33,8 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
     dataplaneInstanceClass = None
-    encaps = [Encapsulation(Encapsulation.Type.DEFAULT)]
+    encaps = [Encapsulation(Encapsulation.Type.DEFAULT),
+              Encapsulation(Encapsulation.Type.MPLS)]
     makeB4BreakSupport = False
     ecmpSupport = False
 
