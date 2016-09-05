@@ -550,6 +550,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 except exc.RemotePEMACAddressNotFound as e:
                     self.log.error("An error occured during setupDataplaneFor"
                                    "RemoteEndpoint: %s", e)
+                    raise
 
                 # Map traffic to remote IP address as MPLS on ethX to remote
                 # router MAC address
