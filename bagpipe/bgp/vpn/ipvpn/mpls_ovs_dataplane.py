@@ -38,6 +38,8 @@ import bagpipe.bgp.common.exceptions as exc
 
 DEFAULT_OVS_BRIDGE = "br-mpls"
 DEFAULT_OVS_TABLE = 0
+DEFAULT_OVS_TABLE_POST_HASH = 1
+
 RULE_PRIORITY = 40000
 
 DEFAULT_ARPNS_IF_MTU = 9000
@@ -902,12 +904,16 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
             self.log.debug("No ovs_table_vrfs configured, will use default"
                            " table %s", DEFAULT_OVS_TABLE)
 
-        self.ovs_table_vrfs_lb = DEFAULT_OVS_TABLE
+        self.ovs_table_vrfs_lb = DEFAULT_OVS_TABLE_POST_HASH
         try:
             self.ovs_table_vrfs_lb = int(config["ovs_table_vrfs_lb"])
         except KeyError:
             self.log.debug("No ovs_table_vrfs_lb configured, will use default"
-                           " table %s", DEFAULT_OVS_TABLE)
+                           " table %s", DEFAULT_OVS_TABLE_POST_HASH)
+
+        if self.ovs_table_vrfs_lb == self.ovs_table_vrfs:
+            raise Exception("can't use a post hash table equal to the"
+                            " VRF lookup table")
 
         self.vxlanEncap = getBoolean(config.get("vxlan_encap", "False"))
 
