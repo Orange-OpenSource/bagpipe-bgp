@@ -11,6 +11,7 @@ function r_both {
 	echo "$hostA: ssh $hostA $*" >&2
 	ssh $hostA "$*"
 	[ $? -gt 0 ] && return $?
+        echo
 	echo "$hostB: ssh $hostB $*" >&2
 	ssh $hostB "$*"
 	return $?
