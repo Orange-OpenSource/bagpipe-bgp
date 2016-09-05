@@ -512,8 +512,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 Encapsulation(Encapsulation.Type.VXLAN) in encaps):
             return "set_field:%d->tunnel_id" % label
         else:
-            return ("push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" %
-                    label)
+            return ("push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" % label)
 
     def _matchOutputAction(self, remotePE, encaps):
         # Check if prefix is from a local VRF
@@ -823,6 +822,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     dataplaneInstanceClass = MPLSOVSVRFDataplane
     type = IPVPN
     ecmpSupport = True
+    requiredOVS = "2.5.0"
 
     def __init__(self, config, init=True):
         lg.LookingGlassLocalLogger.__init__(self)
@@ -836,6 +836,13 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         except:
             self.log.warning("Could not determine OVS release")
             self.ovsRelease = None
+
+        if (StrictVersion(self.ovsRelease) < StrictVersion(self.requiredOVS)):
+            self.log.warning("%s requires at least OVS %s"
+                             " (you are running %s)",
+                             self.__class__.__name__,
+                             self.requiredOVS,
+                             self.ovsRelease)
 
         self.config = config
 
