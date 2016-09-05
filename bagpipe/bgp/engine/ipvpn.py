@@ -26,9 +26,9 @@ from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 from exabgp.protocol.ip import IP
 
 
-def prefixToPackedIPMask(prefix):
-    ipString, mask = prefix.split("/")
-    return (IP.pton(ipString), int(mask))
+def prefix_to_packed_ip_mask(prefix):
+    ip_string, mask = prefix.split("/")
+    return (IP.pton(ip_string), int(mask))
 
 
 @NLRI.register(AFI.ipv4, SAFI.mpls_vpn, force=True)
@@ -45,7 +45,7 @@ class IPVPN(IPVPNNlri):
 
 
 def IPVPNRouteFactory(afi, prefix, label, rd, nexthop):
-    packedPrefix, mask = prefixToPackedIPMask(prefix)
+    packed_prefix, mask = prefix_to_packed_ip_mask(prefix)
 
-    return IPVPN.new(afi, SAFI(SAFI.mpls_vpn), packedPrefix, mask,
+    return IPVPN.new(afi, SAFI(SAFI.mpls_vpn), packed_prefix, mask,
                      Labels([label], True), rd, nexthop)

@@ -26,8 +26,8 @@ from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import EventSource
 
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.common.utils import getBoolean
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common.utils import get_boolean
+from bagpipe.bgp.common import log_decorator
 
 from exabgp.bgp.message.update.nlri.rtc import RTC
 from exabgp.reactor.protocol import AFI, SAFI
@@ -50,20 +50,20 @@ class Manager(EventSource, lg.LookingGlassMixin):
         self.config = _config
 
         # RTC is defaults to being enabled
-        self.config['enable_rtc'] = getBoolean(self.config.get('enable_rtc',
+        self.config['enable_rtc'] = get_boolean(self.config.get('enable_rtc',
                                                                True))
 
         if self.config['enable_rtc']:
-            firstLocalSubscriberCallback = self.rtcAdvertisementForSub
-            lastLocalSubscriberCallback = self.rtcWithdrawalForSub
+            first_local_subscriber_callback = self.rtc_advertisement_for_sub
+            last_local_subscriber_callback = self.rtc_withdrawal_for_sub
         else:
-            firstLocalSubscriberCallback = None
-            lastLocalSubscriberCallback = None
+            first_local_subscriber_callback = None
+            last_local_subscriber_callback = None
 
-        self.routeTableManager = RouteTableManager(
-            firstLocalSubscriberCallback, lastLocalSubscriberCallback)
+        self.rtm = RouteTableManager(first_local_subscriber_callback,
+                                     last_local_subscriber_callback)
 
-        self.routeTableManager.start()
+        self.rtm.start()
 
         if 'local_address' not in self.config:
             raise Exception("config needs a local_address")
@@ -79,87 +79,85 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
         self.peers = {}
         if self.config['peers']:
-            peersAddresses = [x.strip() for x in
+            peers_addresses = [x.strip() for x in
                               self.config['peers'].strip().split(",")]
-            for peerAddress in peersAddresses:
-                log.debug("Creating a peer worker for %s", peerAddress)
-                peerWorker = ExaBGPPeerWorker(self, peerAddress, self.config)
-                self.peers[peerAddress] = peerWorker
-                peerWorker.start()
+            for peer_address in peers_addresses:
+                log.debug("Creating a peer worker for %s", peer_address)
+                peer_worker = ExaBGPPeerWorker(self, peer_address, self.config)
+                self.peers[peer_address] = peer_worker
+                peer_worker.start()
 
-        self.trackedSubs = dict()
-
-        # we need a .name since we'll masquerade as a routeEntry source
+        # we need a .name since we'll masquerade as a route_entry source
         self.name = "BGPManager"
 
-        EventSource.__init__(self, self.routeTableManager)
+        EventSource.__init__(self, self.rtm)
 
     def __repr__(self):
         return self.__class__.__name__
 
-    @logDecorator.log
+    @log_decorator.log
     def stop(self):
         for peer in self.peers.itervalues():
             peer.stop()
-        self.routeTableManager.stop()
+        self.rtm.stop()
         for peer in self.peers.itervalues():
             peer.join()
-        self.routeTableManager.join()
+        self.rtm.join()
 
-    def getLocalAddress(self):
+    def get_local_address(self):
         try:
             return self.config['local_address']
         except KeyError:
-            log.error("BGPManager config has no localAddress defined")
+            log.error("BGPManager config has no local_address defined")
             return "0.0.0.0"
 
-    @logDecorator.log
-    def rtcAdvertisementForSub(self, sub):
+    @log_decorator.log
+    def rtc_advertisement_for_sub(self, sub):
         if sub.safi in RTC_SAFIS:
             event = RouteEvent(RouteEvent.ADVERTISE,
-                               self._subscription2RTCRouteEntry(sub),
+                               self._subscription_2_rtc_route_entry(sub),
                                self)
             log.debug("Based on subscription => synthesized RTC %s", event)
-            self.routeTableManager.enqueue(event)
+            self.rtm.enqueue(event)
 
-    @logDecorator.log
-    def rtcWithdrawalForSub(self, sub):
+    @log_decorator.log
+    def rtc_withdrawal_for_sub(self, sub):
         if sub.safi in RTC_SAFIS:
             event = RouteEvent(RouteEvent.WITHDRAW,
-                               self._subscription2RTCRouteEntry(sub),
+                               self._subscription_2_rtc_route_entry(sub),
                                self)
             log.debug("Based on unsubscription => synthesized withdraw"
                       " for RTC %s", event)
-            self.routeTableManager.enqueue(event)
+            self.rtm.enqueue(event)
 
-    def _subscription2RTCRouteEntry(self, subscription):
+    def _subscription_2_rtc_route_entry(self, subscription):
 
         nlri = RTC.new(AFI(AFI.ipv4), SAFI(SAFI.rtc),
                        self.config['my_as'],
-                       subscription.routeTarget,
-                       IP.create(self.getLocalAddress()))
+                       subscription.route_target,
+                       IP.create(self.get_local_address()))
 
-        routeEntry = RouteEntry(nlri)
+        route_entry = RouteEntry(nlri)
 
-        return routeEntry
+        return route_entry
 
     # Looking Glass Functions ###################
 
-    def getLGMap(self):
+    def get_lg_map(self):
         return {"peers":   (lg.COLLECTION,
-                            (self.getLGPeerList, self.getLGPeerPathItem)),
-                "routes":  (lg.FORWARD, self.routeTableManager),
-                "workers": (lg.FORWARD, self.routeTableManager), }
+                            (self.get_lg_peer_list, self.get_lg_peer_path_item)),
+                "routes":  (lg.FORWARD, self.rtm),
+                "workers": (lg.FORWARD, self.rtm), }
 
-    def getEstablishedPeersCount(self):
+    def get_established_peers_count(self):
         return reduce(lambda count, peer: count +
                       (isinstance(peer, BGPPeerWorker) and
-                       peer.isEstablished()),
+                       peer.is_established()),
                       self.peers.itervalues(), 0)
 
-    def getLGPeerList(self):
-        return [{"id": peer.peerAddress,
+    def get_lg_peer_list(self):
+        return [{"id": peer.peer_address,
                  "state": peer.fsm.state} for peer in self.peers.itervalues()]
 
-    def getLGPeerPathItem(self, pathItem):
-        return self.peers[pathItem]
+    def get_lg_peer_path_item(self, path_item):
+        return self.peers[path_item]

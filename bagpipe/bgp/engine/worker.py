@@ -33,6 +33,7 @@ from bagpipe.bgp.common import looking_glass as lg
 
 log = logging.getLogger(__name__)
 
+STOP_EVENT = "STOP_EVENT"
 
 class Worker(EventSource, lg.LookingGlassMixin):
 
@@ -41,23 +42,21 @@ class Worker(EventSource, lg.LookingGlassMixin):
 
     These objects will:
     * use _subscribe(...) and _unsubscribe(...) to subscribe to routing events
-    * will specialize _onEvent(event) to react to received events
+    * will specialize _on_event(event) to react to received events
 
     They also inherit from EventSource to publish events
     """
 
-    stopEvent = object()
-
-    def __init__(self, bgpManager, workerName):
-        self.bgpManager = bgpManager
-        self.routeTableManager = bgpManager.routeTableManager
+    def __init__(self, bgp_manager, worker_name):
+        self.bgp_manager = bgp_manager
+        self.rtm = bgp_manager.rtm
         self._queue = Queue()
-        self._pleaseStop = Event()
+        self._please_stop = Event()
 
-        self.name = workerName
+        self.name = worker_name
         assert self.name is not None
 
-        EventSource.__init__(self, self.routeTableManager)
+        EventSource.__init__(self, self.rtm)
 
         # private data for RouteTableManager
         self._rtm_matches = set()
@@ -68,18 +67,18 @@ class Worker(EventSource, lg.LookingGlassMixin):
         """
         Stop this worker.
 
-        Set the _pleaseStop internal event to stop the event processor loop
+        Set the _please_stop internal event to stop the event processor loop
         and indicate to the route table manager that this worker is stopped.
         Then call _stopped() to let a subclass implement any further work.
         """
         log.info("Stop worker %s", self)
-        self._pleaseStop.set()
-        self._queue.put(Worker.stopEvent)
+        self._please_stop.set()
+        self.enqueue(STOP_EVENT)
         self._cleanup()
         self._stopped()
 
     def _cleanup(self):
-        self.routeTableManager.enqueue(WorkerCleanupEvent(self))
+        self.rtm.enqueue(WorkerCleanupEvent(self))
 
     def _stopped(self):
         """
@@ -87,34 +86,34 @@ class Worker(EventSource, lg.LookingGlassMixin):
         Worker class)
         """
 
-    def _eventQueueProcessorLoop(self):
+    def _event_queue_processor_loop(self):
         """
         Main loop where the worker consumes events.
         """
-        while not self._pleaseStop.isSet():
+        while not self._please_stop.isSet():
             # log.debug("%s worker waiting on queue",self.name )
             event = self._dequeue()
 
-            if event == Worker.stopEvent:
-                log.debug("StopEvent, breaking queue processor loop")
-                self._pleaseStop.set()
+            if event == STOP_EVENT:
+                log.debug("Stop event, breaking queue processor loop")
+                self._please_stop.set()
                 break
 
-            # log.debug("%s worker calling _onEvent for %s", self.name, event)
+            # log.debug("%s worker calling _on_event for %s", self.name, event)
             try:
-                self._onEvent(event)
+                self._on_event(event)
             except Exception as e:
-                log.error("Exception raised on subclass._onEvent: %s", e)
+                log.error("Exception raised on subclass._on_event: %s", e)
                 log.error("%s", traceback.format_exc())
 
     def run(self):
-        self._eventQueueProcessorLoop()
+        self._event_queue_processor_loop()
 
-    def _onEvent(self, event):
+    def _on_event(self, event):
         """
         This method is implemented by subclasses to react to routing events.
         """
-        log.debug("Worker %s _onEvent: %s", self.name, event)
+        log.debug("Worker %s _on_event: %s", self.name, event)
         raise NotImplementedError
 
     def _dequeue(self):
@@ -128,14 +127,14 @@ class Worker(EventSource, lg.LookingGlassMixin):
     def _subscribe(self, afi, safi, rt=None):
         subobj = Subscription(afi, safi, rt, self)
         log.info("Subscribe: %s ", subobj)
-        self.routeTableManager.enqueue(subobj)
+        self.rtm.enqueue(subobj)
 
     def _unsubscribe(self, afi, safi, rt=None):
         subobj = Unsubscription(afi, safi, rt, self)
         log.info("Unsubscribe: %s ", subobj)
-        self.routeTableManager.enqueue(subobj)
+        self.rtm.enqueue(subobj)
 
-    def getSubscriptions(self):
+    def get_subscriptions(self):
         return sorted(self._rtm_matches)
 
     def __repr__(self):
@@ -143,12 +142,12 @@ class Worker(EventSource, lg.LookingGlassMixin):
 
     # Looking glass ###
 
-    def getLookingGlassLocalInfo(self, pathPrefix):
+    def get_log_local_info(self, path_prefix):
         return {
             "name": self.name,
             "internals": {
                 "event queue length": self._queue.qsize(),
                 "subscriptions":
-                    [repr(sub) for sub in self.getSubscriptions()],
+                    [repr(sub) for sub in self.get_subscriptions()],
             }
         }

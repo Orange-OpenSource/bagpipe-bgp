@@ -71,7 +71,7 @@ class TestEngineObjects(TestCase):
 
     # Tests on EVPN NLRIs
 
-    def test100_EVPNMACHashEqual(self):
+    def test_100_evpn_mac_hash_equal(self):
         '''
         Two indistinct EVPN NLRI should
         hash to the same value, and be equal
@@ -94,7 +94,7 @@ class TestEngineObjects(TestCase):
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
 
-    def test101_EVPNHashEqual_somefieldsvary(self):
+    def test_101_evpn_hash_equal_somefieldsvary(self):
         '''
         Two EVPN MAC NLRIs differing by their ESI or label or RD,
         or nexthop, but otherwise identical should hash to the same value,
@@ -167,7 +167,7 @@ class TestEngineObjects(TestCase):
 
     # tests on attributes
 
-    def test4_SameNLRIDistinctAttributes(self):
+    def test_4_same_nlri_distinct_attributes(self):
         '''
         Two routes with same NLRI but distinct attributes should
         not be equal
@@ -185,7 +185,7 @@ class TestEngineObjects(TestCase):
 
         self.assertNotEqual(entry1, entry2)
 
-    def test5_SameNLRISameAttributes(self):
+    def test_5_same_nlri_same_attributes(self):
         '''
         Two routes with same NLRI but and same attributes should
         hash to the same values and be equal.
@@ -204,7 +204,7 @@ class TestEngineObjects(TestCase):
         self.assertEqual(hash(entry1), hash(entry2))
         self.assertEqual(entry1, entry2)
 
-    def test6_SameNLRISameAttributesOrderMultivalued(self):
+    def test_6_same_nlri_same_attributes_order_multivalued(self):
         '''
         Two routes with same NLRI but and same attributes should
         hash to the same values and be equal, *even if* for a said
@@ -214,18 +214,18 @@ class TestEngineObjects(TestCase):
         nlri = NLRI1
 
         atts1 = Attributes()
-        eComs1 = ExtendedCommunities()
-        eComs1.communities.append(RouteTarget(64512, 1))
-        eComs1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        eComs1.communities.append(RouteTarget(64512, 2))
-        atts1.add(eComs1)
+        ecoms1 = ExtendedCommunities()
+        ecoms1.communities.append(RouteTarget(64512, 1))
+        ecoms1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        ecoms1.communities.append(RouteTarget(64512, 2))
+        atts1.add(ecoms1)
 
         atts2 = Attributes()
-        eComs2 = ExtendedCommunities()
-        eComs2.communities.append(RouteTarget(64512, 2))
-        eComs2.communities.append(RouteTarget(64512, 1))
-        eComs2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        atts2.add(eComs2)
+        ecoms2 = ExtendedCommunities()
+        ecoms2.communities.append(RouteTarget(64512, 2))
+        ecoms2.communities.append(RouteTarget(64512, 1))
+        ecoms2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        atts2.add(ecoms2)
 
         entry1 = RouteEntry(nlri, None, atts1)
 
@@ -234,28 +234,28 @@ class TestEngineObjects(TestCase):
         self.assertEqual(hash(entry1), hash(entry2))
         self.assertEqual(entry1, entry2)
 
-    def test8_RouteEntrySetRTs(self):
+    def test_8_route_entry_set_rts(self):
         atts = Attributes()
-        eComs = ExtendedCommunities()
-        eComs.communities.append(RouteTarget(64512, 1))
-        eComs.communities.append(RouteTarget(64512, 2))
-        eComs.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        ecoms = ExtendedCommunities()
+        ecoms.communities.append(RouteTarget(64512, 1))
+        ecoms.communities.append(RouteTarget(64512, 2))
+        ecoms.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
         atts.add(LocalPreference(20))
-        atts.add(eComs)
+        atts.add(ecoms)
 
         entry = RouteEntry(NLRI1, None, atts)
 
-        # check that the routeEntry object has the RTs we wanted
-        self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
-        self.assertIn(RouteTarget(64512, 2), entry.routeTargets)
+        # check that the route_entry object has the RTs we wanted
+        self.assertIn(RouteTarget(64512, 1), entry.route_targets)
+        self.assertIn(RouteTarget(64512, 2), entry.route_targets)
 
         # modify the route targets
-        entry.setRouteTargets([RouteTarget(64512, 3), RouteTarget(64512, 1)])
+        entry.set_route_targets([RouteTarget(64512, 3), RouteTarget(64512, 1)])
 
         # check that the new RTs have replaced the old ones
-        self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
-        self.assertIn(RouteTarget(64512, 3), entry.routeTargets)
-        self.assertNotIn(RouteTarget(64512, 2), entry.routeTargets)
+        self.assertIn(RouteTarget(64512, 1), entry.route_targets)
+        self.assertIn(RouteTarget(64512, 3), entry.route_targets)
+        self.assertNotIn(RouteTarget(64512, 2), entry.route_targets)
 
         # also need to check the RTs in the attributes
         ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
@@ -266,41 +266,41 @@ class TestEngineObjects(TestCase):
         # check that other communities were preserved
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
 
-    def test9_RouteEntryRTsAsInitParam(self):
+    def test_9_route_entry_rts_as_init_param(self):
         atts = Attributes()
-        eComs = ExtendedCommunities()
-        eComs.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        ecoms = ExtendedCommunities()
+        ecoms.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
         atts.add(LocalPreference(20))
-        atts.add(eComs)
+        atts.add(ecoms)
 
         rts = [RouteTarget(64512, 1), RouteTarget(64512, 2)]
 
         entry = RouteEntry(NLRI1, rts, atts)
 
-        self.assertIn(RouteTarget(64512, 1), entry.routeTargets)
-        self.assertIn(RouteTarget(64512, 2), entry.routeTargets)
+        self.assertIn(RouteTarget(64512, 1), entry.route_targets)
+        self.assertIn(RouteTarget(64512, 2), entry.route_targets)
 
         ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
         self.assertIn(RouteTarget(64512, 1), ecoms)
         self.assertIn(RouteTarget(64512, 2), ecoms)
         self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
 
-    def test10_Ecoms(self):
-        eComs1 = ExtendedCommunities()
-        eComs1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+    def test_10_ecoms(self):
+        ecoms1 = ExtendedCommunities()
+        ecoms1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
         atts1 = Attributes()
-        atts1.add(eComs1)
+        atts1.add(ecoms1)
 
-        eComs2 = ExtendedCommunities()
-        eComs2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        eComs2.communities.append(RouteTarget(64512, 1))
+        ecoms2 = ExtendedCommunities()
+        ecoms2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        ecoms2.communities.append(RouteTarget(64512, 1))
         atts2 = Attributes()
-        atts2.add(eComs2)
+        atts2.add(ecoms2)
 
         self.assertFalse(atts1.sameValuesAs(atts2))
         self.assertFalse(atts2.sameValuesAs(atts1))
 
-    def test11_RTs(self):
+    def test_11_rts(self):
         rt1a = RouteTarget(64512, 1)
         rt1b = RouteTarget(64512, 1)
 
@@ -321,6 +321,3 @@ class TestEngineObjects(TestCase):
         # self.assertEqual(set([rt1a]), set([rt2]))
         self.assertEqual(1, len(set([rt1a]).intersection(set([rt1b]))))
         # self.assertEqual(1, len(set([rt2]).intersection(set([rt1b]))))
-
-    def test12_RC(self):
-        pass

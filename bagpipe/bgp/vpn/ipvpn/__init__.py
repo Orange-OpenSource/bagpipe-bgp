@@ -16,7 +16,7 @@
 # limitations under the License.
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 
@@ -64,210 +64,212 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
     afi = AFI(AFI.ipv4)
     safi = SAFI(SAFI.mpls_vpn)
 
-    @logDecorator.log
+    @log_decorator.log
     def __init__(self, *args, **kwargs):
         VPNInstance.__init__(self, *args, **kwargs)
         self.readvertised = set()
 
-    def _nlriFrom(self, prefix, label, rd):
+    def _nlri_from(self, prefix, label, rd):
         assert rd is not None
 
         return IPVPNRouteFactory(self.afi, prefix, label, rd,
-                                 self.dataplaneDriver.getLocalAddress())
+                                 self.dataplane_driver.get_local_address())
 
-    def generateVifBGPRoute(self, macAdress, ipPrefix, prefixLen, label, rd):
+    def generate_vif_bgp_route(self, mac_address, ip_prefix, plen, label, rd):
         # Generate BGP route and advertise it...
-        nlri = self._nlriFrom("%s/%s" % (ipPrefix, prefixLen), label, rd)
+        nlri = self._nlri_from("%s/%s" % (ip_prefix, plen), label, rd)
 
         return RouteEntry(nlri)
 
-    def _getLocalLabels(self):
-        for portData in self.macAddress2LocalPortData.itervalues():
-            yield portData['label']
+    def _get_local_labels(self):
+        for port_data in self.mac_2_localport_data.itervalues():
+            yield port_data['label']
 
     def _imported(self, route):
-        return len(set(route.routeTargets).intersection(set(self.importRTs))
+        return len(set(route.route_targets).intersection(set(self.import_rts))
                    ) > 0
 
-    def _toReadvertise(self, route):
+    def _to_readvertise(self, route):
         # Only re-advertise IP VPN routes (e.g. not Flowspec routes)
         if not isinstance(route.nlri, IPVPNNlri):
             return False
 
-        rtRecords = route.extendedCommunities(RTRecord)
-        self.log.debug("RTRecords: %s (readvertiseToRTs:%s)",
-                       rtRecords,
-                       self.readvertiseToRTs)
+        rt_records = route.extended_communities(RTRecord)
+        self.log.debug("RTRecords: %s (readvertise_to_rts:%s)",
+                       rt_records,
+                       self.readvertise_to_rts)
 
         readvertise_targets_as_records = [RTRecord.from_rt(rt)
-                                          for rt in self.readvertiseToRTs]
+                                          for rt in self.readvertise_to_rts]
 
-        if self.attractTraffic:
+        if self.attract_traffic:
             readvertise_targets_as_records += [RTRecord.from_rt(rt)
-                                               for rt in self.attractRTs]
+                                               for rt in self.attract_rts]
 
-        if set(readvertise_targets_as_records).intersection(set(rtRecords)):
+        if set(readvertise_targets_as_records).intersection(set(rt_records)):
             self.log.debug("not to re-advertise because one of the readvertise"
                            " or attract-redirect RTs is in RTRecords: %s",
                            set(readvertise_targets_as_records)
-                           .intersection(set(rtRecords)))
+                           .intersection(set(rt_records)))
             return False
 
         return len(
-            set(route.routeTargets).intersection(set(self.readvertiseFromRTs))
+            set(route.route_targets).intersection(set(self.readvertise_from_rts))
             ) > 0
 
-    def _routeForReAdvertisement(self, route, label, rd, lbConsistentHashOrder,
-                                 doDefault=False):
-        prefix = "0.0.0.0/0" if doDefault else route.nlri.cidr.prefix()
+    def _route_for_readvertisement(self, route, label, rd,
+                                   lb_consistent_hash_order,
+                                   do_default=False):
+        prefix = "0.0.0.0/0" if do_default else route.nlri.cidr.prefix()
 
-        nlri = self._nlriFrom(prefix, label, rd)
+        nlri = self._nlri_from(prefix, label, rd)
 
         attributes = Attributes()
 
         # new RTRecord = original RTRecord (if any) + orig RTs
-        origRTRecords = route.extendedCommunities(RTRecord)
-        rts = route.extendedCommunities(RTExtCom)
-        addRTRecords = [RTRecord.from_rt(rt) for rt in rts]
+        orig_rtrecords = route.extended_communities(RTRecord)
+        rts = route.extended_communities(RTExtCom)
+        add_rtrecords = [RTRecord.from_rt(rt) for rt in rts]
 
-        finalRTRecords = list(set(origRTRecords) | set(addRTRecords))
+        final_rtrecords = list(set(orig_rtrecords) | set(add_rtrecords))
 
-        eComs = self._genEncapExtendedCommunities()
-        eComs.communities += finalRTRecords
-        eComs.communities.append(
-            ConsistentHashSortOrder(lbConsistentHashOrder))
-        attributes.add(eComs)
+        ecoms = self._gen_encap_extended_communities()
+        ecoms.communities += final_rtrecords
+        ecoms.communities.append(
+            ConsistentHashSortOrder(lb_consistent_hash_order))
+        attributes.add(ecoms)
 
-        entry = RouteEntry(nlri, self.readvertiseToRTs, attributes)
+        entry = RouteEntry(nlri, self.readvertise_to_rts, attributes)
         self.log.debug("RouteEntry for (re-)advertisement: %s", entry)
         return entry
 
-    @logDecorator.log
-    def _routeForRedirectPrefix(self, prefix):
-        prefixClassifier = self.attractClassifier.copy()
-        prefixClassifier['destinationPrefix'] = prefix
+    @log_decorator.log
+    def _route_for_redirect_prefix(self, prefix):
+        prefix_classifier = utils.dict_camelcase_to_underscore(
+            self.attract_classifier)
+        prefix_classifier['destination_prefix'] = prefix
 
-        trafficClassifier = TrafficClassifier(**prefixClassifier)
+        traffic_classifier = TrafficClassifier(**prefix_classifier)
         self.log.debug("Advertising prefix %s for redirection based on "
-                       "traffic classifier %s", prefix, trafficClassifier)
-        rules = trafficClassifier.mapTrafficClassifier2RedirectRules()
+                       "traffic classifier %s", prefix, traffic_classifier)
+        rules = traffic_classifier.map_traffic_classifier_2_redirect_rules()
 
-        return self.synthesizeRedirectBGPRoute(rules)
+        return self.synthesize_redirect_bgp_route(rules)
 
-    def _advertiseRouteOrDefault(self, route, label, rd,
-                                 lbConsistentHashOrder=0):
-        if self.attractTraffic:
+    def _advertise_route_or_default(self, route, label, rd,
+                                    lb_consistent_hash_order=0):
+        if self.attract_traffic:
             self.log.debug("Advertising default route from VRF %d to "
-                           "redirection VRF", self.instanceId)
+                           "redirection VRF", self.instance_id)
 
-        routeEntry = self._routeForReAdvertisement(
-            route, label, rd, lbConsistentHashOrder,
-            doDefault=self.attractTraffic
+        route_entry = self._route_for_readvertisement(
+            route, label, rd, lb_consistent_hash_order,
+            do_default=self.attract_traffic
         )
-        self._advertiseRoute(routeEntry)
+        self._advertise_route(route_entry)
 
-    def _withdrawRouteOrDefault(self, route, label, rd,
-                                lbConsistentHashOrder=0):
-        if self.attractTraffic:
+    def _withdraw_route_or_default(self, route, label, rd,
+                                   lb_consistent_hash_order=0):
+        if self.attract_traffic:
             self.log.debug("Stop advertising default route from VRF to "
                            "redirection VRF")
 
-        routeEntry = self._routeForReAdvertisement(
-            route, label, rd, lbConsistentHashOrder,
-            doDefault=self.attractTraffic
+        route_entry = self._route_for_readvertisement(
+            route, label, rd, lb_consistent_hash_order,
+            do_default=self.attract_traffic
         )
-        self._withdrawRoute(routeEntry)
+        self._withdraw_route(route_entry)
 
-    @logDecorator.log
+    @log_decorator.log
     def _readvertise(self, route):
         nlri = route.nlri
 
         self.log.debug("Start re-advertising %s from VRF", nlri.cidr.prefix())
-        for _, endpoints in self.localPort2Endpoints.iteritems():
+        for _, endpoints in self.localport_2_endpoints.iteritems():
             for endpoint in endpoints:
-                portData = self.macAddress2LocalPortData[endpoint['mac']]
-                label = portData['label']
-                lbConsistentHashOrder = portData['lbConsistentHashOrder']
-                rd = self.endpoint2RD[(endpoint['mac'], endpoint['ip'])]
+                port_data = self.mac_2_localport_data[endpoint['mac']]
+                label = port_data['label']
+                lb_consistent_hash_order = port_data['lb_consistent_hash_order']
+                rd = self.endpoint_2_rd[(endpoint['mac'], endpoint['ip'])]
                 self.log.debug("Start re-advertising %s from VRF, with label "
                                "%s and route distinguisher %s",
                                nlri, label, rd)
                 # need a distinct RD for each route...
-                self._advertiseRouteOrDefault(route, label, rd,
-                                              lbConsistentHashOrder)
+                self._advertise_route_or_default(route, label, rd,
+                                              lb_consistent_hash_order)
 
-        if self.attractTraffic:
-            flowEntry = self._routeForRedirectPrefix(nlri.cidr.prefix())
-            self._advertiseRoute(flowEntry)
+        if self.attract_traffic:
+            flow_route = self._route_for_redirect_prefix(nlri.cidr.prefix())
+            self._advertise_route(flow_route)
 
         self.readvertised.add(route)
 
-    @logDecorator.log
-    def _readvertiseStop(self, route):
+    @log_decorator.log
+    def _readvertise_stop(self, route):
         nlri = route.nlri
 
         self.log.debug("Stop re-advertising %s from VRF", nlri.cidr.prefix())
-        for _, endpoints in self.localPort2Endpoints.iteritems():
+        for _, endpoints in self.localport_2_endpoints.iteritems():
             for endpoint in endpoints:
-                portData = self.macAddress2LocalPortData[endpoint['mac']]
-                label = portData['label']
-                lbConsistentHashOrder = portData['lbConsistentHashOrder']
-                rd = self.endpoint2RD[(endpoint['mac'], endpoint['ip'])]
+                port_data = self.mac_2_localport_data[endpoint['mac']]
+                label = port_data['label']
+                lb_consistent_hash_order = port_data['lb_consistent_hash_order']
+                rd = self.endpoint_2_rd[(endpoint['mac'], endpoint['ip'])]
                 self.log.debug("Stop re-advertising %s from VRF, with label "
                                "%s and route distinguisher %s",
                                nlri, label, rd)
-                self._withdrawRouteOrDefault(route, label, rd,
-                                             lbConsistentHashOrder)
+                self._withdraw_route_or_default(route, label, rd,
+                                             lb_consistent_hash_order)
 
-        if self.attractTraffic:
-            flowEntry = self._routeForRedirectPrefix(nlri.cidr.prefix())
-            self._withdrawRoute(flowEntry)
+        if self.attract_traffic:
+            flow_route = self._route_for_redirect_prefix(nlri.cidr.prefix())
+            self._withdraw_route(flow_route)
 
         self.readvertised.remove(route)
 
-    def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
-                   advertiseSubnet=False,
-                   lbConsistentHashOrder=0):
-        VPNInstance.vifPlugged(self, macAddress, ipAddressPrefix, localPort,
-                               advertiseSubnet, lbConsistentHashOrder)
+    def vif_plugged(self, mac_address, ip_address_prefix, localport,
+                   advertise_subnet=False,
+                   lb_consistent_hash_order=0):
+        VPNInstance.vif_plugged(self, mac_address, ip_address_prefix, localport,
+                               advertise_subnet, lb_consistent_hash_order)
 
-        label = self.macAddress2LocalPortData[macAddress]['label']
-        rd = self.endpoint2RD[(macAddress, ipAddressPrefix)]
+        label = self.mac_2_localport_data[mac_address]['label']
+        rd = self.endpoint_2_rd[(mac_address, ip_address_prefix)]
         for route in self.readvertised:
             self.log.debug("Re-advertising %s with this port as next hop",
                            route.nlri)
-            self._advertiseRouteOrDefault(route, label, rd,
-                                          lbConsistentHashOrder)
+            self._advertise_route_or_default(route, label, rd,
+                                          lb_consistent_hash_order)
 
-            if self.attractTraffic:
-                flowEntry = self._routeForRedirectPrefix(
+            if self.attract_traffic:
+                flow_route = self._route_for_redirect_prefix(
                     route.nlri.cidr.prefix())
-                self._advertiseRoute(flowEntry)
+                self._advertise_route(flow_route)
 
-    def vifUnplugged(self, macAddress, ipAddressPrefix,
-                     advertiseSubnet=False,
-                     lbConsistentHashOrder=0):
-        label = self.macAddress2LocalPortData[macAddress]['label']
-        lbConsistentHashOrder = (self.macAddress2LocalPortData[macAddress]
-                                 ["lbConsistentHashOrder"])
-        rd = self.endpoint2RD[(macAddress, ipAddressPrefix)]
+    def vif_unplugged(self, mac_address, ip_address_prefix,
+                     advertise_subnet=False,
+                     lb_consistent_hash_order=0):
+        label = self.mac_2_localport_data[mac_address]['label']
+        lb_consistent_hash_order = (self.mac_2_localport_data[mac_address]
+                                 ["lb_consistent_hash_order"])
+        rd = self.endpoint_2_rd[(mac_address, ip_address_prefix)]
         for route in self.readvertised:
             self.log.debug("Stop re-advertising %s with this port as next hop",
                            route.nlri)
-            self._withdrawRouteOrDefault(route, label, rd,
-                                         lbConsistentHashOrder)
+            self._withdraw_route_or_default(route, label, rd,
+                                         lb_consistent_hash_order)
 
-            if self.attractTraffic and self.hasOnlyOneEndpoint():
-                flowEntry = self._routeForRedirectPrefix(
+            if self.attract_traffic and self.has_only_one_endpoint():
+                flow_route = self._route_for_redirect_prefix(
                     route.nlri.cidr.prefix())
-                self._withdrawRoute(flowEntry)
+                self._withdraw_route(flow_route)
 
-        VPNInstance.vifUnplugged(self, macAddress, ipAddressPrefix,
-                                 advertiseSubnet, lbConsistentHashOrder)
+        VPNInstance.vif_unplugged(self, mac_address, ip_address_prefix,
+                                  advertise_subnet, lb_consistent_hash_order)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
-    def _route2trackedEntry(self, route):
+    def _route_2_tracked_entry(self, route):
         if isinstance(route.nlri, IPVPNNlri):
             return route.nlri.cidr.prefix()
         elif isinstance(route.nlri, Flow):
@@ -278,111 +280,112 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             return None
 
     @utils.synchronized
-    @logDecorator.log
-    def _newBestRoute(self, entry, newRoute):
+    @log_decorator.log
+    def _new_best_route(self, entry, new_route):
 
-        if isinstance(newRoute.nlri, Flow):
-            if len(newRoute.extendedCommunities(TrafficRedirect)) == 1:
-                trafficRedirect = newRoute.extendedCommunities(TrafficRedirect)
-                redirectRT = "%s:%s" % (trafficRedirect[0].asn,
-                                        trafficRedirect[0].target)
+        if isinstance(new_route.nlri, Flow):
+            if len(new_route.extended_communities(TrafficRedirect)) == 1:
+                traffic_redirect = new_route.extended_communities(TrafficRedirect)
+                redirect_rt = "%s:%s" % (traffic_redirect[0].asn,
+                                        traffic_redirect[0].target)
 
-                self.startRedirectTraffic(redirectRT, newRoute.nlri.rules)
+                self.start_redirect_traffic(redirect_rt, new_route.nlri.rules)
             else:
                 self.log.warning("FlowSpec action or multiple traffic redirect"
                                  " actions not supported: %s",
-                                 newRoute.extendedCommunities())
+                                 new_route.extended_communities())
         else:
             prefix = entry
 
             if self.readvertise:
                 # check if this is a route we need to re-advertise
-                self.log.debug("route RTs: %s", newRoute.routeTargets)
-                self.log.debug("readv from RTs: %s", self.readvertiseFromRTs)
-                if self._toReadvertise(newRoute):
+                self.log.debug("route RTs: %s", new_route.route_targets)
+                self.log.debug("readv from RTs: %s", self.readvertise_from_rts)
+                if self._to_readvertise(new_route):
                     self.log.debug("Need to re-advertise %s", prefix)
-                    self._readvertise(newRoute)
+                    self._readvertise(new_route)
 
-            if not self._imported(newRoute):
+            if not self._imported(new_route):
                 self.log.debug("No need to setup dataplane for:%s",
                                prefix)
                 return
 
-            encaps = self._checkEncaps(newRoute)
+            encaps = self._check_encaps(new_route)
             if not encaps:
                 return
 
-            assert len(newRoute.nlri.labels.labels) == 1
+            assert len(new_route.nlri.labels.labels) == 1
 
-            lbConsistentHashOrder = 0
-            if newRoute.extendedCommunities(ConsistentHashSortOrder):
-                lbConsistentHashOrder = newRoute.extendedCommunities(
+            lb_consistent_hash_order = 0
+            if new_route.extended_communities(ConsistentHashSortOrder):
+                lb_consistent_hash_order = new_route.extended_communities(
                     ConsistentHashSortOrder)[0].order
 
-            self.dataplane.setupDataplaneForRemoteEndpoint(
-                prefix, newRoute.nexthop,
-                newRoute.nlri.labels.labels[0], newRoute.nlri, encaps,
-                lbConsistentHashOrder)
+            self.dataplane.setup_dataplane_for_remote_endpoint(
+                prefix, new_route.nexthop,
+                new_route.nlri.labels.labels[0], new_route.nlri, encaps,
+                lb_consistent_hash_order)
 
     @utils.synchronized
-    @logDecorator.log
-    def _bestRouteRemoved(self, entry, oldRoute, last):
+    @log_decorator.log
+    def _best_route_removed(self, entry, old_route, last):
 
-        if isinstance(oldRoute.nlri, Flow):
-            if len(oldRoute.extendedCommunities(TrafficRedirect)) == 1:
+        if isinstance(old_route.nlri, Flow):
+            if len(old_route.extended_communities(TrafficRedirect)) == 1:
                 if last:
-                    trafficRedirect = oldRoute.extendedCommunities(
+                    traffic_redirect = old_route.extended_communities(
                         TrafficRedirect)
-                    redirectRT = "%s:%s" % (trafficRedirect[0].asn,
-                                            trafficRedirect[0].target)
+                    redirect_rt = "%s:%s" % (traffic_redirect[0].asn,
+                                             traffic_redirect[0].target)
 
-                    self.stopRedirectTraffic(redirectRT, oldRoute.nlri.rules)
+                    self.stop_redirect_traffic(redirect_rt,
+                                               old_route.nlri.rules)
             else:
                 self.log.warning("FlowSpec action or multiple traffic redirect"
                                  " actions not supported: %s",
-                                 oldRoute.extendedCommunities())
+                                 old_route.extended_communities())
         else:
             prefix = entry
 
             if self.readvertise and last:
                 # check if this is a route we were re-advertising
-                if self._toReadvertise(oldRoute):
+                if self._to_readvertise(old_route):
                     self.log.debug("Need to stop re-advertising %s", prefix)
-                    self._readvertiseStop(oldRoute)
+                    self._readvertise_stop(old_route)
 
-            if not self._imported(oldRoute):
+            if not self._imported(old_route):
                 self.log.debug("No need to update dataplane for:%s",
                                prefix)
                 return
 
-            if self._skipRouteRemoval(last):
+            if self._skip_route_removal(last):
                 self.log.debug("Skipping removal of non-last route because "
                                "dataplane does not want it")
                 return
 
-            encaps = self._checkEncaps(oldRoute)
+            encaps = self._check_encaps(old_route)
             if not encaps:
                 return
 
-            assert len(oldRoute.nlri.labels.labels) == 1
+            assert len(old_route.nlri.labels.labels) == 1
 
-            lbConsistentHashOrder = 0
-            if oldRoute.extendedCommunities(ConsistentHashSortOrder):
-                lbConsistentHashOrder = oldRoute.extendedCommunities(
+            lb_consistent_hash_order = 0
+            if old_route.extended_communities(ConsistentHashSortOrder):
+                lb_consistent_hash_order = old_route.extended_communities(
                     ConsistentHashSortOrder)[0].order
 
-            self.dataplane.removeDataplaneForRemoteEndpoint(
-                prefix, oldRoute.nexthop,
-                oldRoute.nlri.labels.labels[0], oldRoute.nlri, encaps,
-                lbConsistentHashOrder)
+            self.dataplane.remove_dataplane_for_remote_endpoint(
+                prefix, old_route.nexthop,
+                old_route.nlri.labels.labels[0], old_route.nlri, encaps,
+                lb_consistent_hash_order)
 
     # Looking glass ###
 
-    def getLGMap(self):
+    def get_lg_map(self):
         return {
-            "readvertised": (lg.SUBTREE, self.getLGReadvertisedRoutes),
+            "readvertised": (lg.SUBTREE, self.get_lg_readvertised_routes),
         }
 
-    def getLGReadvertisedRoutes(self, pathPrefix):
-        return [route.getLookingGlassLocalInfo(pathPrefix)
+    def get_lg_readvertised_routes(self, path_prefix):
+        return [route.get_log_local_info(path_prefix)
                 for route in self.readvertised]

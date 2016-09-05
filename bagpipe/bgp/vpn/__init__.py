@@ -30,8 +30,8 @@ import bagpipe.bgp.common.exceptions as exc
 
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common import logDecorator
-from bagpipe.bgp.common.run_command import runCommand
+from bagpipe.bgp.common import log_decorator
+from bagpipe.bgp.common.run_command import run_command
 
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.rd_allocator import RDAllocator
@@ -43,7 +43,7 @@ from exabgp.bgp.message.update.attribute.community.extended \
 log = logging.getLogger(__name__)
 
 
-def convertRouteTargets(orig_list):
+def convert_route_targets(orig_list):
     assert isinstance(orig_list, list)
     list_ = []
     for rt in orig_list:
@@ -68,28 +68,28 @@ class VPNManager(lg.LookingGlassMixin):
                   EVPN: EVI
                   }
 
-    @logDecorator.log
-    def __init__(self, bgpManager, dataplaneDrivers):
+    @log_decorator.log
+    def __init__(self, bgp_manager, dataplane_drivers):
         '''
-        dataplaneDrivers is a dict from vpn type to each dataplane driver,
+        dataplane_drivers is a dict from vpn type to each dataplane driver,
         e.g. { "ipvpn": driverA, "evpn": driverB }
         '''
 
-        self.bgpManager = bgpManager
+        self.bgp_manager = bgp_manager
 
-        self.dataplaneDrivers = dataplaneDrivers
+        self.dataplane_drivers = dataplane_drivers
 
         # Init VPN instance identifiers
-        self.instanceId = 1
+        self.instance_id = 1
 
         # VPN instance dict
-        self.vpnInstances = {}
+        self.vpn_instances = {}
 
         logging.debug("Creating label allocator")
-        self.labelAllocator = LabelAllocator()
+        self.label_allocator = LabelAllocator()
 
         logging.debug("Creating route distinguisher allocator")
-        self.rdAllocator = RDAllocator(self.bgpManager.getLocalAddress())
+        self.rd_allocator = RDAllocator(self.bgp_manager.get_local_address())
 
         # dict containing info how an ipvpn is plugged
         # from an evpn  (keys: ipvpn instances)
@@ -97,131 +97,131 @@ class VPNManager(lg.LookingGlassMixin):
 
         self.lock = Lock()
 
-    def _formatIpAddressPrefix(self, ipAddress):
-        if re.match(r'([12]?\d?\d\.){3}[12]?\d?\d\/[123]?\d', ipAddress):
-            return ipAddress
-        elif re.match(r'([12]?\d?\d\.){3}[12]?\d?\d', ipAddress):
-            return ipAddress + "/32"
+    def _format_ip_address_prefix(self, ip_address):
+        if re.match(r'([12]?\d?\d\.){3}[12]?\d?\d\/[123]?\d', ip_address):
+            return ip_address
+        elif re.match(r'([12]?\d?\d\.){3}[12]?\d?\d', ip_address):
+            return ip_address + "/32"
         else:
             raise exc.MalformedIPAddress
 
     @utils.synchronized
-    def getInstanceId(self):
-        iid = self.instanceId
-        self.instanceId += 1
+    def get_instance_id(self):
+        iid = self.instance_id
+        self.instance_id += 1
         return iid
 
-    @logDecorator.logInfo
-    def _attach_evpn2ipvpn(self, localPort, ipvpnInstance):
-        """ Assuming localPort indicates no real interface but only
+    @log_decorator.log_info
+    def _attach_evpn_2_ipvpn(self, localport, ipvpn_instance):
+        """ Assuming localport indicates no real interface but only
         an EVPN, this method will create a pair of twin interfaces, one
         to plug in the EVPN, the other to plug in the IPVPN.
 
-        The localPort dict will be modified so that the 'linuxif' indicates
+        The localport dict will be modified so that the 'linuxif' indicates
         the name of the interface to plug in the IPVPN.
 
         The EVPN instance will be notified so that it forwards traffic
         destinated to the gateway on the interface toward the IPVPN.
         """
-        assert 'evpn' in localPort
+        assert 'evpn' in localport
 
-        if 'id' not in localPort['evpn']:
+        if 'id' not in localport['evpn']:
             raise Exception("Missing parameter 'id' :an external EVPN "
                             "instance id must be specified for an EVPN "
                             "attachment")
 
         try:
-            evpn = self.vpnInstances[localPort['evpn']['id']]
+            evpn = self.vpn_instances[localport['evpn']['id']]
         except:
             raise Exception("The specified evpn instance does not exist (%s)"
-                            % localPort['evpn'])
+                            % localport['evpn'])
 
         if evpn.type != EVPN:
             raise Exception("The specified instance to plug is not an evpn"
                             "instance (is %s instead)" % evpn.type)
 
-        if ipvpnInstance in self._evpn_ipvpn_ifs:
+        if ipvpn_instance in self._evpn_ipvpn_ifs:
             (evpn_if, ipvpn_if, evpn, managed) = \
-                self._evpn_ipvpn_ifs[ipvpnInstance]
+                self._evpn_ipvpn_ifs[ipvpn_instance]
 
-            if not localPort['evpn']['id'] == evpn.externalInstanceId:
+            if not localport['evpn']['id'] == evpn.external_instance_id:
                 raise Exception('Trying to plug into an IPVPN a new E-VPN '
                                 'while one is already plugged in')
             else:
                 # do nothing
                 log.warning('Trying to plug an E-VPN into an IPVPN, but it was'
                             ' already done')
-                localPort['linuxif'] = ipvpn_if
+                localport['linuxif'] = ipvpn_if
                 return
 
         #  detect if this evpn is already plugged into an IPVPN
-        if evpn.hasGatewayPort():
+        if evpn.has_gateway_port():
             raise Exception("Trying to plug E-VPN into an IPVPN, but this EVPN"
                             " is already plugged into an IPVPN")
 
-        if 'linuxif' in localPort and localPort['linuxif']:
+        if 'linuxif' in localport and localport['linuxif']:
             raise Exception("Cannot specify an attachment with both a linuxif "
                             "and an evpn")
 
-        if 'ovs_port_name' in localPort['evpn']:
+        if 'ovs_port_name' in localport['evpn']:
             try:
-                assert localPort['ovs']['plugged']
-                assert(localPort['ovs']['port_name'] or
-                       localPort['ovs']['port_number'])
+                assert localport['ovs']['plugged']
+                assert(localport['ovs']['port_name'] or
+                       localport['ovs']['port_number'])
             except:
                 raise Exception("Using ovs_port_name in EVPN/IPVPN attachment"
                                 " requires specifying the corresponding OVS"
                                 " port, which must also be pre-plugged")
 
-            evpn_if = localPort['evpn']['ovs_port_name']
+            evpn_if = localport['evpn']['ovs_port_name']
 
             # we assume in this case that the E-VPN interface is already
             # plugged into the E-VPN bridge
             managed = False
         else:
             evpn_if = "evpn%d-ipvpn%d" % (
-                evpn.instanceId, ipvpnInstance.instanceId)
+                evpn.instance_id, ipvpn_instance.instance_id)
             ipvpn_if = "ipvpn%d-evpn%d" % (
-                ipvpnInstance.instanceId, evpn.instanceId)
+                ipvpn_instance.instance_id, evpn.instance_id)
 
             # FIXME: do it only if not existing already...
             log.info("Creating veth pair %s %s ", evpn_if, ipvpn_if)
 
             # delete the interfaces if they exist already
-            runCommand(log, "ip link delete %s" %
-                       evpn_if, acceptableReturnCodes=[0, 1])
-            runCommand(log, "ip link delete %s" %
-                       ipvpn_if, acceptableReturnCodes=[0, 1])
+            run_command(log, "ip link delete %s" %
+                       evpn_if, acceptable_return_codes=[0, 1])
+            run_command(log, "ip link delete %s" %
+                       ipvpn_if, acceptable_return_codes=[0, 1])
 
-            runCommand(log, "ip link add %s type veth peer name %s mtu 65535" %
+            run_command(log, "ip link add %s type veth peer name %s mtu 65535" %
                        (evpn_if, ipvpn_if))
 
-            runCommand(log, "ip link set %s up" % evpn_if)
-            runCommand(log, "ip link set %s up" % ipvpn_if)
+            run_command(log, "ip link set %s up" % evpn_if)
+            run_command(log, "ip link set %s up" % ipvpn_if)
             managed = True
 
-        localPort['linuxif'] = ipvpn_if
+        localport['linuxif'] = ipvpn_if
 
-        evpn.setGatewayPort(evpn_if, ipvpnInstance)
+        evpn.set_gateway_port(evpn_if, ipvpn_instance)
 
-        self._evpn_ipvpn_ifs[ipvpnInstance] = (
+        self._evpn_ipvpn_ifs[ipvpn_instance] = (
             evpn_if, ipvpn_if, evpn, managed)
 
-    @logDecorator.logInfo
-    def _detach_evpn2ipvpn(self, ipvpn):
+    @log_decorator.log_info
+    def _detach_evpn_2_ipvpn(self, ipvpn):
         """
-        Symmetric to _attach_evpn2ipvpn
+        Symmetric to _attach_evpn_2_ipvpn
         """
-        (evpn_if, ipvpn_if, evpnInstance,
+        (evpn_if, ipvpn_if, evpn_instance,
          managed) = self._evpn_ipvpn_ifs[ipvpn]
 
-        if not ipvpn.hasEnpoint(ipvpn_if):
+        if not ipvpn.has_enpoint(ipvpn_if):
             # TODO: check that this evpn instance is still up and running
-            evpnInstance.gatewayPortDown(evpn_if)
+            evpn_instance.gateway_port_down(evpn_if)
 
             # cleanup veth pair
             if managed:
-                runCommand(log, "ip link delete %s" % evpn_if)
+                run_command(log, "ip link delete %s" % evpn_if)
 
             del self._evpn_ipvpn_ifs[ipvpn]
 
@@ -230,230 +230,232 @@ class VPNManager(lg.LookingGlassMixin):
 
         # cleanup veth pair
         if managed:
-            runCommand(log, "ovs-vsctl del-port %s" % ipvpn_if)
-            runCommand(log, "ip link delete %s" % ipvpn_if)
+            run_command(log, "ovs-vsctl del-port %s" % ipvpn_if)
+            run_command(log, "ip link delete %s" % ipvpn_if)
 
-    @logDecorator.logInfo
-    def _createVPNInstance(self, externalInstanceId, instanceType, importRTs,
-                           exportRTs, gatewayIP, mask, readvertise,
-                           attractTraffic, **kwargs):
-        instanceId = self.getInstanceId()
+    @log_decorator.log_info
+    def _create_vpn_instance(self, external_instance_id, instance_type, import_rts,
+                           export_rts, gateway_ip, mask, readvertise,
+                           attract_traffic, **kwargs):
         log.info("Create and start new VPN instance %d for external "
-                 "instance identifier %s", instanceId, externalInstanceId)
+                 "instance identifier %s", self.get_instance_id(),
+                 external_instance_id)
         try:
-            vpnInstanceFactory = VPNManager.type2class[instanceType]
+            vpn_instance_factory = VPNManager.type2class[instance_type]
         except KeyError:
-            log.error("Unsupported instanceType for VPNInstance: %s",
-                      instanceType)
-            raise Exception("Unsupported instance type: %s" % instanceType)
+            log.error("Unsupported instance_type for VPNInstance: %s",
+                      instance_type)
+            raise Exception("Unsupported instance type: %s" % instance_type)
 
         try:
-            dataplaneDriver = self.dataplaneDrivers[instanceType]
+            dataplane_driver = self.dataplane_drivers[instance_type]
         except KeyError:
             log.error("No dataplane driver for VPN type %s",
-                      instanceType)
+                      instance_type)
             raise Exception("No dataplane driver for VPN type %s" %
-                            instanceType)
+                            instance_type)
 
-        vpnInstance = vpnInstanceFactory(
-            self, dataplaneDriver,
-            externalInstanceId, instanceId, importRTs, exportRTs,
-            gatewayIP, mask, readvertise, attractTraffic, **kwargs)
+        vpn_instance = vpn_instance_factory(
+            self, dataplane_driver,
+            external_instance_id, self.get_instance_id(), import_rts, export_rts,
+            gateway_ip, mask, readvertise, attract_traffic, **kwargs)
 
         # Update VPN instance list
-        self.vpnInstances[externalInstanceId] = vpnInstance
+        self.vpn_instances[external_instance_id] = vpn_instance
 
-        vpnInstance.start()
+        vpn_instance.start()
 
-        return vpnInstance
+        return vpn_instance
 
-    @logDecorator.logInfo
-    def plugVifToVPN(self, externalInstanceId, instanceType, importRTs,
-                     exportRTs, macAddress, ipAddress, gatewayIP,
-                     localPort, linuxbr, advertiseSubnet, readvertise,
-                     attractTraffic, lbConsistentHashOrder):
+    @log_decorator.log_info
+    def plug_vif_to_vpn(self, external_instance_id, instance_type, import_rts,
+                     export_rts, mac_address, ip_address, gateway_ip,
+                     localport, linuxbr, advertise_subnet, readvertise,
+                     attract_traffic, lb_consistent_hash_order):
 
         # Verify and format IP address with prefix if necessary
         try:
-            ipAddressPrefix = self._formatIpAddressPrefix(ipAddress)
+            ip_address_prefix = self._format_ip_address_prefix(ip_address)
         except exc.MalformedIPAddress:
             raise
 
         # Convert route target string to RouteTarget dictionary
-        importRTs = convertRouteTargets(importRTs)
-        exportRTs = convertRouteTargets(exportRTs)
+        import_rts = convert_route_targets(import_rts)
+        export_rts = convert_route_targets(export_rts)
 
         if readvertise:
             try:
-                readvertise = {k: convertRouteTargets(readvertise[k])
+                readvertise = {k: convert_route_targets(readvertise[k])
                                for k in ['from_rt', 'to_rt']}
             except KeyError as e:
                 raise Exception("Wrong 'readvertise' parameters: %s" % e)
 
-        if attractTraffic:
+        if attract_traffic:
             try:
-                attractTraffic['redirect_rts'] = (
-                    convertRouteTargets(attractTraffic['redirect_rts']))
+                attract_traffic['redirect_rts'] = (
+                    convert_route_targets(attract_traffic['redirect_rts']))
             except KeyError as e:
-                raise Exception("Wrong 'attractTraffic' parameters: %s" % e)
+                raise Exception("Wrong 'attract_traffic' parameters: %s" % e)
 
         # retrieve network mask
-        mask = int(ipAddressPrefix.split('/')[1])
+        mask = int(ip_address_prefix.split('/')[1])
 
         # Retrieve VPN instance or create new one if does not exist
         try:
-            vpnInstance = self.vpnInstances[externalInstanceId]
-            if vpnInstance.type != instanceType:
+            vpn_instance = self.vpn_instances[external_instance_id]
+            if vpn_instance.type != instance_type:
                 raise Exception("Trying to plug port on an existing instance "
                                 "of a different type (existing: %s, asked: %s)"
-                                % (vpnInstance.type, instanceType))
+                                % (vpn_instance.type, instance_type))
         except KeyError:
-            if instanceType == EVPN and linuxbr:
+            if instance_type == EVPN and linuxbr:
                 kwargs = {'linuxbr': linuxbr}
             else:
                 kwargs = {}
 
-            vpnInstance = self._createVPNInstance(
-                externalInstanceId, instanceType, importRTs, exportRTs,
-                gatewayIP, mask, readvertise, attractTraffic, **kwargs)
+            vpn_instance = self._create_vpn_instance(
+                external_instance_id, instance_type, import_rts, export_rts,
+                gateway_ip, mask, readvertise, attract_traffic, **kwargs)
 
         # Check if new route target import/export must be updated
-        if not ((set(vpnInstance.importRTs) == set(importRTs)) and
-                (set(vpnInstance.exportRTs) == set(exportRTs))):
-            vpnInstance.updateRouteTargets(importRTs, exportRTs)
+        if not ((set(vpn_instance.import_rts) == set(import_rts)) and
+                (set(vpn_instance.export_rts) == set(export_rts))):
+            vpn_instance.update_route_targets(import_rts, export_rts)
 
-        if instanceType == IPVPN and 'evpn' in localPort:
+        if instance_type == IPVPN and 'evpn' in localport:
             # special processing for the case where what we plug into
             # the ipvpn is not an existing interface but an interface
             # to create, connected to an existing evpn instance
-            self._attach_evpn2ipvpn(localPort, vpnInstance)
+            self._attach_evpn_2_ipvpn(localport, vpn_instance)
 
         # Plug VIF to VPN instance
-        vpnInstance.vifPlugged(macAddress, ipAddressPrefix, localPort,
-                               advertiseSubnet, lbConsistentHashOrder)
+        vpn_instance.vif_plugged(mac_address, ip_address_prefix, localport,
+                               advertise_subnet, lb_consistent_hash_order)
 
-    @logDecorator.logInfo
-    def unplugVifFromVPN(self, externalInstanceId, macAddress, ipAddress,
-                         localPort, readvertise):
+    @log_decorator.log_info
+    def unplug_vif_from_vpn(self, external_instance_id, mac_address, ip_address,
+                            localport, readvertise):
 
         # Verify and format IP address with prefix if necessary
         try:
-            ipAddressPrefix = self._formatIpAddressPrefix(ipAddress)
+            ip_address_prefix = self._format_ip_address_prefix(ip_address)
         except exc.MalformedIPAddress:
             raise
 
         # Retrieve VPN instance or raise exception if does not exist
         try:
-            vpnInstance = self.vpnInstances[externalInstanceId]
+            vpn_instance = self.vpn_instances[external_instance_id]
         except KeyError:
             log.error("Try to unplug VIF from non existing VPN instance %s",
-                      externalInstanceId)
-            raise exc.VPNNotFound(externalInstanceId)
+                      external_instance_id)
+            raise exc.VPNNotFound(external_instance_id)
 
         # Unplug VIF from VPN instance
-        vpnInstance.vifUnplugged(macAddress, ipAddressPrefix, readvertise)
+        vpn_instance.vif_unplugged(mac_address, ip_address_prefix, readvertise)
 
-        if vpnInstance.type == IPVPN and 'evpn' in localPort:
-            self._detach_evpn2ipvpn(vpnInstance)
+        if vpn_instance.type == IPVPN and 'evpn' in localport:
+            self._detach_evpn_2_ipvpn(vpn_instance)
 
-        if vpnInstance.stopIfEmpty():
-            del self.vpnInstances[externalInstanceId]
+        if vpn_instance.stop_if_empty():
+            del self.vpn_instances[external_instance_id]
 
-    @logDecorator.logInfo
-    def redirectTrafficToVPN(self, redirectedId, redirectedType, redirectRT):
-        externalInstanceId = "redirect-to-%s-%s" % (redirectedType,
-                                                    redirectRT.replace(":", "_"))
+    @log_decorator.log_info
+    def redirect_traffic_to_vpn(self, redirected_id,
+                                redirected_type, redirect_rt):
+        external_instance_id = "redirect-to-%s-%s" % (redirected_type,
+                                                      redirect_rt.replace(":",
+                                                                          "_"))
 
         log.info("Retrieve VPN instance %s for traffic redirection to route "
-                 "target %s", externalInstanceId, redirectRT)
+                 "target %s", external_instance_id, redirect_rt)
 
-        # Retrieve redirect VPN instance or create new one if does not exist
+        # Retrieve a redirect VPN instance or create a new one if none exists
+        # yet
         try:
-            redirectInstance = self.vpnInstances[externalInstanceId]
-            if redirectInstance.type != redirectedType:
+            redirect_instance = self.vpn_instances[external_instance_id]
+            if redirect_instance.type != redirected_type:
                 raise Exception("Trying to redirect traffic to an existing "
                                 "instance of a different type (existing: %s, "
                                 "asked: %s)"
-                                % (redirectInstance.type, redirectedType))
+                                % (redirect_instance.type, redirected_type))
         except KeyError:
             # Convert route target string to RouteTarget dictionary
-            importRTs = convertRouteTargets([redirectRT])
+            import_rts = convert_route_targets([redirect_rt])
 
-            redirectInstance = self._createVPNInstance(
-                externalInstanceId, redirectedType, importRTs, [],
+            redirect_instance = self._create_vpn_instance(
+                external_instance_id, redirected_type, import_rts, [],
                 "127.0.0.1", "24", None, None)
 
-        redirectInstance.registerRedirectedInstance(redirectedId)
+        redirect_instance.register_redirected_instance(redirected_id)
 
-        return redirectInstance
+        return redirect_instance
 
-    @logDecorator.logInfo
-    def stopRedirectTrafficToVPN(self, redirectedId, redirectedType,
-                                 redirectRT):
-        externalInstanceId = "redirect-to-%s-%s" % (redirectedType,
-                                                    redirectRT.replace(":", "_"))
-
-        # Retrieve redirect VPN instance or raise exception if does not exist
+    @log_decorator.log_info
+    def stop_redirect_to_vpn(self, redirected_id,
+                            redirected_type, redirect_rt):
+        #TODO: factor out in a function:
+        external_instance_id = "redirect-to-%s-%s" % (redirected_type,
+                                                      redirect_rt.replace(":",
+                                                                          "_"))
+        #TODO: factor out in a function:
         try:
-            redirectInstance = self.vpnInstances[externalInstanceId]
+            redirect_instance = self.vpn_instances[external_instance_id]
         except KeyError:
             log.error("Try to stop traffic redirection to non existing VPN "
-                      "instance %s", externalInstanceId)
-            raise exc.VPNNotFound(externalInstanceId)
+                      "instance %s", external_instance_id)
+            raise exc.VPNNotFound(external_instance_id)
 
-        redirectInstance.unregisterRedirectedInstance(redirectedId)
+        redirect_instance.unregister_redirected_instance(redirected_id)
 
-        if redirectInstance.stopIfNoRedirectedInstance():
-            del self.vpnInstances[externalInstanceId]
+        if redirect_instance.stop_if_no_redirected_instance():
+            del self.vpn_instances[external_instance_id]
 
-    @logDecorator.logInfo
+    @log_decorator.log_info
     def stop(self):
-        for vpnInstance in self.vpnInstances.itervalues():
-            vpnInstance.stop()
+        for vpn_instance in self.vpn_instances.itervalues():
+            vpn_instance.stop()
             # Cleanup veth pair
-            if (vpnInstance.type == IPVPN and
-                    self._evpn_ipvpn_ifs.get(vpnInstance)):
-                self._cleanup_evpn2ipvpn(vpnInstance)
-        for vpnInstance in self.vpnInstances.itervalues():
-            vpnInstance.join()
+            if (vpn_instance.type == IPVPN and
+                    self._evpn_ipvpn_ifs.get(vpn_instance)):
+                self._cleanup_evpn2ipvpn(vpn_instance)
+        for vpn_instance in self.vpn_instances.itervalues():
+            vpn_instance.join()
 
     # Looking Glass hooks ####
 
-    def getLGMap(self):
+    def get_lg_map(self):
         class DataplaneLGHook(lg.LookingGlassMixin):
 
-            def __init__(self, vpnManager):
-                self.vpnManager = vpnManager
+            def __init__(self, vpn_manager):
+                self.vpn_manager = vpn_manager
 
-            def getLGMap(self):
+            def get_lg_map(self):
                 return {
                     "drivers": (lg.COLLECTION, (
-                        self.vpnManager.getLGDataplanesList,
-                        self.vpnManager.getLGDataplaneFromPathItem)),
-                    "ids": (lg.DELEGATE, self.vpnManager.labelAllocator)
+                        self.vpn_manager.get_lg_dataplanes_list,
+                        self.vpn_manager.get_lg_dataplane_from_path_item)),
+                    "ids": (lg.DELEGATE, self.vpn_manager.label_allocator)
                 }
-        dataplaneHook = DataplaneLGHook(self)
+        dataplane_hook = DataplaneLGHook(self)
         return {
-            "instances": (lg.COLLECTION, (self.getLGVPNList,
-                                          self.getLGVPNFromPathItem)),
-            "dataplane": (lg.DELEGATE, dataplaneHook)
+            "instances": (lg.COLLECTION, (self.get_lg_vpn_list,
+                                          self.get_lg_vpn_from_path_item)),
+            "dataplane": (lg.DELEGATE, dataplane_hook)
         }
 
-    def getLGVPNList(self):
+    def get_lg_vpn_list(self):
         return [{"id": id,
                  "name": instance.name}
-                for (id, instance) in self.vpnInstances.iteritems()]
+                for (id, instance) in self.vpn_instances.iteritems()]
 
-    def getLGVPNFromPathItem(self, pathItem):
-        return self.vpnInstances[pathItem]
+    def get_lg_vpn_from_path_item(self, path_item):
+        return self.vpn_instances[path_item]
 
-    def getVPNInstancesCount(self):
-        return len(self.vpnInstances)
+    def get_vpn_instances_count(self):
+        return len(self.vpn_instances)
 
-    # LookingGLass ########
+    def get_lg_dataplanes_list(self):
+        return [{"id": i} for i in self.dataplane_drivers.iterkeys()]
 
-    def getLGDataplanesList(self):
-        return [{"id": i} for i in self.dataplaneDrivers.iterkeys()]
-
-    def getLGDataplaneFromPathItem(self, pathItem):
-        return self.dataplaneDrivers[pathItem]
+    def get_lg_dataplane_from_path_item(self, path_item):
+        return self.dataplane_drivers[path_item]

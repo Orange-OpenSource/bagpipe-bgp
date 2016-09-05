@@ -26,7 +26,7 @@ import logging
 
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.bgp_peer_worker import FSM
-from bagpipe.bgp.engine.bgp_peer_worker import KeepAliveReceived
+from bagpipe.bgp.engine.bgp_peer_worker import KEEP_ALIVE_RECEIVED
 from bagpipe.bgp.engine.bgp_peer_worker import InitiateConnectionException
 from bagpipe.bgp.engine.bgp_peer_worker import OpenWaitTimeout
 from bagpipe.bgp.engine.bgp_peer_worker import StoppedException
@@ -66,7 +66,7 @@ from exabgp.bgp.fsm import FSM as ExaFSM
 log = logging.getLogger(__name__)
 
 
-def setupExaBGPEnv():
+def setup_exabgp_env():
     # initialize ExaBGP config
     from exabgp.configuration.environment import environment
     import exabgp.configuration.setup  # initialises environment.configuration
@@ -86,7 +86,7 @@ def setupExaBGPEnv():
     env.log.packets = True
 
 
-TranslateExaBGPState = {ExaFSM.IDLE: FSM.Idle,
+TRANSLATE_EXABGP_STATE = {ExaFSM.IDLE: FSM.Idle,
                         ExaFSM.ACTIVE: FSM.Active,
                         ExaFSM.CONNECT: FSM.Connect,
                         ExaFSM.OPENSENT: FSM.OpenSent,
@@ -97,29 +97,29 @@ TranslateExaBGPState = {ExaFSM.IDLE: FSM.Idle,
 
 class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
-    enabledFamilies = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
+    enabled_families = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
                        # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
                        (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
                        (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn))]
 
-    def __init__(self, routeTableManager, peerAddress, config):
-        BGPPeerWorker.__init__(self, routeTableManager, peerAddress)
+    def __init__(self, route_table_manager, peer_address, config):
+        BGPPeerWorker.__init__(self, route_table_manager, peer_address)
 
         self.config = config
-        self.localAddress = self.config['local_address']
-        self.peerAddress = peerAddress
+        self.local_address = self.config['local_address']
+        self.peer_address = peer_address
 
         self.peer = None
 
         self.rtc_active = False
-        self._activeFamilies = []
+        self._active_families = []
 
     # hooks into BGPPeerWorker state changes
 
-    def _stopAndClean(self):
-        super(ExaBGPPeerWorker, self)._stopAndClean()
+    def _stop_and_clean(self):
+        super(ExaBGPPeerWorker, self)._stop_and_clean()
 
-        self._activeFamilies = []
+        self._active_families = []
 
         if self.peer is not None:
             self.log.info("Clearing peer")
@@ -128,8 +128,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             self.peer.stop()
             self.peer = None
 
-    def _toEstablished(self):
-        super(ExaBGPPeerWorker, self)._toEstablished()
+    def _to_established(self):
+        super(ExaBGPPeerWorker, self)._to_established()
 
         if self.rtc_active:
             self.log.debug("RTC active, subscribing to all RTC routes")
@@ -140,28 +140,28 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             self.log.debug("RTC inactive, subscribing to all active families")
             # if we don't use RTC with our peer, then we need to see events for
             # all routes of all active families, to be able to send them to him
-            for (afi, safi) in self._activeFamilies:
+            for (afi, safi) in self._active_families:
                 self._subscribe(afi, safi)
 
     # implementation of BGPPeerWorker abstract methods
 
-    def _initiateConnection(self):
+    def _initiate_connection(self):
         self.log.debug("Initiate ExaBGP connection to %s from %s",
-                       self.peerAddress, self.localAddress)
+                       self.peer_address, self.local_address)
 
         self.rtc_active = False
 
         neighbor = Neighbor()
-        neighbor.router_id = RouterID(self.localAddress)
+        neighbor.router_id = RouterID(self.local_address)
         neighbor.local_as = ASN(self.config['my_as'])
         neighbor.peer_as = ASN(self.config['peer_as'])
-        neighbor.local_address = IP.create(self.localAddress)
-        neighbor.md5_ip = IP.create(self.localAddress)
-        neighbor.peer_address = IP.create(self.peerAddress)
+        neighbor.local_address = IP.create(self.local_address)
+        neighbor.md5_ip = IP.create(self.local_address)
+        neighbor.peer_address = IP.create(self.peer_address)
         neighbor.hold_time = HoldTime(DEFAULT_HOLDTIME)
         neighbor.api = defaultdict(list)
 
-        for afi_safi in self.enabledFamilies:
+        for afi_safi in self.enabled_families:
             neighbor.add_family(afi_safi)
 
         if self.config['enable_rtc']:
@@ -172,7 +172,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
         try:
             for action in self.peer._connect():
-                self.fsm.state = TranslateExaBGPState[
+                self.fsm.state = TRANSLATE_EXABGP_STATE[
                     self.peer._outgoing.fsm.state]
 
                 if action == ACTION.LATER:
@@ -180,7 +180,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                 elif action == ACTION.NOW:
                     time.sleep(0.1)
 
-                if self.shouldStop:
+                if self.should_stop:
                     self.log.debug("We're closing, raise StoppedException")
                     raise StoppedException()
 
@@ -207,15 +207,15 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
         received_open = self.protocol.negotiated.received_open
 
-        self._setHoldTime(self.protocol.negotiated.holdtime)
+        self._set_hold_time(self.protocol.negotiated.holdtime)
 
         mp_capabilities = received_open.capabilities.get(
             Capability.CODE.MULTIPROTOCOL, [])
 
         # check that our peer advertized at least mpls_vpn and evpn
         # capabilities
-        self._activeFamilies = []
-        for (afi, safi) in (self.__class__.enabledFamilies +
+        self._active_families = []
+        for (afi, safi) in (self.__class__.enabled_families +
                             [(AFI(AFI.ipv4), SAFI(SAFI.rtc))]):
             if (afi, safi) not in mp_capabilities:
                 if (((afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc))) or
@@ -225,10 +225,10 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             else:
                 self.log.info(
                     "Family (%s,%s) successfully negotiated with peer %s",
-                    afi, safi, self.peerAddress)
-                self._activeFamilies.append((afi, safi))
+                    afi, safi, self.peer_address)
+                self._active_families.append((afi, safi))
 
-        if len(self._activeFamilies) == 0:
+        if len(self._active_families) == 0:
             self.log.error("No family was negotiated for VPN routes")
 
         self.rtc_active = False
@@ -236,13 +236,13 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         if self.config['enable_rtc']:
             if (AFI(AFI.ipv4), SAFI(SAFI.rtc)) in mp_capabilities:
                 self.log.info(
-                    "RTC successfully enabled with peer %s", self.peerAddress)
+                    "RTC successfully enabled with peer %s", self.peer_address)
                 self.rtc_active = True
             else:
                 self.log.warning(
                     "enable_rtc True but peer not configured for RTC")
 
-    def _receiveLoopFun(self):
+    def _receive_loop_fun(self):
 
         try:
             select.select([self.protocol.connection.io], [], [], 2)
@@ -275,7 +275,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                 raise Exception("Update received but not in Established state")
             # more below
         elif message.ID == KeepAlive.ID:
-            self.enqueue(KeepAliveReceived)
+            self.enqueue(KEEP_ALIVE_RECEIVED)
             self.log.debug("Received message: %s", message)
         else:
             self.log.warning("Received unexpected message: %s", message)
@@ -290,19 +290,19 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                     else:
                         raise Exception("should not be reached (action:%s)",
                                         nlri.action)
-                    self._processReceivedRoute(action, nlri,
+                    self._process_received_route(action, nlri,
                                                message.attributes)
         return 1
 
-    def _processReceivedRoute(self, action, nlri, attributes):
+    def _process_received_route(self, action, nlri, attributes):
         self.log.info("Received route: %s, %s", nlri, attributes)
 
-        routeEntry = RouteEntry(nlri, None, attributes)
+        route_entry = RouteEntry(nlri, None, attributes)
 
         if action == IN.ANNOUNCED:
-            self._advertiseRoute(routeEntry)
+            self._advertise_route(route_entry)
         elif action == IN.WITHDRAWN:
-            self._withdrawRoute(routeEntry)
+            self._withdraw_route(route_entry)
         else:
             raise Exception("unsupported action ??? (%s)" % action)
 
@@ -317,7 +317,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             # the semantic of RTC routes does not distinguish between AFI/SAFIs
             # if our peer subscribed to a Route Target, it means that we needs
             # to send him all routes of any AFI/SAFI carrying this RouteTarget.
-            for (afi, safi) in self._activeFamilies:
+            for (afi, safi) in self._active_families:
                 if (afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc)):
                     if action == IN.ANNOUNCED:
                         self._subscribe(afi, safi, nlri.rt)
@@ -329,7 +329,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
     def _send(self, data):
         # (error if state not the right one for sending updates)
         self.log.debug("Sending %d bytes on socket to peer %s",
-                       len(data), self.peerAddress)
+                       len(data), self.peer_address)
         try:
             for _ in self.protocol.connection.writer(data):
                 pass
@@ -337,12 +337,12 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             self.log.error("Was not able to send data: %s", e)
             self.log.warning("%s", traceback.format_exc())
 
-    def _keepAliveMessageData(self):
+    def _keep_alive_message_data(self):
         return KeepAlive().message()
 
-    def _updateForRouteEvent(self, event):
+    def _update_for_route_event(self, event):
         try:
-            r = Update([event.routeEntry.nlri], event.routeEntry.attributes)
+            r = Update([event.route_entry.nlri], event.route_entry.attributes)
             return ''.join(r.messages(self.protocol.negotiated))
         except Exception as e:
             self.log.error("Exception while generating message for "
@@ -352,13 +352,13 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
     # Looking Glass ###############
 
-    def getLookingGlassLocalInfo(self, pathPrefix):
+    def get_log_local_info(self, path_prefix):
         return {
-            "peeringAddresses": {"peerAddress":  self.peerAddress,
-                                 "localAddress": self.localAddress},
+            "peeringAddresses": {"peer_address":  self.peer_address,
+                                 "local_address": self.local_address},
             "as_info": {"local": self.config['my_as'],
                         "peer":  self.config['peer_as']},
             "rtc": {"active": self.rtc_active,
                     "enabled": self.config['enable_rtc']},
-            "active_families": [repr(f) for f in self._activeFamilies],
+            "active_families": [repr(f) for f in self._active_families],
         }

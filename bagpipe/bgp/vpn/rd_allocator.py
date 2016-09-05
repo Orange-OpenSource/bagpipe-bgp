@@ -42,7 +42,7 @@ class RDAllocator(lg.LookingGlassMixin):
         self.lock = Lock()
 
     @utils.synchronized
-    def getNewRD(self, description):
+    def get_new_rd(self, description):
 
         if self.current_id == MAX_RD_LOCAL_ID+1:
             log.error("All the %d possible local ids have been used at least "
@@ -67,5 +67,5 @@ class RDAllocator(lg.LookingGlassMixin):
             log.warn("Asked to release a non registered route distinguisher: "
                      "%s", rd)
 
-    def getLookingGlassLocalInfo(self, prefix):
+    def get_log_local_info(self, prefix):
         return self.rds

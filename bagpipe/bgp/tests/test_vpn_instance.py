@@ -27,7 +27,7 @@
    Tests are organized as follow :
    - testAx use cases to test endpoints plug with different combinations of MAC
      and IP addresses on a port
-   - testBx use cases to test enpoints plug with different combinations of MAC
+   - testBx use cases to test endpoints plug with different combinations of MAC
      and IP addresses on different ports
    - testCx use cases to test endpoints unplug with different combinations of
      MAC and IP addresses as the one plugged on a port
@@ -49,7 +49,7 @@ from bagpipe.bgp.tests import RT5
 from bagpipe.bgp.tests import NLRI1
 from bagpipe.bgp.tests import NH1
 from bagpipe.bgp.tests import BaseTestBagPipeBGP
-from bagpipe.bgp.tests import _routeTarget2String
+from bagpipe.bgp.tests import _rt_to_string
 
 from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import RouteEvent
@@ -101,50 +101,50 @@ RTRecord3 = RTRecord.from_rt(RT3)
 RTRecord4 = RTRecord.from_rt(RT4)
 
 
-def _extractNLRIFromCall(vpnInstance, method, callIndex=0):
-    calls = getattr(vpnInstance, method).call_args_list
-    return calls[callIndex][0][0].nlri
+def _extract_nlri_from_call(vpn_instance, method, call_index=0):
+    calls = getattr(vpn_instance, method).call_args_list
+    return calls[call_index][0][0].nlri
 
 
-def _extractRTFromCall(vpnInstance, method, callIndex=0):
-    calls = getattr(vpnInstance, method).call_args_list
-    return calls[callIndex][0][0].routeTargets
+def _extract_rt_from_call(vpn_instance, method, call_index=0):
+    calls = getattr(vpn_instance, method).call_args_list
+    return calls[call_index][0][0].route_targets
 
 
-def _extractRTRecordsFromCall(vpnInstance, method, callIndex=0):
-    calls = getattr(vpnInstance, method).call_args_list
-    route = calls[callIndex][0][0]
-    return route.extendedCommunities(RTRecord)
+def _extract_rtrec_from_call(vpn_instance, method, call_index=0):
+    calls = getattr(vpn_instance, method).call_args_list
+    route = calls[call_index][0][0]
+    return route.extended_communities(RTRecord)
 
 
-def _extractTrafficRedirectFromCall(vpnInstance, method, callIndex=0):
-    calls = getattr(vpnInstance, method).call_args_list
-    route = calls[callIndex][0][0]
-    for ecom in route.extendedCommunities(TrafficRedirect):
+def _extract_traffic_redirect_from_call(vpn_instance, method, call_index=0):
+    calls = getattr(vpn_instance, method).call_args_list
+    route = calls[call_index][0][0]
+    for ecom in route.extended_communities(TrafficRedirect):
         return RouteTarget(int(ecom.asn), int(ecom.target))
     return None
 
 
-def _extractTrafficClassifierFromCall(vpnInstance, method, callIndex=0):
-    calls = getattr(vpnInstance, method).call_args_list
-    trafficClassifier = TrafficClassifier()
-    trafficClassifier.mapRedirectRules2TrafficClassifier(
-        calls[callIndex][0][0].nlri.rules)
-    return trafficClassifier
+def _extract_traffic_classifier_from_call(vpn_instance, method, call_index=0):
+    calls = getattr(vpn_instance, method).call_args_list
+    traffic_classifier = TrafficClassifier()
+    traffic_classifier.map_redirect_rules_2_traffic_classifier(
+        calls[call_index][0][0].nlri.rules)
+    return traffic_classifier
 
 
 class TestableVPNInstance(VPNInstance):
 
-    def _bestRouteRemoved(self, entry, route):
+    def _best_route_removed(self, entry, route):
         pass
 
-    def _newBestRoute(self, entry, route, last):
+    def _new_best_route(self, entry, route, last):
         pass
 
-    def _route2trackedEntry(self, route):
+    def _route_2_tracked_entry(self, route):
         pass
 
-    def generateVifBGPRoute(self):
+    def generate_vif_bgp_route(self):
         pass
 
 
@@ -153,532 +153,534 @@ class TestVPNInstance(TestCase):
     def setUp(self):
         super(TestVPNInstance, self).setUp()
 
-        mockDataplane = Mock()
-        mockDataplane.vifPlugged = Mock()
-        mockDataplane.vifUnplugged = Mock()
+        mock_dataplane = Mock()
+        mock_dataplane.vif_plugged = Mock()
+        mock_dataplane.vif_unplugged = Mock()
 
-        mockDPDriver = Mock()
-        mockDPDriver.initializeDataplaneInstance.return_value = mockDataplane
+        mock_dp_driver = Mock()
+        mock_dp_driver.initialize_dataplane_instance.return_value = (
+            mock_dataplane
+        )
 
         VPNInstance.afi = AFI(AFI.ipv4)
         VPNInstance.safi = SAFI(SAFI.mpls_vpn)
-        self.vpnInstance = TestableVPNInstance(Mock(name='VPNManager'),
-                                               mockDPDriver, 1, 1,
+        self.vpn = TestableVPNInstance(Mock(name='VPNManager'),
+                                               mock_dp_driver, 1, 1,
                                                [RT1], [RT1], '10.0.0.1', 24,
                                                None, None)
-        self.vpnInstance.synthesizeVifBGPRoute = Mock(
+        self.vpn.synthesize_vif_bgp_route = Mock(
             return_value=RouteEntry(NLRI1, [RT1]))
-        self.vpnInstance._advertiseRoute = Mock()
-        self.vpnInstance._withdrawRoute = Mock()
-        self.vpnInstance._postFirstPlug = Mock()
-        self.vpnInstance.start()
+        self.vpn._advertise_route = Mock()
+        self.vpn._withdraw_route = Mock()
+        #self.vpn._postFirstPlug = Mock() ## TODO: unused ??
+        self.vpn.start()
 
     def tearDown(self):
         super(TestVPNInstance, self).tearDown()
-        self.vpnInstance.stop()
-        self.vpnInstance.join()
+        self.vpn.stop()
+        self.vpn.join()
 
-    def _get_ipAddress(self, ipAddressPrefix):
-        return ipAddressPrefix[0:ipAddressPrefix.find('/')]
+    def _get_ip_address(self, ip_address_prefix):
+        return ip_address_prefix[0:ip_address_prefix.find('/')]
 
-    def _validate_ipAddress2MacAddress_consistency(self, macAddress,
-                                                   ipAddress1,
-                                                   ipAddress2=None):
+    def _validate_ip_address_2_mac_address_consistency(self, mac_address,
+                                                   ip_address1,
+                                                   ip_address2=None):
         # Validate IP address -> MAC address consistency
-        self.assertIn(ipAddress1, self.vpnInstance.ipAddress2MacAddress)
+        self.assertIn(ip_address1, self.vpn.ip_address_2_mac)
 
-        if ipAddress2:
-            self.assertIn(ipAddress1, self.vpnInstance.ipAddress2MacAddress)
+        if ip_address2:
+            self.assertIn(ip_address1, self.vpn.ip_address_2_mac)
             self.assertEquals(
-                self.vpnInstance.ipAddress2MacAddress[ipAddress1],
-                self.vpnInstance.ipAddress2MacAddress[ipAddress2])
+                self.vpn.ip_address_2_mac[ip_address1],
+                self.vpn.ip_address_2_mac[ip_address2])
         else:
             self.assertIn(
-                macAddress, self.vpnInstance.ipAddress2MacAddress[ipAddress1])
+                mac_address, self.vpn.ip_address_2_mac[ip_address1])
 
-    def _validate_macAddress2LocalPortData_consistency(self, macAddress,
-                                                       localPort):
+    def _chk_mac_2_localport_data_consistency(self, mac_address,
+                                                       localport):
         # Validate MAC address -> Port informations consistency
-        self.assertIn(macAddress, self.vpnInstance.macAddress2LocalPortData)
+        self.assertIn(mac_address, self.vpn.mac_2_localport_data)
 
-        port_info = self.vpnInstance.macAddress2LocalPortData[
-            macAddress]['port_info']
-        self.assertEquals(localPort['linuxif'], port_info['linuxif'])
+        port_info = self.vpn.mac_2_localport_data[
+            mac_address]['port_info']
+        self.assertEquals(localport['linuxif'], port_info['linuxif'])
 
-    def _validate_localPort2Endpoints_consistency(self, length, localPort,
+    def _validate_localport_2_endpoints_consistency(self, length, localport,
                                                   endpoints):
         # Validate Port -> Endpoint (MAC, IP) tuple consistency
         self.assertEqual(
             length,
-            len(self.vpnInstance.localPort2Endpoints[localPort['linuxif']]))
+            len(self.vpn.localport_2_endpoints[localport['linuxif']]))
 
-        for macAddress, ipAddress in endpoints:
-            endpoint_info = {'mac': macAddress, 'ip': ipAddress}
+        for mac_address, ip_address in endpoints:
+            endpoint_info = {'mac': mac_address, 'ip': ip_address}
             self.assertIn(
                 endpoint_info,
-                self.vpnInstance.localPort2Endpoints[localPort['linuxif']])
+                self.vpn.localport_2_endpoints[localport['linuxif']])
 
-    def testA1_plugEnpointTwiceSamePort(self):
+    def test_a1_plug_endpoint_twice_same_port(self):
         '''
         Plug one endpoint with same MAC and IP addresses twice on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
-        self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_plugged.call_count,
                          "Port must be plugged only once on dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Route for port must be advertised only once")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
 
-    def testA2_plugMultipleEnpointsWithSameIPSamePort(self):
+    def test_a2_plug_multiple_endpoints_with_same_ip_same_port(self):
         '''
-        Plug multiple enpoints with different MAC addresses and same IP
+        Plug multiple endpoints with different MAC addresses and same IP
         address on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
         # An IP address correspond to only one MAC address, exception must be
         # raised
         self.assertRaises(Exception,
-                          self.vpnInstance.vifPlugged,
+                          self.vpn.vif_plugged,
                           MAC2, IP1, LOCAL_PORT1)
-        self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_plugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Only route for first port must be advertised")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
-        self.assertNotIn(MAC2, self.vpnInstance.macAddress2LocalPortData)
+        self.assertNotIn(MAC2, self.vpn.mac_2_localport_data)
 
-    def testA3_plugMultipleEndpointsWithSameMACSamePort(self):
+    def test_a3_plug_multiple_endpoints_with_same_mac_same_port(self):
         '''
         Plug multiple endpoints with same MAC address and different IP
         addresses on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC1, IP2, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP2, LOCAL_PORT1)
 
-        self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(2, self.vpn.dataplane.vif_plugged.call_count,
                          "Port different IP addresses must be plugged on "
                          "dataplane")
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Route for port different IP addresses must be "
                          "advertised")
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1, IP2)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1, IP2)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             2, LOCAL_PORT1, [(MAC1, IP1), (MAC1, IP2)])
 
-    def testA4_plugMultipleEndpointsSamePort(self):
+    def test_a4_plug_multiple_endpoints_same_port(self):
         '''
         Plug multiple endpoints with different MAC and IP addresses on a port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1)
 
-        self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(2, self.vpn.dataplane.vif_plugged.call_count,
                          "Port different endpoints must be plugged on "
                          "dataplane")
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Route for port different endpoints must be "
                          "advertised")
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._validate_ip_address_2_mac_address_consistency(MAC2, IP2)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._chk_mac_2_localport_data_consistency(MAC2, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             2, LOCAL_PORT1, [(MAC1, IP1), (MAC2, IP2)])
 
-    def testB1_plugEndpointTwiceDifferentPort(self):
+    def test_b1_plug_endpoint_twice_different_port(self):
         '''
         Plug one endpoint with same MAC and IP addresses twice on different
         ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
         # A port correspond to only one MAC address, exception must be raised
         self.assertRaises(Exception,
-                          self.vpnInstance.vifPlugged,
+                          self.vpn.vif_plugged,
                           MAC1, IP1, LOCAL_PORT2)
-        self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_plugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Only route for first port must be advertised")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
         self.assertNotIn(
-            LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
+            LOCAL_PORT2['linuxif'], self.vpn.localport_2_endpoints)
 
-    def testB2_plugMultipleEndpointsWithSameIPDifferentPort(self):
+    def test_b2_plug_multiple_endpoints_with_same_ip_different_port(self):
         '''
         Plug multiple endpoints with different MAC addresses and same IP
         address on different port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
         # An IP address correspond to only one MAC address, exception must be
         # raised
         self.assertRaises(Exception,
-                          self.vpnInstance.vifPlugged,
+                          self.vpn.vif_plugged,
                           MAC2, IP1, LOCAL_PORT2)
-        self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_plugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Only route for first port must be advertised")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
         self.assertNotIn(
-            LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
+            LOCAL_PORT2['linuxif'], self.vpn.localport_2_endpoints)
 
-    def testB4_plugMultipleEndpointsWithSameMACDifferentPort(self):
+    def test_b4_plug_multiple_endpoints_with_same_mac_different_port(self):
         '''
         Plug multiple endpoints with same MAC address and different IP
         addresses on different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
         # A port correspond to only one MAC address, exception must be raised
         self.assertRaises(Exception,
-                          self.vpnInstance.vifPlugged,
+                          self.vpn.vif_plugged,
                           MAC1, IP2, LOCAL_PORT2)
-        self.assertEqual(1, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_plugged.call_count,
                          "Only first port must be plugged on dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Only route for first port must be advertised")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
         self.assertNotIn(
-            LOCAL_PORT2['linuxif'], self.vpnInstance.localPort2Endpoints)
+            LOCAL_PORT2['linuxif'], self.vpn.localport_2_endpoints)
 
-    def testB5_plugMultipleEndpointsDifferentPort(self):
+    def test_b5_plug_multiple_endpoints_different_port(self):
         '''
         Plug multiple endpoints with different MAC and IP addresses on
         different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT2)
 
-        self.assertEqual(2, self.vpnInstance.dataplane.vifPlugged.call_count,
+        self.assertEqual(2, self.vpn.dataplane.vif_plugged.call_count,
                          "All ports must be plugged on dataplane")
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Routes for all ports must be advertised")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
 
-        self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
-        self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT2)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC2, IP2)
+        self._chk_mac_2_localport_data_consistency(MAC2, LOCAL_PORT2)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT2, [(MAC2, IP2)])
 
-    def testC1_unplugUniqueEndpointSamePort(self):
+    def test_c1_unplug_unique_endpoint_same_port(self):
         '''
         Unplug one endpoint with same MAC and IP addresses as the one plugged
         on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
-        label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
+        label1 = self.vpn.mac_2_localport_data[MAC1]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
+        self.vpn.vif_unplugged(MAC1, IP1)
 
-        self.assertEqual(1, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_unplugged.call_count,
                          "Endpoint could be unplugged from dataplane")
         self.assertEqual(
-            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),)],
-            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+            [((MAC1, self._get_ip_address(IP1), LOCAL_PORT1, label1, True),)],
+            self.vpn.dataplane.vif_unplugged.call_args_list)
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Route must be first advertised and after withdrawn")
-        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count,
+        self.assertEqual(1, self.vpn._withdraw_route.call_count,
                          "Route must be first advertised and after withdrawn")
 
-        self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
-        self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
-        self.assertEqual({}, self.vpnInstance.localPort2Endpoints)
+        self.assertEqual({}, self.vpn.mac_2_localport_data)
+        self.assertEqual({}, self.vpn.ip_address_2_mac)
+        self.assertEqual({}, self.vpn.localport_2_endpoints)
 
-    def testC2_unplugUniqueEndpointWithSameIPSamePort(self):
+    def test_c2_unplug_unique_endpoint_with_same_ip_same_port(self):
         '''
         Unplug one endpoint with different MAC addresses and same IP address as
         the one plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
         self.assertRaises(Exception,
-                          self.vpnInstance.vifUnplugged,
+                          self.vpn.vif_unplugged,
                           MAC2, IP1)
 
-        self.assertEqual(0, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(0, self.vpn.dataplane.vif_unplugged.call_count,
                          "Endpoint could not be unplugged from dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "only one Route must be advertised")
 
-        self.assertIn(MAC1, self.vpnInstance.macAddress2LocalPortData)
-        self.assertIn(IP1, self.vpnInstance.ipAddress2MacAddress)
+        self.assertIn(MAC1, self.vpn.mac_2_localport_data)
+        self.assertIn(IP1, self.vpn.ip_address_2_mac)
         self.assertIn(
-            LOCAL_PORT1['linuxif'], self.vpnInstance.localPort2Endpoints)
+            LOCAL_PORT1['linuxif'], self.vpn.localport_2_endpoints)
 
-    def testC3_unplugUniqueEndpointWithSameMACSamePort(self):
+    def test_c3_unplug_unique_endpoint_with_same_mac_same_port(self):
         '''
         Unplug one endpoint with same MAC address and different IP addresses
         as the one plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
 
         self.assertRaises(Exception,
-                          self.vpnInstance.vifUnplugged,
+                          self.vpn.vif_unplugged,
                           MAC1, IP2)
 
-        self.assertEqual(0, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(0, self.vpn.dataplane.vif_unplugged.call_count,
                          "Endpoint could not be unplugged from dataplane")
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(1, self.vpn._advertise_route.call_count,
                          "Route must only be advertised once")
-        self.assertEqual(0, self.vpnInstance._withdrawRoute.call_count,
+        self.assertEqual(0, self.vpn._withdraw_route.call_count,
                          "Route must not be withdrawn")
 
-        self.assertIn(MAC1, self.vpnInstance.macAddress2LocalPortData)
-        self.assertIn(IP1, self.vpnInstance.ipAddress2MacAddress)
+        self.assertIn(MAC1, self.vpn.mac_2_localport_data)
+        self.assertIn(IP1, self.vpn.ip_address_2_mac)
         self.assertIn(
-            LOCAL_PORT1['linuxif'], self.vpnInstance.localPort2Endpoints)
+            LOCAL_PORT1['linuxif'], self.vpn.localport_2_endpoints)
 
-    def testC4_unplugOneEndpointSamePort(self):
+    def test_c4_unplug_one_endpoint_same_port(self):
         '''
         Unplug only one endpoint with same MAC and IP addresses
         corresponding to one plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1)
 
-        label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
+        label1 = self.vpn.mac_2_localport_data[MAC1]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
+        self.vpn.vif_unplugged(MAC1, IP1)
 
-        self.assertEqual(1, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(1, self.vpn.dataplane.vif_unplugged.call_count,
                          "Endpoint must be unplugged from dataplane")
         self.assertEqual(
-            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),)],
-            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+            [((MAC1, self._get_ip_address(IP1), LOCAL_PORT1, label1, False),)],
+            self.vpn.dataplane.vif_unplugged.call_args_list)
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Routes for all port endpoints must be first "
                          "advertised and only one withdrawn")
-        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count,
+        self.assertEqual(1, self.vpn._withdraw_route.call_count,
                          "Routes for all port endpoints must be first "
                          "advertised and only one withdrawn")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
-        self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC2, IP2)
+        self._chk_mac_2_localport_data_consistency(MAC2, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC2, IP2)])
 
-    def testC5_unplugAllEndpointsSamePort(self):
+    def test_c5_unplug_all_endpoints_same_port(self):
         '''
         Unplug all endpoints with same MAC and IP addresses
         corresponding to those plugged on port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1)
 
-        label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
-        label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
+        label1 = self.vpn.mac_2_localport_data[MAC1]['label']
+        label2 = self.vpn.mac_2_localport_data[MAC2]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
-        self.vpnInstance.vifUnplugged(MAC2, IP2)
+        self.vpn.vif_unplugged(MAC1, IP1)
+        self.vpn.vif_unplugged(MAC2, IP2)
 
-        self.assertEqual(2, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(2, self.vpn.dataplane.vif_unplugged.call_count,
                          "All port endpoints must be unplugged from dataplane")
         self.assertEqual(
-            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
-             ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT1, label2, True),)],
-            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+            [((MAC1, self._get_ip_address(IP1), LOCAL_PORT1, label1, False),),
+             ((MAC2, self._get_ip_address(IP2), LOCAL_PORT1, label2, True),)],
+            self.vpn.dataplane.vif_unplugged.call_args_list)
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Routes for all port endpoints must be first "
                          "advertised and after withdrawn")
-        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count,
+        self.assertEqual(2, self.vpn._withdraw_route.call_count,
                          "Routes for all port endpoints must be first "
                          "advertised and after withdrawn")
 
-        self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
-        self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
-        self.assertEqual({}, self.vpnInstance.localPort2Endpoints)
+        self.assertEqual({}, self.vpn.mac_2_localport_data)
+        self.assertEqual({}, self.vpn.ip_address_2_mac)
+        self.assertEqual({}, self.vpn.localport_2_endpoints)
 
-    def testD1_unplugUniqueEndpointsDifferentPort(self):
+    def test_d1_unplug_unique_endpoints_different_port(self):
         '''
         Unplug the endpoints with different MAC and IP addresses corresponding
         to those plugged on different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT2)
 
-        label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
-        label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
+        label1 = self.vpn.mac_2_localport_data[MAC1]['label']
+        label2 = self.vpn.mac_2_localport_data[MAC2]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
-        self.vpnInstance.vifUnplugged(MAC2, IP2)
+        self.vpn.vif_unplugged(MAC1, IP1)
+        self.vpn.vif_unplugged(MAC2, IP2)
 
-        self.assertEqual(2, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(2, self.vpn.dataplane.vif_unplugged.call_count,
                          "All different ports endpoints must be unplugged "
                          "from dataplane")
         self.assertEqual(
-            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, True),),
-             ((MAC2, self._get_ipAddress(IP2), LOCAL_PORT2, label2, True),)],
-            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+            [((MAC1, self._get_ip_address(IP1), LOCAL_PORT1, label1, True),),
+             ((MAC2, self._get_ip_address(IP2), LOCAL_PORT2, label2, True),)],
+            self.vpn.dataplane.vif_unplugged.call_args_list)
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Routes for all different ports endpoints must be "
                          "first advertised and after withdrawn")
-        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count,
+        self.assertEqual(2, self.vpn._withdraw_route.call_count,
                          "Routes for all different ports endpoints must be "
                          "first advertised and after withdrawn")
 
-        self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
-        self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
-        self.assertEqual({}, self.vpnInstance.localPort2Endpoints)
+        self.assertEqual({}, self.vpn.mac_2_localport_data)
+        self.assertEqual({}, self.vpn.ip_address_2_mac)
+        self.assertEqual({}, self.vpn.localport_2_endpoints)
 
-    def testD2_unplugOneEndpointSameIPDifferentPort(self):
+    def test_d2_unplug_one_endpoint_same_ip_different_port(self):
         '''
         Unplug one endpoint with different MAC or IP address corresponding to
         one plugged on another port
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT2)
 
         self.assertRaises(Exception,
-                          self.vpnInstance.vifUnplugged,
+                          self.vpn.vif_unplugged,
                           MAC1, IP2)
 
-        self.assertEqual(0, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(0, self.vpn.dataplane.vif_unplugged.call_count,
                          "Endpoint could not be unplugged from dataplane")
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(2, self.vpn._advertise_route.call_count,
                          "Routes for all different ports endpoints must only "
                          "be advertised")
 
-        self._validate_ipAddress2MacAddress_consistency(MAC1, IP1)
-        self._validate_macAddress2LocalPortData_consistency(MAC1, LOCAL_PORT1)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC1, IP1)
+        self._chk_mac_2_localport_data_consistency(MAC1, LOCAL_PORT1)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT1, [(MAC1, IP1)])
 
-        self._validate_ipAddress2MacAddress_consistency(MAC2, IP2)
-        self._validate_macAddress2LocalPortData_consistency(MAC2, LOCAL_PORT2)
-        self._validate_localPort2Endpoints_consistency(
+        self._validate_ip_address_2_mac_address_consistency(MAC2, IP2)
+        self._chk_mac_2_localport_data_consistency(MAC2, LOCAL_PORT2)
+        self._validate_localport_2_endpoints_consistency(
             1, LOCAL_PORT2, [(MAC2, IP2)])
 
-    def testD3_unplugMultipleEndpointsDifferentPort(self):
+    def test_d3_unplug_multiple_endpoints_different_port(self):
         '''
         Unplug multiple endpoints with same MAC and IP addresses corresponding
         to those plugged on different ports
         '''
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2)
-        self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC3, IP3, LOCAL_PORT2)
+        self.vpn.vif_plugged(MAC4, IP4, LOCAL_PORT2)
 
-        label1 = self.vpnInstance.macAddress2LocalPortData[MAC1]['label']
-        label2 = self.vpnInstance.macAddress2LocalPortData[MAC2]['label']
-        label3 = self.vpnInstance.macAddress2LocalPortData[MAC3]['label']
-        label4 = self.vpnInstance.macAddress2LocalPortData[MAC4]['label']
+        label1 = self.vpn.mac_2_localport_data[MAC1]['label']
+        label2 = self.vpn.mac_2_localport_data[MAC2]['label']
+        label3 = self.vpn.mac_2_localport_data[MAC3]['label']
+        label4 = self.vpn.mac_2_localport_data[MAC4]['label']
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1)
-        self.vpnInstance.vifUnplugged(MAC2, IP2)
-        self.vpnInstance.vifUnplugged(MAC3, IP3)
-        self.vpnInstance.vifUnplugged(MAC4, IP4)
+        self.vpn.vif_unplugged(MAC1, IP1)
+        self.vpn.vif_unplugged(MAC2, IP2)
+        self.vpn.vif_unplugged(MAC3, IP3)
+        self.vpn.vif_unplugged(MAC4, IP4)
 
-        self.assertEqual(4, self.vpnInstance.dataplane.vifUnplugged.call_count,
+        self.assertEqual(4, self.vpn.dataplane.vif_unplugged.call_count,
                          "All different ports endpoints must be unplugged "
                          "from dataplane")
         self.assertEqual(
-            [((MAC1, self._get_ipAddress(IP1), LOCAL_PORT1, label1, False),),
-             ((MAC2, self._get_ipAddress(
+            [((MAC1, self._get_ip_address(IP1), LOCAL_PORT1, label1, False),),
+             ((MAC2, self._get_ip_address(
                IP2), LOCAL_PORT1, label2, True),),
-             ((MAC3, self._get_ipAddress(
+             ((MAC3, self._get_ip_address(
                IP3), LOCAL_PORT2, label3, False),),
-             ((MAC4, self._get_ipAddress(IP4), LOCAL_PORT2, label4, True),)],
-            self.vpnInstance.dataplane.vifUnplugged.call_args_list)
-        self.assertEqual(4, self.vpnInstance._withdrawRoute.call_count,
+             ((MAC4, self._get_ip_address(IP4), LOCAL_PORT2, label4, True),)],
+            self.vpn.dataplane.vif_unplugged.call_args_list)
+        self.assertEqual(4, self.vpn._withdraw_route.call_count,
                          "Routes for all different ports endpoints must be "
                          "first advertised and after withdrawn")
-        self.assertEqual(4, self.vpnInstance._advertiseRoute.call_count,
+        self.assertEqual(4, self.vpn._advertise_route.call_count,
                          "Routes for all different ports endpoints must be "
                          "first advertised and after withdrawn")
 
-        self.assertEqual({}, self.vpnInstance.macAddress2LocalPortData)
-        self.assertEqual({}, self.vpnInstance.ipAddress2MacAddress)
-        self.assertEqual({}, self.vpnInstance.localPort2Endpoints)
+        self.assertEqual({}, self.vpn.mac_2_localport_data)
+        self.assertEqual({}, self.vpn.ip_address_2_mac)
+        self.assertEqual({}, self.vpn.localport_2_endpoints)
 
-    def test_getLGLocalPortData(self):
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1)
-        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT2)
-        self.vpnInstance.vifPlugged(MAC4, IP4, LOCAL_PORT2)
+    def test_get_lg_localport_data(self):
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1)
+        self.vpn.vif_plugged(MAC3, IP3, LOCAL_PORT2)
+        self.vpn.vif_plugged(MAC4, IP4, LOCAL_PORT2)
 
-        self.vpnInstance.getLGLocalPortData("")
+        self.vpn.get_lg_local_port_data("")
 
-    # tests of updateRouteTargets
+    # tests of update_route_targets
 
-    def _test_updateRTsInit(self):
-        self.vpnInstance._advertiseRoute.reset_mock()
+    def _test_update_rts_init(self):
+        self.vpn._advertise_route.reset_mock()
 
         route = RouteEntry(NLRI1, [RT1])
-        self.vpnInstance._rtm_routeEntries = set([route])
+        self.vpn._rtm_route_entries = set([route])
 
-    def test_updateRTs1(self):
-        self._test_updateRTsInit()
+    def test_update_rts_1(self):
+        self._test_update_rts_init()
 
         # no change -> no route update
-        self.vpnInstance.updateRouteTargets([RT1], [RT1])
+        self.vpn.update_route_targets([RT1], [RT1])
 
-        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(0, self.vpn._advertise_route.call_count)
 
-    def test_updateRTs2(self):
-        self._test_updateRTsInit()
+    def test_update_rts_2(self):
+        self._test_update_rts_init()
 
         # change imports -> no route update
-        self.vpnInstance.updateRouteTargets([RT2], [RT1])
+        self.vpn.update_route_targets([RT2], [RT1])
 
-        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(0, self.vpn._advertise_route.call_count)
 
-    def test_updateRTs3(self):
-        self._test_updateRTsInit()
-
-        # change exports
-        # check that previously advertised routes are readvertised
-        self.vpnInstance.updateRouteTargets([RT1], [RT2])
-
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-
-        self.assertIn(RT2, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute'))
-        self.assertNotIn(RT1, _extractRTFromCall(self.vpnInstance,
-                                                 '_advertiseRoute'))
-
-    def test_updateRTs3bis(self):
-        self._test_updateRTsInit()
+    def test_update_rts_3(self):
+        self._test_update_rts_init()
 
         # change exports
         # check that previously advertised routes are readvertised
-        self.vpnInstance.updateRouteTargets([RT1], [RT1, RT2])
+        self.vpn.update_route_targets([RT1], [RT2])
 
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-        self.assertIn(RT2, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute'))
-        self.assertIn(RT1, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute'))
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
+
+        self.assertIn(RT2, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route'))
+        self.assertNotIn(RT1, _extract_rt_from_call(self.vpn,
+                                                 '_advertise_route'))
+
+    def test_update_rts_3bis(self):
+        self._test_update_rts_init()
+
+        # change exports
+        # check that previously advertised routes are readvertised
+        self.vpn.update_route_targets([RT1], [RT1, RT2])
+
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
+        self.assertIn(RT2, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route'))
+        self.assertIn(RT1, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route'))
 
 
 LOCAL_ADDRESS = '4.5.6.7'
@@ -690,19 +692,19 @@ IP_ADDR_PREFIX3 = '3.3.3.3/32'
 
 DEFAULT_ADDR_PREFIX = '0.0.0.0/0'
 
-attractTraffic1 = {'redirect_rts': [RT5],
+ATTRACT_TRAFFIC_1 = {'redirect_rts': [RT5],
                    'classifier': {'destinationPort': '80',
                                   'protocol': 'tcp'
                                   }
                    }
 
-trafficClassifier1 = TrafficClassifier(destinationPrefix="1.1.1.1/32",
-                                       destinationPort="80",
-                                       protocol="tcp")
+TC1 = TrafficClassifier(destination_prefix="1.1.1.1/32",
+                        destination_port="80",
+                        protocol="tcp")
 
-trafficClassifier2 = TrafficClassifier(destinationPrefix="2.2.2.2/32",
-                                       destinationPort="80",
-                                       protocol="tcp")
+TC2 = TrafficClassifier(destination_prefix="2.2.2.2/32",
+                        destination_port="80",  
+                        protocol="tcp")
 
 
 class TestVRF(BaseTestBagPipeBGP, TestCase):
@@ -710,632 +712,636 @@ class TestVRF(BaseTestBagPipeBGP, TestCase):
     def setUp(self):
         super(TestVRF, self).setUp()
 
-        self.mockDataplane = Mock()
-        self.mockDataplane.vifPlugged = Mock()
-        self.mockDataplane.vifUnplugged = Mock()
-        self.mockDataplane.setupDataplaneForRemoteEndpoint = Mock()
+        self.mock_dataplane = Mock()
+        self.mock_dataplane.vif_plugged = Mock()
+        self.mock_dataplane.vif_unplugged = Mock()
+        self.mock_dataplane.setup_dataplane_for_remote_endpoint = Mock()
 
-        mockDPDriver = Mock()
-        mockDPDriver.initializeDataplaneInstance.return_value = \
-            self.mockDataplane
-        mockDPDriver.getLocalAddress.return_value = LOCAL_ADDRESS
-        mockDPDriver.supportedEncaps.return_value = \
+        mock_dp_driver = Mock()
+        mock_dp_driver.initialize_dataplane_instance.return_value = \
+            self.mock_dataplane
+        mock_dp_driver.get_local_address.return_value = LOCAL_ADDRESS
+        mock_dp_driver.supported_encaps.return_value = \
             [Encapsulation(Encapsulation.Type.DEFAULT)]
 
-        labelAllocator = LabelAllocator()
-        bgpManager = Mock()
-        bgpManager.getLocalAddress.return_value = LOCAL_ADDRESS
-        rdAllocator = RDAllocator(bgpManager.getLocalAddress())
-        self.vpnManager = Mock(bgpManager=bgpManager,
-                               labelAllocator=labelAllocator,
-                               rdAllocator=rdAllocator)
+        ###FIXMEimport pdb; pdb.set_trace()
 
-        self.vpnInstance = VRF(
-            self.vpnManager,
-            mockDPDriver, 1, 1,
+        label_allocator = LabelAllocator()
+        bgp_manager = Mock()
+        bgp_manager.get_local_address.return_value = LOCAL_ADDRESS
+        rd_allocator = RDAllocator(bgp_manager.get_local_address())
+        self.manager = Mock(bgp_manager=bgp_manager,
+                           label_allocator=label_allocator,
+                           rd_allocator=rd_allocator)
+
+        self.vpn = VRF(
+            self.manager,
+            mock_dp_driver, 1, 1,
             [RT1], [RT1], '10.0.0.1', 24,
             {'from_rt': [RT3],
              'to_rt': [RT4]
              }, None)
-        self.vpnInstance._advertiseRoute = Mock()
-        self.vpnInstance._withdrawRoute = Mock()
-        self.vpnInstance.start()
+        self.vpn._advertise_route = Mock()
+        self.vpn._withdraw_route = Mock()
+        self.vpn.start()
 
-        self.eventTargetWorker = self.vpnInstance
+        self.event_target_worker = self.vpn
 
-    def _resetMocks(self):
-        self.vpnInstance._advertiseRoute.reset_mock()
-        self.vpnInstance._withdrawRoute.reset_mock()
-        self.mockDataplane.setupDataplaneForRemoteEndpoint.reset_mock()
-        self.mockDataplane.vifPlugged.reset_mock()
-        self.mockDataplane.vifUnplugged.reset_mock()
+    def _reset_mocks(self):
+        self.vpn._advertise_route.reset_mock()
+        self.vpn._withdraw_route.reset_mock()
+        self.mock_dataplane.setup_dataplane_for_remote_endpoint.reset_mock()
+        self.mock_dataplane.vif_plugged.reset_mock()
+        self.mock_dataplane.vif_unplugged.reset_mock()
 
     def tearDown(self):
         super(TestVRF, self).tearDown()
-        self.vpnInstance.stop()
-        self.vpnInstance.join()
+        self.vpn.stop()
+        self.vpn.join()
 
-    def _configVRFWithAttractTraffic(self, attractTraffic):
-        self.vpnInstance.attractTraffic = True
-        self.vpnInstance.attractRTs = attractTraffic['redirect_rts']
-        self.vpnInstance.attractClassifier = attractTraffic['classifier']
+    def _config_vrf_with_attract_traffic(self, attract_traffic):
+        self.vpn.attract_traffic = True
+        self.vpn.attract_rts = attract_traffic['redirect_rts']
+        self.vpn.attract_classifier = attract_traffic['classifier']
 
-    def _mockVPNManagerForAttractTraffic(self):
-        self.vpnManager.redirectTrafficToVPN = Mock()
-        self.vpnManager.stopRedirectTrafficToVPN = Mock()
+    def _mock_vpnmanager_for_attract_traffic(self):
+        self.manager.redirect_traffic_to_vpn = Mock()
+        self.manager.stop_redirect_to_vpn = Mock()
 
-    def _resetMocksVPNManager(self):
-        self.vpnManager.redirectTrafficToVPN.reset_mock()
-        self.vpnManager.stopRedirectTrafficToVPN.reset_mock()
+    def _reset_mocks_vpnmanager(self):
+        self.manager.redirect_traffic_to_vpn.reset_mock()
+        self.manager.stop_redirect_to_vpn.reset_mock()
 
-    def _generateRouteNLRI(self, ipAddressPrefix):
+    def _generate_route_nlri(self, ip_address_prefix):
         # Parse address/mask
-        (ipPrefix, prefixLen) = self.vpnInstance._parseIPAddressPrefix(ipAddressPrefix)
+        (_, prefix_len) = self.vpn._parse_ipaddress_prefix(ip_address_prefix)
 
-        prefix_rd = self.vpnManager.rdAllocator.getNewRD(
-            "Route distinguisher for prefix %s" % ipAddressPrefix
+        prefix_rd = self.manager.rd_allocator.get_new_rd(
+            "Route distinguisher for prefix %s" % ip_address_prefix
         )
-        rd = self.vpnInstance.instanceRD if prefixLen == 32 else prefix_rd
+        rd = self.vpn.instance_rd if prefix_len == 32 else prefix_rd
 
-        label = self.vpnManager.labelAllocator.getNewLabel(
-            "Label for prefix %s" % ipAddressPrefix
+        label = self.manager.label_allocator.get_new_label(
+            "Label for prefix %s" % ip_address_prefix
         )
 
-        return IPVPNRouteFactory(AFI(AFI.ipv4), ipAddressPrefix,
+        return IPVPNRouteFactory(AFI(AFI.ipv4), ip_address_prefix,
                                  label, rd, NEXT_HOP)
 
-    def _generateFlowSpecNLRI(self, classifier):
-        flow_nlri = FlowRouteFactory(AFI(AFI.ipv4), self.vpnInstance.instanceRD)
+    def _generate_flow_spec_nlri(self, classifier):
+        flow_nlri = FlowRouteFactory(AFI(AFI.ipv4), self.vpn.instance_rd)
 
-        for rule in classifier.mapTrafficClassifier2RedirectRules():
+        for rule in classifier.map_traffic_classifier_2_redirect_rules():
             flow_nlri.add(rule)
 
         return flow_nlri
 
     # unit test for IPVPN re-advertisement
-    def test_ReAdvertisement1(self):
-        self._resetMocks()
+    def test_re_advertisement_1(self):
+        self._reset_mocks()
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2],
-                            workerA, NH1, 200)
+        vpn_nlri_1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri_1, [RT1, RT2],
+                            worker_a, NH1, 200)
         # no re-advertisement supposed to happen
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
         # dataplane supposed to be updated for this route
         self.assertEqual(
             1,
-            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+            self.mock_dataplane.setup_dataplane_for_remote_endpoint.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        vpnNLRI2 = self._generateRouteNLRI(IP_ADDR_PREFIX2)
-        event2 = self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
-                                     workerA, NH1, 200, rtrecords=[RTRecord1])
+        vpn_nlri_2 = self._generate_route_nlri(IP_ADDR_PREFIX2)
+        event2 = self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri_2, [RT3],
+                                     worker_a, NH1, 200, rtrecords=[RTRecord1])
         # re-advertisement of VPN NLRI2 supposed to happen, to RT4
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-        self.assertIn(RT4, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute'))
-        self.assertNotIn(RT2, _extractRTFromCall(self.vpnInstance,
-                                                 '_advertiseRoute'))
-        self.assertNotIn(RT3, _extractRTFromCall(self.vpnInstance,
-                                                 '_advertiseRoute'))
-        self.assertIn(RTRecord3, _extractRTRecordsFromCall(self.vpnInstance,
-                                                           '_advertiseRoute'))
-        self.assertIn(RTRecord1, _extractRTRecordsFromCall(self.vpnInstance,
-                                                           '_advertiseRoute'))
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
+        self.assertIn(RT4, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route'))
+        self.assertNotIn(RT2, _extract_rt_from_call(self.vpn,
+                                                 '_advertise_route'))
+        self.assertNotIn(RT3, _extract_rt_from_call(self.vpn,
+                                                 '_advertise_route'))
+        self.assertIn(RTRecord3, _extract_rtrec_from_call(self.vpn,
+                                                           '_advertise_route'))
+        self.assertIn(RTRecord1, _extract_rtrec_from_call(self.vpn,
+                                                           '_advertise_route'))
         # dataplane *not* supposed to be updated for this route
         self.assertEqual(
             0,
-            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+            self.mock_dataplane.setup_dataplane_for_remote_endpoint.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
         # new interface plugged in
-        # route vpnNLRI2 should be re-advertized with this new next hop as
+        # route vpn_nlri_2 should be re-advertized with this new next hop as
         #  next-hop
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT2, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT2, False, 0)
         # advertised route count should increment by 2:
         # - vif route itself
         # - re-adv of NLRI1 with this new port as next-hop
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
-        self.assertEqual(0, self.vpnInstance._withdrawRoute.call_count)
-        self.assertIn(RT1, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute', 0))
-        self.assertNotIn(RT4, _extractRTFromCall(self.vpnInstance,
-                                                 '_advertiseRoute', 0))
-        self.assertIn(RT4, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute', 1))
-        self.assertNotIn(RT1, _extractRTFromCall(self.vpnInstance,
-                                                 '_advertiseRoute', 1))
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
+        self.assertEqual(0, self.vpn._withdraw_route.call_count)
+        self.assertIn(RT1, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route', 0))
+        self.assertNotIn(RT4, _extract_rt_from_call(self.vpn,
+                                                 '_advertise_route', 0))
+        self.assertIn(RT4, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route', 1))
+        self.assertNotIn(RT1, _extract_rt_from_call(self.vpn,
+                                                 '_advertise_route', 1))
 
-        # check that second event is for re-advertised route vpnNLRI2 and
+        # check that second event is for re-advertised route vpn_nlri_2 and
         #  contains what we expect
-        routeEntry = self.vpnInstance._advertiseRoute.call_args_list[1][0][0]
-        self.assertEqual(vpnNLRI2.cidr.prefix(), routeEntry.nlri.cidr.prefix())
-        self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
-        self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
+        route_entry = self.vpn._advertise_route.call_args_list[1][0][0]
+        self.assertEqual(vpn_nlri_2.cidr.prefix(), route_entry.nlri.cidr.prefix())
+        self.assertNotEqual(vpn_nlri_2.labels, route_entry.nlri.labels)
+        self.assertNotEqual(vpn_nlri_2.nexthop, route_entry.nlri.nexthop)
 
-        self._resetMocks()
+        self._reset_mocks()
 
         # new route, that, because it contains the redirectRT in RTRecord
         # will not be re-advertized
-        vpnNLRI3 = self._generateRouteNLRI(IP_ADDR_PREFIX3)
-        event3 = self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI3, [RT3],
-                                     workerA, NH1, 200, rtrecords=[RTRecord4])
-        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
-        self.assertEqual(0, self.vpnInstance._withdrawRoute.call_count)
-        self._revertEvent(event3)
+        vpn_nlri3 = self._generate_route_nlri(IP_ADDR_PREFIX3)
+        event3 = self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri3, [RT3],
+                                     worker_a, NH1, 200, rtrecords=[RTRecord4])
+        self.assertEqual(0, self.vpn._advertise_route.call_count)
+        self.assertEqual(0, self.vpn._withdraw_route.call_count)
+        self._revert_event(event3)
 
-        self._resetMocks()
+        self._reset_mocks()
 
         # vif unplugged, routes VPN NLRI2 with next-hop
         # corresponding to this ports should now be withdrawn
-        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
-        self.assertEqual(2, self.vpnInstance._withdrawRoute.call_count)
-        routeEntry = self.vpnInstance._withdrawRoute.call_args_list[0][0][0]
-        self.assertEqual(vpnNLRI2.cidr.prefix(), routeEntry.nlri.cidr.prefix())
-        self.assertNotEqual(vpnNLRI2.labels, routeEntry.nlri.labels)
-        self.assertNotEqual(vpnNLRI2.nexthop, routeEntry.nlri.nexthop)
+        self.vpn.vif_unplugged(MAC2, IP2, False)
+        self.assertEqual(2, self.vpn._withdraw_route.call_count)
+        route_entry = self.vpn._withdraw_route.call_args_list[0][0][0]
+        self.assertEqual(vpn_nlri_2.cidr.prefix(), route_entry.nlri.cidr.prefix())
+        self.assertNotEqual(vpn_nlri_2.labels, route_entry.nlri.labels)
+        self.assertNotEqual(vpn_nlri_2.nexthop, route_entry.nlri.nexthop)
 
-        self._resetMocks()
+        self._reset_mocks()
 
         # RTs of route NLRI1 now include a re-advertiseed RT
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT1, RT2, RT3],
-                            workerA, NH1, 200)
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-        self.assertIn(RT4, _extractRTFromCall(self.vpnInstance,
-                                              '_advertiseRoute'))
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri_1, [RT1, RT2, RT3],
+                            worker_a, NH1, 200)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
+        self.assertIn(RT4, _extract_rt_from_call(self.vpn,
+                                              '_advertise_route'))
         # dataplane supposed to be updated for this route
         self.assertEqual(
             1,
-            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+            self.mock_dataplane.setup_dataplane_for_remote_endpoint.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self._revertEvent(event2)
+        self._revert_event(event2)
         # withdraw of re-adv route supposed to happen
-        self.assertEqual(1, self.vpnInstance._withdrawRoute.call_count)
-        self.assertEqual(0, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._withdraw_route.call_count)
+        self.assertEqual(0, self.vpn._advertise_route.call_count)
         # dataplane *not* supposed to be updated for this route
         self.assertEqual(
             0,
-            self.mockDataplane.setupDataplaneForRemoteEndpoint.call_count)
+            self.mock_dataplane.setup_dataplane_for_remote_endpoint.call_count)
 
-    def _checkAttractTraffic(self, method, redirect_rts, attendedClassifiers):
-        self.assertEqual(len(attendedClassifiers),
-                         getattr(self.vpnInstance, method).call_count)
+    def _check_attract_traffic(self, method, redirect_rts,
+                               expected_classifiers):
+        self.assertEqual(len(expected_classifiers),
+                         getattr(self.vpn, method).call_count)
 
-        for index, classifier in enumerate(attendedClassifiers):
+        for index, classifier in enumerate(expected_classifiers):
             if not classifier:
                 # Skip advertisement to exported route targets
-                if (self.vpnInstance.exportRTs == _extractRTFromCall(
-                        self.vpnInstance,
+                if (self.vpn.export_rts == _extract_rt_from_call(
+                        self.vpn,
                         method,
                         index)):
                     continue
 
                 # 1 - re-advertisement of a default route supposed to happen to RT4
-                self.assertIn(self.vpnInstance.readvertiseToRTs[0],
-                              _extractRTFromCall(self.vpnInstance,
+                self.assertIn(self.vpn.readvertise_to_rts[0],
+                              _extract_rt_from_call(self.vpn,
                                                  method, index))
 
-                ipvpn_nlri = _extractNLRIFromCall(self.vpnInstance,
+                ipvpn_nlri = _extract_nlri_from_call(self.vpn,
                                                   method, index)
                 self.assertEqual(DEFAULT_ADDR_PREFIX, ipvpn_nlri.cidr.prefix())
 
-                self.assertNotIn(self.vpnInstance.readvertiseFromRTs[0],
-                                 _extractRTFromCall(self.vpnInstance,
+                self.assertNotIn(self.vpn.readvertise_from_rts[0],
+                                 _extract_rt_from_call(self.vpn,
                                                     method, index))
             else:
                 # 2 - advertisement of FlowSpec NLRI supposed to happen to RT5 for
                 #     traffic redirection to RT4 on TCP destination port 80
-                flow_nlri = _extractNLRIFromCall(self.vpnInstance,
+                flow_nlri = _extract_nlri_from_call(self.vpn,
                                                  method, index)
                 self.assertIsInstance(flow_nlri, Flow)
 
                 self.assertIn(redirect_rts[0],
-                              _extractRTFromCall(self.vpnInstance,
+                              _extract_rt_from_call(self.vpn,
                                                  method, index))
                 self.assertEqual(
-                    self.vpnInstance.readvertiseToRTs[0],
-                    _extractTrafficRedirectFromCall(self.vpnInstance,
+                    self.vpn.readvertise_to_rts[0],
+                    _extract_traffic_redirect_from_call(self.vpn,
                                                     method, index)
                 )
                 self.assertEqual(
                     classifier,
-                    _extractTrafficClassifierFromCall(self.vpnInstance,
+                    _extract_traffic_classifier_from_call(self.vpn,
                                                       method, index)
                 )
 
     # unit test for IPVPN traffic redirection
-    def test_AttractTrafficSinglePrefixAdvertise(self):
+    def test_attract_traffic_single_prefix_advertise(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic('_advertiseRoute',
-                                  attractTraffic1['redirect_rts'],
-                                  [None, trafficClassifier1])
+        self._check_attract_traffic('_advertise_route',
+                                  ATTRACT_TRAFFIC_1['redirect_rts'],
+                                  [None, TC1])
 
-    def test_AttractTrafficSinglePrefixWithdraw(self):
+    def test_attract_traffic_single_prefix_withdraw(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        self._new_route_event(RouteEvent.WITHDRAW, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic('_withdrawRoute',
-                                  attractTraffic1['redirect_rts'],
-                                  [None, trafficClassifier1])
+        self._check_attract_traffic('_withdraw_route',
+                                  ATTRACT_TRAFFIC_1['redirect_rts'],
+                                  [None, TC1])
 
-    def test_AttractTrafficMultiplePrefixAdvertise(self):
+    def test_attract_traffic_multiple_prefix_advertise(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        vpnNLRI2 = self._generateRouteNLRI(IP_ADDR_PREFIX2)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri2 = self._generate_route_nlri(IP_ADDR_PREFIX2)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri2, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic(
-            '_advertiseRoute',
-            attractTraffic1['redirect_rts'],
-            [None, trafficClassifier1, None, trafficClassifier2])
+        self._check_attract_traffic(
+            '_advertise_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
+            [None, TC1, None, TC2])
 
-    def test_AttractTrafficMultiplePrefixWithdraw(self):
+    def test_attract_traffic_multiple_prefix_withdraw(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-
-        # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
-
-        self._resetMocks()
-
-        workerA = Worker(Mock(), 'Worker-A')
-
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
-
-        vpnNLRI2 = self._generateRouteNLRI(IP_ADDR_PREFIX2)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
-
-        self.assertEqual(4, self.vpnInstance._advertiseRoute.call_count)
-
-        self._resetMocks()
-
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
-
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
-
-        self._checkAttractTraffic(
-            '_withdrawRoute',
-            attractTraffic1['redirect_rts'],
-            [None, trafficClassifier2, None, trafficClassifier1])
-
-    def test_RedirectedVRFSingleFlowAdvertised(self):
-        self._mockVPNManagerForAttractTraffic()
-
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
+
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
+
+        vpn_nlri2 = self._generate_route_nlri(IP_ADDR_PREFIX2)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri2, [RT3],
+                            worker_a, NH1, 200)
+
+        self.assertEqual(4, self.vpn._advertise_route.call_count)
+
+        self._reset_mocks()
+
+        self._new_route_event(RouteEvent.WITHDRAW, vpn_nlri2, [RT3],
+                            worker_a, NH1, 200)
+
+        self._new_route_event(RouteEvent.WITHDRAW, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
+
+        self._check_attract_traffic(
+            '_withdraw_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
+            [None, TC2, None, TC1])
+
+    def test_redirected_vrfsingle_flow_advertised(self):
+        #import pdb; pdb.set_trace()
+        self._mock_vpnmanager_for_attract_traffic()
+
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+
+        # new Route for plugged if supposed to be advertised
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
+
+        self._reset_mocks()
+
+        worker_a = Worker(Mock(), 'Worker-A')
 
         # FlowSpec route
-        flowNLRI1 = self._generateFlowSpecNLRI(trafficClassifier1)
-        self._newFlowEvent(RouteEvent.ADVERTISE, flowNLRI1, [RT5], [RT1],
-                           workerA)
+        flow_nlri1 = self._generate_flow_spec_nlri(TC1)
+        self._new_flow_event(RouteEvent.ADVERTISE, flow_nlri1, [RT5], [RT1],
+                           worker_a)
 
-        redirect_rt5 = _routeTarget2String(RT5)
-        self.assertEqual(1, self.vpnManager.redirectTrafficToVPN.call_count)
-        self.assertIn(trafficClassifier1,
-                      self.vpnInstance.redirectRT2classifiers[redirect_rt5])
+        redirect_rt5 = _rt_to_string(RT5)
+        self.assertEqual(1, self.manager.redirect_traffic_to_vpn.call_count)
+        self.assertIn(TC1,
+                      self.vpn.redirect_rt_2_classifiers[redirect_rt5])
 
-    def test_RedirectedVRFMultipleFlowAdvertised(self):
-        self._mockVPNManagerForAttractTraffic()
+    def test_redirected_vrfmultiple_flow_advertised(self):
+        self._mock_vpnmanager_for_attract_traffic()
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
         # FlowSpec route
-        flowNLRI1 = self._generateFlowSpecNLRI(trafficClassifier1)
-        self._newFlowEvent(RouteEvent.ADVERTISE, flowNLRI1, [RT5], [RT1],
-                           workerA)
-        flowNLRI2 = self._generateFlowSpecNLRI(trafficClassifier2)
-        self._newFlowEvent(RouteEvent.ADVERTISE, flowNLRI2, [RT5], [RT1],
-                           workerA)
+        flow_nlri1 = self._generate_flow_spec_nlri(TC1)
+        self._new_flow_event(RouteEvent.ADVERTISE, flow_nlri1, [RT5], [RT1],
+                           worker_a)
+        flow_nlri2 = self._generate_flow_spec_nlri(TC2)
+        self._new_flow_event(RouteEvent.ADVERTISE, flow_nlri2, [RT5], [RT1],
+                           worker_a)
 
-        redirect_rt5 = _routeTarget2String(RT5)
-        self.assertEqual(2, self.vpnManager.redirectTrafficToVPN.call_count)
-        self.assertIn(trafficClassifier1,
-                      self.vpnInstance.redirectRT2classifiers[redirect_rt5])
-        self.assertIn(trafficClassifier2,
-                      self.vpnInstance.redirectRT2classifiers[redirect_rt5])
+        redirect_rt5 = _rt_to_string(RT5)
+        self.assertEqual(2, self.manager.redirect_traffic_to_vpn.call_count)
+        self.assertIn(TC1,
+                      self.vpn.redirect_rt_2_classifiers[redirect_rt5])
+        self.assertIn(TC2,
+                      self.vpn.redirect_rt_2_classifiers[redirect_rt5])
 
-    def test_RedirectedVRFMultipleFlowWithdrawn(self):
-        self._mockVPNManagerForAttractTraffic()
+    def test_redirected_vrf_multiple_flow_withdrawn(self):
+        self._mock_vpnmanager_for_attract_traffic()
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(1, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(1, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
         # FlowSpec route
-        flowNLRI1 = self._generateFlowSpecNLRI(trafficClassifier1)
-        self._newFlowEvent(RouteEvent.ADVERTISE, flowNLRI1, [RT5], [RT1],
-                           workerA)
-        flowNLRI2 = self._generateFlowSpecNLRI(trafficClassifier2)
-        self._newFlowEvent(RouteEvent.ADVERTISE, flowNLRI2, [RT5], [RT1],
-                           workerA)
+        flow_nlri1 = self._generate_flow_spec_nlri(TC1)
+        self._new_flow_event(RouteEvent.ADVERTISE, flow_nlri1, [RT5], [RT1],
+                           worker_a)
+        flow_nlri2 = self._generate_flow_spec_nlri(TC2)
+        self._new_flow_event(RouteEvent.ADVERTISE, flow_nlri2, [RT5], [RT1],
+                           worker_a)
 
-        self.assertEqual(2, self.vpnManager.redirectTrafficToVPN.call_count)
+        self.assertEqual(2, self.manager.redirect_traffic_to_vpn.call_count)
 
-        self._resetMocksVPNManager()
+        self._reset_mocks_vpnmanager()
 
-        self._newFlowEvent(RouteEvent.WITHDRAW, flowNLRI2, [RT5], [RT1],
-                           workerA)
+        self._new_flow_event(RouteEvent.WITHDRAW, flow_nlri2, [RT5], [RT1],
+                           worker_a)
 
-        redirect_rt5 = _routeTarget2String(RT5)
-        self.assertNotIn(trafficClassifier2,
-                         self.vpnInstance.redirectRT2classifiers[redirect_rt5])
+        redirect_rt5 = _rt_to_string(RT5)
+        self.assertNotIn(TC2,
+                         self.vpn.redirect_rt_2_classifiers[redirect_rt5])
 
-        self._newFlowEvent(RouteEvent.WITHDRAW, flowNLRI1, [RT5], [RT1],
-                           workerA)
+        self._new_flow_event(RouteEvent.WITHDRAW, flow_nlri1, [RT5], [RT1],
+                           worker_a)
 
-        self.assertTrue(not self.vpnInstance.redirectRT2classifiers)
-        self.assertEqual(1, self.vpnManager.stopRedirectTrafficToVPN.call_count)
+        self.assertTrue(not self.vpn.redirect_rt_2_classifiers)
+        self.assertEqual(1, self.manager.stop_redirect_to_vpn.call_count)
 
-    def test_LoadBalancingSinglePrefixAdvertise(self):
+    def test_load_balancing_single_prefix_advertise(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic('_advertiseRoute',
-                                  attractTraffic1['redirect_rts'],
-                                  [None, None, trafficClassifier1])
+        self._check_attract_traffic('_advertise_route',
+                                  ATTRACT_TRAFFIC_1['redirect_rts'],
+                                  [None, None, TC1])
 
-    def test_LoadBalancingSinglePrefixWithdraw(self):
+    def test_load_balancing_single_prefix_withdraw(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self.assertEqual(3, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(3, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        self._new_route_event(RouteEvent.WITHDRAW, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic('_withdrawRoute',
-                                  attractTraffic1['redirect_rts'],
-                                  [None, None, trafficClassifier1])
+        self._check_attract_traffic('_withdraw_route',
+                                  ATTRACT_TRAFFIC_1['redirect_rts'],
+                                  [None, None, TC1])
 
-    def test_LoadBalancingMultiplePrefixAdvertise(self):
+    def test_load_balancing_multiple_prefix_advertise(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        vpnNLRI2 = self._generateRouteNLRI(IP_ADDR_PREFIX2)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri2 = self._generate_route_nlri(IP_ADDR_PREFIX2)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri2, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic(
-            '_advertiseRoute',
-            attractTraffic1['redirect_rts'],
-            [None, None, trafficClassifier1, None, None, trafficClassifier2])
+        self._check_attract_traffic(
+            '_advertise_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
+            [None, None, TC1, None, None, TC2])
 
-    def test_LoadBalancingMultiplePrefixWithdraw(self):
+    def test_load_balancing_multiple_prefix_withdraw(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        vpnNLRI2 = self._generateRouteNLRI(IP_ADDR_PREFIX2)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri2 = self._generate_route_nlri(IP_ADDR_PREFIX2)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri2, [RT3],
+                            worker_a, NH1, 200)
 
-        self.assertEqual(6, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(6, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI2, [RT3],
-                            workerA, NH1, 200)
-        self._newRouteEvent(RouteEvent.WITHDRAW, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        self._new_route_event(RouteEvent.WITHDRAW, vpn_nlri2, [RT3],
+                            worker_a, NH1, 200)
+        self._new_route_event(RouteEvent.WITHDRAW, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self._checkAttractTraffic(
-            '_withdrawRoute',
-            attractTraffic1['redirect_rts'],
-            [None, None, trafficClassifier2, None, None, trafficClassifier1])
+        self._check_attract_traffic(
+            '_withdraw_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
+            [None, None, TC2, None, None, TC1])
 
-    def test_LoadBalancingNewPlug(self):
+    def test_load_balancing_new_plug(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self.assertEqual(3, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(3, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self.vpnInstance.vifPlugged(MAC3, IP3, LOCAL_PORT1, False, 2)
+        self.vpn.vif_plugged(MAC3, IP3, LOCAL_PORT1, False, 2)
 
-        self._checkAttractTraffic(
-            '_advertiseRoute',
-            attractTraffic1['redirect_rts'],
-            [None, None, trafficClassifier1])
+        self._check_attract_traffic(
+            '_advertise_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
+            [None, None, TC1])
 
-    def test_LoadBalancingUnplugAll(self):
+    def test_load_balancing_unplug_all(self):
         # Configure VRF to generate traffic redirection, based on a 5-tuple
         # classifier, to a specific route target
-        self._configVRFWithAttractTraffic(attractTraffic1)
+        self._config_vrf_with_attract_traffic(ATTRACT_TRAFFIC_1)
 
-        self.vpnInstance.vifPlugged(MAC1, IP1, LOCAL_PORT1, False, 0)
-        self.vpnInstance.vifPlugged(MAC2, IP2, LOCAL_PORT1, False, 1)
+        self.vpn.vif_plugged(MAC1, IP1, LOCAL_PORT1, False, 0)
+        self.vpn.vif_plugged(MAC2, IP2, LOCAL_PORT1, False, 1)
 
         # new Route for plugged if supposed to be advertised
-        self.assertEqual(2, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(2, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        workerA = Worker(Mock(), 'Worker-A')
+        worker_a = Worker(Mock(), 'Worker-A')
 
-        vpnNLRI1 = self._generateRouteNLRI(IP_ADDR_PREFIX1)
-        self._newRouteEvent(RouteEvent.ADVERTISE, vpnNLRI1, [RT3],
-                            workerA, NH1, 200)
+        vpn_nlri1 = self._generate_route_nlri(IP_ADDR_PREFIX1)
+        self._new_route_event(RouteEvent.ADVERTISE, vpn_nlri1, [RT3],
+                            worker_a, NH1, 200)
 
-        self.assertEqual(3, self.vpnInstance._advertiseRoute.call_count)
+        self.assertEqual(3, self.vpn._advertise_route.call_count)
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self.vpnInstance.vifUnplugged(MAC1, IP1, False)
+        self.vpn.vif_unplugged(MAC1, IP1, False)
 
-        self._checkAttractTraffic(
-            '_withdrawRoute',
-            attractTraffic1['redirect_rts'],
+        self._check_attract_traffic(
+            '_withdraw_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
             [None, None])
 
-        self._resetMocks()
+        self._reset_mocks()
 
-        self.vpnInstance.vifUnplugged(MAC2, IP2, False)
+        self.vpn.vif_unplugged(MAC2, IP2, False)
 
-        self._checkAttractTraffic(
-            '_withdrawRoute',
-            attractTraffic1['redirect_rts'],
-            [None, trafficClassifier1, None])
+        self._check_attract_traffic(
+            '_withdraw_route',
+            ATTRACT_TRAFFIC_1['redirect_rts'],
+            [None, TC1, None])

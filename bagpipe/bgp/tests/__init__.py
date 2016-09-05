@@ -20,9 +20,9 @@ import logging
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
-from bagpipe.bgp.engine.exabgp_peer_worker import setupExaBGPEnv
+from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
 
-setupExaBGPEnv()
+setup_exabgp_env()
 
 from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.open.asn import ASN
@@ -46,7 +46,7 @@ RT4 = RouteTarget(64512, 40)
 RT5 = RouteTarget(64512, 50)
 
 
-def _routeTarget2String(rt):
+def _rt_to_string(rt):
     assert isinstance(rt, RouteTarget)
     return "%s:%s" % (rt.asn, rt.number)
 
@@ -89,39 +89,39 @@ log = logging.getLogger()
 
 class BaseTestBagPipeBGP():
 
-    def setEventTargetWorker(self, worker):
-        self.eventTargetWorker = worker
+    def set_event_target_worker(self, worker):
+        self.event_target_worker = worker
 
-    def _newRouteEvent(self, eventType, nlri, rts, source, nh, lp=0,
-                       replacedRouteEntry=None,
-                       afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn),
-                       **kwargs):
+    def _new_route_event(self, event_type, nlri, rts, source, nh, lp=0,
+                         replaced_route_entry=None,
+                         afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn),
+                         **kwargs):
         attributes = Attributes()
         attributes.add(NextHop(nh))
         attributes.add(LocalPreference(lp))
 
         if 'rtrecords' in kwargs:
-            eComs = ExtendedCommunities()
-            eComs.communities += kwargs['rtrecords']
-            attributes.add(eComs)
+            ecoms = ExtendedCommunities()
+            ecoms.communities += kwargs['rtrecords']
+            attributes.add(ecoms)
 
-        routeEvent = RouteEvent(eventType,
+        route_event = RouteEvent(event_type,
                                 RouteEntry(nlri, rts, attributes, source),
                                 source)
-        routeEvent.setReplacedRoute(replacedRouteEntry)
+        route_event.set_replaced_route(replaced_route_entry)
 
-        self.eventTargetWorker.enqueue(routeEvent)
+        self.event_target_worker.enqueue(route_event)
 
         log.info("*** Emitting event to %s: %s",
-                 self.eventTargetWorker, routeEvent)
+                 self.event_target_worker, route_event)
 
         self._wait()
 
-        return routeEvent
+        return route_event
 
-    def _newFlowEvent(self, eventType, nlri, to_rts, attract_rts, source,
-                      afi=AFI(AFI.ipv4), safi=SAFI(SAFI.flow_vpn),
-                      **kwargs):
+    def _new_flow_event(self, event_type, nlri, to_rts, attract_rts, source,
+                        afi=AFI(AFI.ipv4), safi=SAFI(SAFI.flow_vpn),
+                        **kwargs):
         attributes = Attributes()
 
         ecommunities = ExtendedCommunities()
@@ -131,32 +131,32 @@ class BaseTestBagPipeBGP():
 
         attributes.add(ecommunities)
 
-        flowEvent = RouteEvent(eventType,
+        flow_event = RouteEvent(event_type,
                                RouteEntry(nlri, attract_rts, attributes,
                                           source),
                                source)
 
-        self.eventTargetWorker.enqueue(flowEvent)
+        self.event_target_worker.enqueue(flow_event)
 
         log.info("*** Emitting FlowSpec event to %s: %s",
-                 self.eventTargetWorker, flowEvent)
+                 self.event_target_worker, flow_event)
 
         self._wait()
 
-        return flowEvent
+        return flow_event
 
-    def _revertEvent(self, event):
+    def _revert_event(self, event):
         if event.type == RouteEvent.ADVERTISE:
             type = RouteEvent.WITHDRAW
         else:  # WITHDRAW
             type = RouteEvent.ADVERTISE
 
-        routeEvent = RouteEvent(type, event.routeEntry, event.source)
+        route_event = RouteEvent(type, event.route_entry, event.source)
 
-        self.eventTargetWorker.enqueue(routeEvent)
+        self.event_target_worker.enqueue(route_event)
 
         log.info("*** Emitting event to %s: %s",
-                 self.eventTargetWorker, routeEvent)
+                 self.event_target_worker, route_event)
 
         self._wait()
 

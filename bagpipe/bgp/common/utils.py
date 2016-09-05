@@ -20,6 +20,8 @@ import sys
 import traceback
 import logging
 
+import re
+
 from collections import defaultdict
 
 
@@ -48,8 +50,6 @@ def import_object(import_str, *args, **kwargs):
     """Import a class and return an instance of it."""
     return import_class(import_str)(*args, **kwargs)
 
-# Method for synchronization
-
 
 def synchronized(method):
 
@@ -60,7 +60,7 @@ def synchronized(method):
     return synchronized_method
 
 
-def getBoolean(string):
+def get_boolean(string):
     '''
     return True is string represents boolean true ("true","yes","on","1"),
     False if not
@@ -88,3 +88,12 @@ def invert_dict_of_sets(d):
         for v in d[k]:
             new_d[v].add(k)
     return new_d
+
+
+camel2underscore_regex = re.compile('(?!^)([A-Z]+)')
+
+def dict_camelcase_to_underscore(dictionary):
+    ''' copy dict, with translation of keys from FooBar to foo_bar'''
+    return {camel2underscore_regex.sub(r'_\1', key).lower(): value
+            for (key, value) in dictionary.iteritems()
+            }

@@ -21,9 +21,9 @@ import socket
 
 from distutils.version import StrictVersion
 
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.common.run_command import runCommand
+from bagpipe.bgp.common.run_command import run_command
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
@@ -32,18 +32,18 @@ from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
 class DataplaneDriver(lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
-    dataplaneInstanceClass = None
+    dataplane_instance_class = None
     encaps = [Encapsulation(Encapsulation.Type.DEFAULT),
               Encapsulation(Encapsulation.Type.MPLS)]
-    makeB4BreakSupport = False
-    ecmpSupport = False
+    makebefore4break_support = False
+    ecmp_support = False
 
-    @logDecorator.log
+    @log_decorator.log
     def __init__(self, config, init=True):
         '''config is a dict'''
         lg.LookingGlassLocalLogger.__init__(self)
 
-        assert issubclass(self.dataplaneInstanceClass, VPNInstanceDataplane)
+        assert issubclass(self.dataplane_instance_class, VPNInstanceDataplane)
 
         self.config = config
 
@@ -60,135 +60,135 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
                             self.local_address)
 
         # Linux kernel version check
-        o = self._runCommand("uname -r")
-        self.kernelRelease = o[0][0].split("-")[0]
-        if getattr(self, 'requiredKernel', None):
-            if (StrictVersion(self.kernelRelease) <
-                    StrictVersion(self.requiredKernel)):
+        o = self._run_command("uname -r")
+        self.kernel_release = o[0][0].split("-")[0]
+        if getattr(self, 'required_kernel', None):
+            if (StrictVersion(self.kernel_release) <
+                    StrictVersion(self.required_kernel)):
                 self.log.warning("%s requires at least Linux kernel %s"
                                  " (you are running %s)",
                                  self.__class__.__name__,
-                                 self.requiredKernel,
-                                 self.kernelRelease)
+                                 self.required_kernel,
+                                 self.kernel_release)
 
         # skipped if instantiated with init=False, to be used for cleanup
         if init:
-            self._initReal(config)
+            self._init_real(config)
 
         # Flag to trigger cleanup all dataplane states on first call to
-        # vifPlugged
-        self.firstInit = True
+        # vif_plugged
+        self.first_init = True
 
     @abstractmethod
-    def resetState(self):
+    def reset_state(self):
         pass
 
     @abstractmethod
-    def _initReal(self, config):
+    def _init_real(self, config):
         '''
-        This is called after resetState (which, e.g. cleans up the stuff
+        This is called after reset_state (which, e.g. cleans up the stuff
         possibly left-out by a previous failed run).
 
         All init things that should not be cleaned up go here.
         '''
         pass
 
-    @logDecorator.logInfo
-    def initializeDataplaneInstance(self, instanceId, externalInstanceId,
-                                    gatewayIP, mask, instanceLabel, **kwargs):
+    @log_decorator.log_info
+    def initialize_dataplane_instance(self, instance_id, external_instance_id,
+                                    gateway_ip, mask, instance_label, **kwargs):
         '''
         returns a VPNInstanceDataplane subclass
-        after calling resetState on the dataplane driver, if this is the first
-        call to initializeDataplaneInstance
+        after calling reset_state on the dataplane driver, if this is the first
+        call to initialize_dataplane_instance
         '''
 
-        if self.firstInit:
+        if self.first_init:
             self.log.info("First VPN instance init, resetting dataplane state")
             try:
-                self.resetState()
+                self.reset_state()
             except Exception as e:
                 self.log.error("Exception while resetting state: %s", e)
-            self.firstInit = False
+            self.first_init = False
         else:
             self.log.debug("(not resetting dataplane state)")
 
-        return self.dataplaneInstanceClass(self, instanceId,
-                                           externalInstanceId, gatewayIP, mask,
-                                           instanceLabel, **kwargs)
+        return self.dataplane_instance_class(self, instance_id,
+                                           external_instance_id, gateway_ip, mask,
+                                           instance_label, **kwargs)
 
     def cleanup(self):
-        # FIXME: to be clarified: can be removed ? should call resetState ?
-        self._cleanupReal()
+        # FIXME: to be clarified: can be removed ? should call reset_state ?
+        self._cleanup_real()
 
-    def getLocalAddress(self):
+    def get_local_address(self):
         return self.local_address
 
-    def supportedEncaps(self):
+    def supported_encaps(self):
         return self.__class__.encaps
 
-    def _runCommand(self, command, *args, **kwargs):
-        return runCommand(self.log, command, *args, **kwargs)
+    def _run_command(self, command, *args, **kwargs):
+        return run_command(self.log, command, *args, **kwargs)
 
-    def getLGMap(self):
+    def get_lg_map(self):
         encaps = []
-        for encap in self.supportedEncaps():
+        for encap in self.supported_encaps():
             encaps.append(repr(encap))
         return {
             "name": (lg.VALUE, self.__class__.__name__),
             "local_address": (lg.VALUE, self.local_address),
             "supported_encaps": (lg.VALUE, encaps),
             "config": (lg.VALUE, self.config),
-            "kernel_release": (lg.VALUE, self.kernelRelease)
+            "kernel_release": (lg.VALUE, self.kernel_release)
         }
 
 
 class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
-    @logDecorator.logInfo
-    def __init__(self, dataplaneDriver, instanceId, externalInstanceId,
-                 gatewayIP, mask, instanceLabel=None):
-        lg.LookingGlassLocalLogger.__init__(self, repr(instanceId))
-        self.driver = dataplaneDriver
-        self.config = dataplaneDriver.config
-        self.instanceId = instanceId
-        self.externalInstanceId = externalInstanceId
-        self.gatewayIP = gatewayIP
+    @log_decorator.log_info
+    def __init__(self, dataplane_driver, instance_id, external_instance_id,
+                 gateway_ip, mask, instance_label=None):
+        lg.LookingGlassLocalLogger.__init__(self, repr(instance_id))
+        self.driver = dataplane_driver
+        self.config = dataplane_driver.config
+        self.instance_id = instance_id
+        self.external_instance_id = external_instance_id
+        self.gateway_ip = gateway_ip
         self.mask = mask
-        self.instanceLabel = instanceLabel
+        self.instance_label = instance_label
 
     @abstractmethod
     def cleanup(self):
         pass
 
     @abstractmethod
-    def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
+    def vif_plugged(self, mac_address, ip_address_prefix, localport, label):
         pass
 
     @abstractmethod
-    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, label,
-                     lastEndpoint=True):
+    def vif_unplugged(self, mac_address, ip_address_prefix, localport, label,
+                     last_endpoint=True):
         pass
 
     @abstractmethod
-    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                        encaps, lbConsistentHashOrder=0):
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
+                                        encaps, lb_consistent_hash_order=0):
         pass
 
     @abstractmethod
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                         encaps, lbConsistentHashOrder=0):
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
+                                         encaps, lb_consistent_hash_order=0):
         pass
 
-    def _runCommand(self, *args, **kwargs):
-        return runCommand(self.log, *args, **kwargs)
+    def _run_command(self, *args, **kwargs):
+        return run_command(self.log, *args, **kwargs)
 
     # Looking glass info ####
 
-    def getLookingGlassLocalInfo(self, pathPrefix):
+    def get_log_local_info(self, path_prefix):
         driver = {"id": self.driver.type,
-                  "href": lg.getAbsolutePath(
-                      "DATAPLANE_DRIVERS", pathPrefix, [self.driver.type])}
+                  "href": lg.get_absolute_path(
+                      "DATAPLANE_DRIVERS", path_prefix, [self.driver.type])}
         return {
             "driver": driver,
         }
@@ -196,49 +196,49 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
 
 class DummyVPNInstanceDataplane(VPNInstanceDataplane):
 
-    @logDecorator.log
+    @log_decorator.log
     def __init__(self, *args, **kwargs):
         VPNInstanceDataplane.__init__(self, *args)
 
-    @logDecorator.log
-    def vifPlugged(self, macAddress, ipAddressPrefix, localPort, label):
+    @log_decorator.log
+    def vif_plugged(self, mac_address, ip_address_prefix, localport, label):
         pass
 
-    @logDecorator.log
-    def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, label,
-                     lastEndpoint=True):
+    @log_decorator.log
+    def vif_unplugged(self, mac_address, ip_address_prefix, localport, label,
+                     last_endpoint=True):
         pass
 
-    @logDecorator.log
-    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                        encaps, lbConsistentHashOrder=0):
+    @log_decorator.log
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
+                                        encaps, lb_consistent_hash_order=0):
         pass
 
-    @logDecorator.log
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                         encaps, lbConsistentHashOrder=0):
+    @log_decorator.log
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
+                                        encaps, lb_consistent_hash_order=0):
         pass
 
-    @logDecorator.log
+    @log_decorator.log
     def cleanup(self):
         pass
 
 
 class DummyDataplaneDriver(DataplaneDriver):
 
-    dataplaneInstanceClass = DummyVPNInstanceDataplane
+    dataplane_instance_class = DummyVPNInstanceDataplane
 
     def __init__(self, *args):
         DataplaneDriver.__init__(self, *args)
 
-    @logDecorator.logInfo
-    def _initReal(self, config):
+    @log_decorator.log_info
+    def _init_real(self, config):
         pass
 
-    @logDecorator.logInfo
-    def resetState(self):
+    @log_decorator.log_info
+    def reset_state(self):
         pass
 
-    @logDecorator.logInfo
-    def _cleanupReal(self):
+    @log_decorator.log_info
+    def _cleanup_real(self):
         pass

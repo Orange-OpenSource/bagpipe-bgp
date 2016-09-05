@@ -32,7 +32,7 @@ from netaddr.ip import IPNetwork
 
 from bagpipe.bgp.common import constants as consts
 
-from bagpipe.bgp.common.run_command import runCommand
+from bagpipe.bgp.common.run_command import run_command
 from bagpipe.bgp.common.net_utils import get_device_mac
 
 from bagpipe.bgp.vpn.ipvpn import IPVPN
@@ -48,27 +48,27 @@ NS2VPN_DEFAULT_IFNAME = "tovpn"
 # Needed so that the OVS bridge kernel interface can hava a high enough MTU
 DEFAULT_MTU = 9000
 
-logFormatter = logging.Formatter("[%(levelname)-5.5s]  %(message)s")
+log_formatter = logging.Formatter("[%(levelname)-5.5s]  %(message)s")
 log = logging.getLogger()
 
-consoleHandler = logging.StreamHandler()
-consoleHandler.setFormatter(logFormatter)
-log.addHandler(consoleHandler)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+log.addHandler(console_handler)
 
 log.setLevel(logging.WARNING)
 
-run_log_command = functools.partial(runCommand, log)
+run_log_command = functools.partial(run_command, log)
 
 
 def create_veth_pair(vpn_interface, ns_interface, ns_name):
     run_log_command("ip netns exec %s ip link delete %s" %
-                    (ns_name, ns_interface), raiseExceptionOnError=False)
+                    (ns_name, ns_interface), raise_on_error=False)
     run_log_command("ip link delete %s" %
-                    vpn_interface, raiseExceptionOnError=False)
+                    vpn_interface, raise_on_error=False)
     run_log_command(
         "ip link add %s type veth peer name %s netns %s mtu 65535" %
         (vpn_interface, ns_interface, ns_name),
-        raiseExceptionOnError=False)
+        raise_on_error=False)
     run_log_command("ip link set dev %s up" % vpn_interface)
     run_log_command("ip link set dev %s mtu %d" % (vpn_interface, DEFAULT_MTU))
     run_log_command("ip netns exec %s ip link set dev %s up" %
@@ -79,12 +79,12 @@ def get_vpn2ns_if_name(namespace):
     return (VPN2NS_INTERFACE_PREFIX + namespace)[:consts.LINUX_DEV_LEN]
 
 
-def createSpecialNetNSPort(options):
+def create_special_netns_port(options):
     print "Will plug local namespace %s into network" % options.netns
 
     # create namespace
     run_log_command("ip netns add %s" %
-                    options.netns, raiseExceptionOnError=False)
+                    options.netns, raise_on_error=False)
 
     # create veth pair and move one into namespace
     if options.ovs_vlan:
@@ -104,15 +104,15 @@ def createSpecialNetNSPort(options):
 
     run_log_command("ip netns exec %s ip addr add %s dev %s" %
                     (options.netns, options.ip, options.if2vpn),
-                    raiseExceptionOnError=False)
+                    raise_on_error=False)
 
     run_log_command("ip netns exec %s ip route add default dev %s via %s" %
                     (options.netns, options.if2vpn, options.gw_ip),
-                    raiseExceptionOnError=False)
+                    raise_on_error=False)
 
     run_log_command("ip netns exec %s ip link set %s mtu 1420" %
                     (options.netns, options.if2vpn),
-                    raiseExceptionOnError=False)
+                    raise_on_error=False)
 
 
 def classifier_callback(option, opt_str, value, parser):
@@ -146,13 +146,13 @@ def main():
                       "namespace attached/detached "
                       "[with 'if' as the name of the interface to the netns]")
 
-    parser.add_option("--rt", dest="routeTargets",
+    parser.add_option("--rt", dest="route_targets",
                       help="route target [default: 64512:0] (can be "
                       "specified multiple times)", default=[], action="append")
-    parser.add_option("--import-rt", dest="importOnlyRouteTargets",
+    parser.add_option("--import-rt", dest="import_only_rts",
                       help="import-only route target (can be specified"
                       "multiple times)", default=[], action="append")
-    parser.add_option("--export-rt", dest="exportOnlyRouteTargets",
+    parser.add_option("--export-rt", dest="export_only_rts",
                       help="export-only route target (can be specified"
                       "multiple times)", default=[], action="append")
 
@@ -165,13 +165,13 @@ def main():
                       help="MAC address (required for evpn if port"
                       " is not 'netns')")
 
-    parser.set_defaults(advertiseSubnet=False)
+    parser.set_defaults(advertise_subnet=False)
     parser.add_option("--advertise-singleton", action="store_false",
-                      dest="advertiseSubnet",
+                      dest="advertise_subnet",
                       help="advertise IP address as a /32 (default)")
 
     parser.add_option("--advertise-subnet", action="store_true",
-                      dest="advertiseSubnet",
+                      dest="advertise_subnet",
                       help="advertise the whole IP subnet")
 
     parser.add_option("--ovs-preplug", action="store_true", dest="ovs_preplug",
@@ -193,17 +193,17 @@ def main():
                       "defaults to %default "
                       "(optional, for use with --port netns)")
 
-    parser.add_option("--readv-from-rt", dest="reAdvFromRTs",
+    parser.add_option("--readv-from-rt", dest="readv_from_rts",
                       help="enables route readvertisement from these RTs,"
                       " works in conjunction with --readv-to-rt",
                       default=[], action="append")
 
-    parser.add_option("--readv-to-rt", dest="reAdvToRTs",
+    parser.add_option("--readv-to-rt", dest="readv_to_rts",
                       help="enables route readvertisement to these RTs,"
                       " works in conjunction with --readv-from-rt",
                       default=[], action="append")
 
-    parser.add_option("--redirect-rts", dest="redirectRTs",
+    parser.add_option("--redirect-rts", dest="redirect_rts",
                       help="Redirection Route Targets to attract traffic, "
                       "matching the traffic classifier, in specified VRF from "
                       "any VRF importing this route target",
@@ -246,21 +246,21 @@ def main():
     if not(options.ip):
         parser.error("Need to specify --ip")
 
-    if (len(options.routeTargets) == 0 and
-            not (options.importOnlyRouteTargets
-                 or options.exportOnlyRouteTargets)):
+    if (len(options.route_targets) == 0 and
+            not (options.import_only_rts
+                 or options.export_only_rts)):
         if options.network_type == IPVPN:
-            options.routeTargets = ["64512:512"]
+            options.route_targets = ["64512:512"]
         else:
-            options.routeTargets = ["64512:513"]
+            options.route_targets = ["64512:513"]
 
-    importRTs = copy(options.routeTargets or [])
-    for rt in options.importOnlyRouteTargets:
-        importRTs.append(rt)
+    import_rts = copy(options.route_targets or [])
+    for rt in options.import_only_rts:
+        import_rts.append(rt)
 
-    exportRTs = copy(options.routeTargets or [])
-    for rt in options.exportOnlyRouteTargets:
-        exportRTs.append(rt)
+    export_rts = copy(options.route_targets or [])
+    for rt in options.export_only_rts:
+        export_rts.append(rt)
 
     if not re.match('.*/[0-9]+$', options.ip):
         options.ip = options.ip + "/24"
@@ -285,7 +285,7 @@ def main():
             options.if2netns = get_vpn2ns_if_name(options.netns)
 
         if options.operation == "attach":
-            createSpecialNetNSPort(options)
+            create_special_netns_port(options)
 
         options.port = options.if2netns
         options.mac = get_device_mac(run_log_command,
@@ -310,7 +310,7 @@ def main():
                                                options.bridge)
             run_log_command("ovs-vsctl del-port %s %s" %
                             (options.bridge, options.port),
-                            raiseExceptionOnError=False)
+                            raise_on_error=False)
             run_log_command("ovs-vsctl add-port %s %s" %
                             (options.bridge, options.port))
 
@@ -328,29 +328,29 @@ def main():
                          "attachment if port is not 'netns'")
 
     readvertise = None
-    if options.reAdvToRTs:
-        readvertise = {"from_rt": options.reAdvFromRTs,
-                       "to_rt": options.reAdvToRTs}
+    if options.readv_to_rts:
+        readvertise = {"from_rt": options.readv_from_rts,
+                       "to_rt": options.readv_to_rts}
 
     attract_traffic = dict()
-    if options.redirectRTs:
+    if options.redirect_rts:
         if options.classifier:
-            attract_traffic.update(dict({'redirect_rts': options.redirectRTs,
+            attract_traffic.update(dict({'redirect_rts': options.redirect_rts,
                                          'classifier': options.classifier}))
         else:
             parser.error("Need to specify --redirect-rt and at least one "
                          "traffic classifier option")
 
     json_data = json.dumps(
-        {"import_rt":  importRTs,
-         "export_rt":  exportRTs,
+        {"import_rt":  import_rts,
+         "export_rt":  export_rts,
          "local_port":  local_port,
          "vpn_instance_id":  options.vpn_instance_id,
          "vpn_type":    options.network_type,
          "gateway_ip":  options.gw_ip,
          "mac_address": options.mac,
          "ip_address":  options.ip,
-         "advertise_subnet": options.advertiseSubnet,
+         "advertise_subnet": options.advertise_subnet,
          "readvertise": readvertise,
          "attract_traffic": attract_traffic,
          "lb_consistent_hash_order": options.lb_consistent_hash_order

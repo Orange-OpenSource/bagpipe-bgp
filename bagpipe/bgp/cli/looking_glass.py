@@ -28,8 +28,8 @@ LOOKING_GLASS_BASE = "looking-glass"
 INDENT_INCREMENT = 2
 
 
-def pretty_print_recurse(data, indent, recursiveRequests, url,
-                         alreadyANewLine=False):
+def pretty_print_recurse(data, indent, recursive_requests, url,
+                         already_anew_line=False):
     """
     key has already been output, this function will print data and finish at
     a start of line
@@ -47,15 +47,15 @@ def pretty_print_recurse(data, indent, recursiveRequests, url,
             more = True
 
         if more:
-            targetURL = data["href"]
-            if recursiveRequests:
-                if targetURL.startswith(url):
-                    response = urllib2.urlopen(targetURL)
+            target_url = data["href"]
+            if recursive_requests:
+                if target_url.startswith(url):
+                    response = urllib2.urlopen(target_url)
                     if response.getcode() == 200:
                         pretty_print_recurse(json.load(response),
                                              indent + INDENT_INCREMENT,
-                                             recursiveRequests, targetURL,
-                                             alreadyANewLine=False)
+                                             recursive_requests, target_url,
+                                             already_anew_line=False)
                         return True
                     else:
                         stdout.write(" (ERROR %d)", response.getcode())
@@ -63,20 +63,20 @@ def pretty_print_recurse(data, indent, recursiveRequests, url,
 
             del data["href"]
             stdout.write(" (...)")
-            alreadyANewLine = False
+            already_anew_line = False
 
         if len(data) > 0:
-            if not alreadyANewLine:
+            if not already_anew_line:
                 stdout.write("\n")
-            firstVal = True
+            first_val = True
             for (key, value) in data.iteritems():
-                if not firstVal or not alreadyANewLine:
+                if not first_val or not already_anew_line:
                     stdout.write("%s" % (" " * indent))
-                if firstVal:
-                    firstVal = False
+                if first_val:
+                    first_val = False
                 stdout.write("%s: " % key)
                 pretty_print_recurse(value, indent + INDENT_INCREMENT,
-                                     recursiveRequests, url)
+                                     recursive_requests, url)
         else:
             if more:
                 stdout.write("\n")
@@ -86,19 +86,19 @@ def pretty_print_recurse(data, indent, recursiveRequests, url,
     elif isinstance(data, list):
 
         if len(data) > 0:
-            if not alreadyANewLine:
+            if not already_anew_line:
                 stdout.write("\n")
-                alreadyANewLine = True
+                already_anew_line = True
 
-            for (i, value) in enumerate(data):
+            for value in data:
                 stdout.write("%s* " % (" " * indent))
                 if isinstance(value, dict) or isinstance(value, list):
                     pretty_print_recurse(value, indent + INDENT_INCREMENT,
-                                         recursiveRequests, url,
-                                         alreadyANewLine)
+                                         recursive_requests, url,
+                                         already_anew_line)
                 else:
                     stdout.write("%s\n" % value)
-                alreadyANewLine = True
+                already_anew_line = True
         else:
             stdout.write("-\n")
 
@@ -153,7 +153,7 @@ e.g.: %prog vpns instances"""
                     data = json.load(response_bis)
 
             pretty_print_recurse(data, 0, options.recurse, target_url,
-                                 alreadyANewLine=True)
+                                 already_anew_line=True)
 
     except urllib2.HTTPError as e:
         if e.code == 404:

@@ -30,12 +30,12 @@ from netaddr.ip import IPNetwork
 import netaddr
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.engine.flowspec import FlowRouteFactory
 from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
-    compareECMP, compareNoECMP
+    compare_ecmp, compare_no_ecmp
 from bagpipe.bgp.engine import RouteEntry
 
 from bagpipe.bgp.rest_api import APIException
@@ -53,30 +53,30 @@ log = logging.getLogger(__name__)
 
 class TrafficClassifier(object):
 
-    def __init__(self, sourcePrefix=None, destinationPrefix=None,
-                 sourcePort=None, destinationPort=None, protocol='tcp'):
-        self.sourcePrefix = sourcePrefix
-        self.destinationPrefix = destinationPrefix
+    def __init__(self, source_prefix=None, destination_prefix=None,
+                 source_port=None, destination_port=None, protocol='tcp'):
+        self.source_pfx = source_prefix
+        self.destination_pfx = destination_prefix
 
-        if sourcePort:
-            if ":" in sourcePort:
-                self.sourcePort = tuple(
-                    [int(p) for p in sourcePort.split(":")]
+        if source_port:
+            if ":" in source_port:
+                self.source_port = tuple(
+                    [int(p) for p in source_port.split(":")]
                 )
             else:
-                self.sourcePort = int(sourcePort)
+                self.source_port = int(source_port)
         else:
-            self.sourcePort = sourcePort
+            self.source_port = source_port
 
-        if destinationPort:
-            if ":" in destinationPort:
-                self.destinationPort = tuple(
-                    [int(p) for p in destinationPort.split(":")]
+        if destination_port:
+            if ":" in destination_port:
+                self.destination_port = tuple(
+                    [int(p) for p in destination_port.split(":")]
                 )
             else:
-                self.destinationPort = int(destinationPort)
+                self.destination_port = int(destination_port)
         else:
-            self.destinationPort = destinationPort
+            self.destination_port = destination_port
 
         self.protocol = protocol
 
@@ -84,10 +84,10 @@ class TrafficClassifier(object):
         return "traffic-classifier:%s" % str(self)
 
     def __str__(self):
-        return "%s-%s,%s-%s,%s" % (self.sourcePrefix or "*",
-                                   self.sourcePort or "*",
-                                   self.destinationPrefix or "*",
-                                   self.destinationPort or "*",
+        return "%s-%s,%s-%s,%s" % (self.source_pfx or "*",
+                                   self.source_port or "*",
+                                   self.destination_pfx or "*",
+                                   self.destination_port or "*",
                                    self.protocol)
 
     def __eq__(self, other):
@@ -95,11 +95,11 @@ class TrafficClassifier(object):
                 self.__dict__ == other.__dict__)
 
     def __hash__(self):
-        return hash((self.sourcePrefix, self.sourcePort,
-                     self.destinationPrefix, self.destinationPort,
+        return hash((self.source_pfx, self.source_port,
+                     self.destination_pfx, self.destination_port,
                      self.protocol))
 
-    def _interpretPortRule(self, rule):
+    def _interpret_port_rule(self, rule):
         if len(rule) == 1:
             op = rule[0].operations
             port = rule[0].value
@@ -127,8 +127,8 @@ class TrafficClassifier(object):
 
         return port_range
 
-    @logDecorator.log
-    def _constructPortRules(self, port_range, flow_object):
+    @log_decorator.log
+    def _construct_port_rules(self, port_range, flow_object):
         log.info("Construct port rules with %s (type %s) on %s object",
                  port_range, type(port_range), flow_object)
         port_rules = list()
@@ -159,59 +159,59 @@ class TrafficClassifier(object):
 
         return port_rules
 
-    def _getSourcePrefix(self, rule):
-        self.sourcePrefix = rule[0].cidr.prefix()
+    def _get_source_prefix(self, rule):
+        self.source_pfx = rule[0].cidr.prefix()
 
-    def _getDestinationPrefix(self, rule):
-        self.destinationPrefix = rule[0].cidr.prefix()
+    def _get_destination_prefix(self, rule):
+        self.destination_pfx = rule[0].cidr.prefix()
 
-    def _parseAnyPort(self, rule):
-        self.sourcePort = self._interpretPortRule(rule)
-        self.destinationPort = list(self.sourcePort)
+    def _parse_any_port(self, rule):
+        self.source_port = self._interpret_port_rule(rule)
+        self.destination_port = list(self.source_port)
 
-    def _parseSourcePort(self, rule):
-        self.sourcePort = self._interpretPortRule(rule)
+    def _parse_source_port(self, rule):
+        self.source_port = self._interpret_port_rule(rule)
 
-    def _parseDestinationPort(self, rule):
-        self.destinationPort = self._interpretPortRule(rule)
+    def _parse_destination_port(self, rule):
+        self.destination_port = self._interpret_port_rule(rule)
 
-    def _getProtocol(self, rule):
+    def _get_protocol(self, rule):
         self.protocol = Protocol.names[rule[0].value]
 
-    def mapTrafficClassifier2RedirectRules(self):
+    def map_traffic_classifier_2_redirect_rules(self):
         rules = list()
-        if self.sourcePrefix:
-            ip, mask = self.sourcePrefix.split('/')
-            if IPNetwork(self.sourcePrefix).version == 4:
+        if self.source_pfx:
+            ip, mask = self.source_pfx.split('/')
+            if IPNetwork(self.source_pfx).version == 4:
                 rules.append(flow.Flow4Source(socket.inet_pton(socket.AF_INET,
                                                                ip),
                                               int(mask)))
-            elif IPNetwork(self.sourcePrefix).version == 6:
+            elif IPNetwork(self.source_pfx).version == 6:
                 # TODO: IPv6 offset ??
                 rules.append(flow.Flow6Source(socket.inet_pton(socket.AF_INET6,
                                                                ip),
                                               int(mask), 0))
 
-        if self.destinationPrefix:
-            ip, mask = self.destinationPrefix.split('/')
-            if IPNetwork(self.destinationPrefix).version == 4:
+        if self.destination_pfx:
+            ip, mask = self.destination_pfx.split('/')
+            if IPNetwork(self.destination_pfx).version == 4:
                 rules.append(
                     flow.Flow4Destination(socket.inet_pton(socket.AF_INET, ip),
                                           int(mask))
                 )
-            elif IPNetwork(self.destinationPrefix).version == 6:
+            elif IPNetwork(self.destination_pfx).version == 6:
                 # TODO: IPv6 offset ??
                 rules.append(
                     flow.Flow6Destination(socket.inet_pton(socket.AF_INET6, ip),
                                           int(mask), 0)
                 )
 
-        if self.sourcePort:
-            rules += self._constructPortRules(self.sourcePort,
+        if self.source_port:
+            rules += self._construct_port_rules(self.source_port,
                                               flow.FlowSourcePort)
 
-        if self.destinationPort:
-            rules += self._constructPortRules(self.destinationPort,
+        if self.destination_port:
+            rules += self._construct_port_rules(self.destination_port,
                                               flow.FlowDestinationPort)
 
         if self.protocol:
@@ -220,13 +220,13 @@ class TrafficClassifier(object):
 
         return rules
 
-    def mapRedirectRules2TrafficClassifier(self, rules):
-        components = {1: self._getDestinationPrefix,  # FlowDestinationPrefix
-                      2: self._getSourcePrefix,  # FlowSourcePrefix
-                      3: self._getProtocol,  # FlowIPProtocol
-                      4: self._parseAnyPort,  # FlowAnyPort
-                      5: self._parseDestinationPort,  # FLowDestinationPort
-                      6: self._parseSourcePort}  # FlowSourcePort
+    def map_redirect_rules_2_traffic_classifier(self, rules):
+        components = {1: self._get_destination_prefix,  # FlowDestinationPrefix
+                      2: self._get_source_prefix,  # FlowSourcePrefix
+                      3: self._get_protocol,  # FlowIPProtocol
+                      4: self._parse_any_port,  # FlowAnyPort
+                      5: self._parse_destination_port,  # FLowDestinationPort
+                      6: self._parse_source_port}  # FlowSourcePort
 
         for ID, rule in rules.iteritems():
             components[ID](rule)
@@ -239,39 +239,37 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     afi = None
     safi = None
 
-    @logDecorator.log
-    def __init__(self, vpnManager, dataplaneDriver,
-                 externalInstanceId, instanceId, importRTs, exportRTs,
-                 gatewayIP, mask, readvertise, attractTraffic, **kwargs):
+    @log_decorator.log
+    def __init__(self, vpn_manager, dataplane_driver,
+                 external_instance_id, instance_id, import_rts, export_rts,
+                 gateway_ip, mask, readvertise, attract_traffic, **kwargs):
 
-        self.vpnManager = vpnManager
+        self.vpn_manager = vpn_manager
 
-        self.instanceType = self.__class__.__name__
-        self.instanceId = instanceId
+        self.instance_type = self.__class__.__name__
+        self.instance_id = instance_id
 
         Thread.__init__(self)
         self.setDaemon(True)
 
-        # FIXME: à mettre dans self.AFISAFI2compareRoute
-        #  # avoir à la place d'une valeur un dict (afi,safi) -> valeur
-        if dataplaneDriver.ecmpSupport:
-            compareRoutes = compareECMP
+        if dataplane_driver.ecmp_support:
+            compare_routes = compare_ecmp
         else:
-            compareRoutes = compareNoECMP
+            compare_routes = compare_no_ecmp
 
-        TrackerWorker.__init__(self, self.vpnManager.bgpManager, "%s-%d" %
-                               (self.instanceType, self.instanceId),
-                               compareRoutes)
+        TrackerWorker.__init__(self, self.vpn_manager.bgp_manager, "%s-%d" %
+                               (self.instance_type, self.instance_id),
+                               compare_routes)
 
         lg.LookingGlassLocalLogger.__init__(self,
-                                            "%s-%d" % (self.instanceType,
-                                                       self.instanceId))
+                                            "%s-%d" % (self.instance_type,
+                                                       self.instance_id))
         self.lock = Lock()
 
-        self.importRTs = importRTs
-        self.exportRTs = exportRTs
-        self.externalInstanceId = externalInstanceId
-        self.gatewayIP = gatewayIP
+        self.import_rts = import_rts
+        self.export_rts = export_rts
+        self.external_instance_id = external_instance_id
+        self.gateway_ip = gateway_ip
         self.mask = mask
 
         self.afi = self.__class__.afi
@@ -279,36 +277,36 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         assert isinstance(self.afi, AFI)
         assert isinstance(self.safi, SAFI)
 
-        self.dataplaneDriver = dataplaneDriver
+        self.dataplane_driver = dataplane_driver
 
-        self.instanceLabel = self.vpnManager.labelAllocator.getNewLabel(
-            "Incoming traffic for %s %d" % (self.instanceType,
-                                            self.instanceId))
+        self.instance_label = self.vpn_manager.label_allocator.get_new_label(
+            "Incoming traffic for %s %d" % (self.instance_type,
+                                            self.instance_id))
 
-        self.instanceRD = self.vpnManager.rdAllocator.getNewRD(
-            "Default route distinguisher for %s %d" % (self.instanceType,
-                                                       self.instanceId))
+        self.instance_rd = self.vpn_manager.rd_allocator.get_new_rd(
+            "Default route distinguisher for %s %d" % (self.instance_type,
+                                                       self.instance_id))
 
-        self.localPortData = dict()
+        self.localport_data = dict()
 
         # One local port -> List of endpoints (MAC and IP addresses tuple)
-        self.localPort2Endpoints = dict()
+        self.localport_2_endpoints = dict()
         # One endpoint (MAC and IP addresses tuple) -> One route distinguisher
-        self.endpoint2RD = dict()
+        self.endpoint_2_rd = dict()
         # One MAC address -> One local port
-        self.macAddress2LocalPortData = dict()
+        self.mac_2_localport_data = dict()
         # One IP address ->  Multiple MAC address
-        self.ipAddress2MacAddress = dict()
+        self.ip_address_2_mac = dict()
 
         # Redirected instances list from which traffic is attracted (based on
         # FlowSpec 5-tuple classification)
-        self.redirectedInstances = set()
+        self.redirected_instances = set()
 
-        self.dataplane = self.dataplaneDriver.initializeDataplaneInstance(
-            self.instanceId, self.externalInstanceId,
-            self.gatewayIP, self.mask, self.instanceLabel, **kwargs)
+        self.dataplane = self.dataplane_driver.initialize_dataplane_instance(
+            self.instance_id, self.external_instance_id,
+            self.gateway_ip, self.mask, self.instance_label, **kwargs)
 
-        for rt in self.importRTs:
+        for rt in self.import_rts:
             self._subscribe(self.afi, self.safi, rt)
             # Subscribe to FlowSpec routes
             # FIXME(tmorin): this maybe isn't applicable yet to E-VPN yet
@@ -317,83 +315,83 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         if readvertise:
             self.readvertise = True
             try:
-                self.readvertiseToRTs = readvertise['to_rt']
+                self.readvertise_to_rts = readvertise['to_rt']
             except KeyError:
                 raise APIException("'readvertise' specified with no 'to_rt'")
-            self.readvertiseFromRTs = readvertise.get('from_rt', [])
+            self.readvertise_from_rts = readvertise.get('from_rt', [])
             self.log.debug("readvertise enabled, from RT:%s, to %s",
-                           self.readvertiseFromRTs, self.readvertiseToRTs)
-            for rt in self.readvertiseFromRTs:
+                           self.readvertise_from_rts, self.readvertise_to_rts)
+            for rt in self.readvertise_from_rts:
                 self._subscribe(self.afi, self.safi, rt)
         else:
             self.log.debug("readvertise not enabled")
             self.readvertise = False
 
-        if self.readvertise and attractTraffic:
-            if len(self.readvertiseToRTs) != 1:
+        if self.readvertise and attract_traffic:
+            if len(self.readvertise_to_rts) != 1:
                 raise APIException("attract_traffic requires exactly one RT"
                                    " to be provided in readvertise/to_rt")
-            self.attractTraffic = True
-            self.attractRTs = attractTraffic['redirect_rts']
+            self.attract_traffic = True
+            self.attract_rts = attract_traffic['redirect_rts']
             try:
-                self.attractClassifier = attractTraffic['classifier']
+                self.attract_classifier = attract_traffic['classifier']
             except KeyError:
-                raise APIException("'attractTraffic' specified with no "
+                raise APIException("'attract_traffic' specified with no "
                                    "'classifier'")
             self.log.debug("Attract traffic enabled with RT: %s and classifier:"
-                           " %s", self.attractRTs, self.attractClassifier)
+                           " %s", self.attract_rts, self.attract_classifier)
         else:
             self.log.debug("attract traffic not enabled")
-            self.attractTraffic = False
+            self.attract_traffic = False
 
     @utils.synchronized
     def stop(self):
         self._stop()
 
-    @logDecorator.log
+    @log_decorator.log
     def _stop(self):
         # cleanup BGP subscriptions
-        for rt in self.importRTs:
+        for rt in self.import_rts:
             self._unsubscribe(self.afi, self.safi, rt)
             self._unsubscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
 
         self.dataplane.cleanup()
 
-        self.vpnManager.labelAllocator.release(self.instanceLabel)
+        self.vpn_manager.label_allocator.release(self.instance_label)
 
         # this makes sure that the thread will be stopped, and any remaining
         # routes/subscriptions are released:
         TrackerWorker.stop(self)
 
     @utils.synchronized
-    @logDecorator.log
-    def stopIfEmpty(self):
-        self.log.debug("localPort2Endpoints: %s", self.localPort2Endpoints)
-        if self.isEmpty():
+    @log_decorator.log
+    def stop_if_empty(self):
+        self.log.debug("localport_2_endpoints: %s", self.localport_2_endpoints)
+        if self.is_empty():
             self._stop()
             return True
 
         return False
 
-    def isEmpty(self):
-        return not self.localPort2Endpoints
+    def is_empty(self):
+        return not self.localport_2_endpoints
 
-    def hasEnpoint(self, linuxif):
-        return self.localPort2Endpoints.get(linuxif) is not None
+    def has_enpoint(self, linuxif):
+        return self.localport_2_endpoints.get(linuxif) is not None
 
-    def hasOnlyOneEndpoint(self):
-        return (len(self.localPort2Endpoints) == 1 and
-                len(self.localPort2Endpoints.values()[0]) == 1)
+    def has_only_one_endpoint(self):
+        return (len(self.localport_2_endpoints) == 1 and
+                len(self.localport_2_endpoints.values()[0]) == 1)
 
-    @logDecorator.log
-    def updateRouteTargets(self, newImportRTs, newExportRTs):
-        added_import_rt = set(newImportRTs) - set(self.importRTs)
-        removed_import_rt = set(self.importRTs) - set(newImportRTs)
+    @log_decorator.log
+    def update_route_targets(self, new_import_rts, new_export_rts):
+        added_import_rt = set(new_import_rts) - set(self.import_rts)
+        removed_import_rt = set(self.import_rts) - set(new_import_rts)
 
         self.log.debug("%s %d - Added Import RTs: %s",
-                       self.instanceType, self.instanceId, added_import_rt)
+                       self.instance_type, self.instance_id, added_import_rt)
         self.log.debug("%s %d - Removed Import RTs: %s",
-                       self.instanceType, self.instanceId, removed_import_rt)
+                       self.instance_type, self.instance_id, removed_import_rt)
 
         # Register to BGP with these route targets
         for rt in added_import_rt:
@@ -406,47 +404,47 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             self._unsubscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
 
         # Update import and export route targets
-        self.importRTs = newImportRTs
+        self.import_rts = new_import_rts
 
         # Re-advertise all routes with new export RTs
-        self.log.debug("Exports RTs: %s -> %s", self.exportRTs, newExportRTs)
-        if frozenset(newExportRTs) != frozenset(self.exportRTs):
+        self.log.debug("Exports RTs: %s -> %s", self.export_rts, new_export_rts)
+        if frozenset(new_export_rts) != frozenset(self.export_rts):
             self.log.debug("Will re-export routes with new RTs")
-            self.exportRTs = newExportRTs
+            self.export_rts = new_export_rts
             # FIXME: we should only update the routes that
             # are routes of ports plugged to the VPN instance,
             # not all routes which would wrongly include
             # routes that we re-advertise between RTs
-            for routeEntry in self.getRouteEntries():
+            for route_entry in self.get_route_entries():
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
-                              routeEntry.nlri, newExportRTs)
+                              route_entry.nlri, new_export_rts)
 
-                updatedRouteEntry = RouteEntry(routeEntry.nlri, None,
-                                               copy(routeEntry.attributes))
-                # reset the routeTargets
-                # will RTs originally present in routeEntry.attributes
-                updatedRouteEntry.setRouteTargets(self.exportRTs)
+                updated_route_entry = RouteEntry(route_entry.nlri, None,
+                                               copy(route_entry.attributes))
+                # reset the route_targets
+                # will RTs originally present in route_entry.attributes
+                updated_route_entry.set_route_targets(self.export_rts)
 
-                self.log.debug("   updated route: %s", updatedRouteEntry)
+                self.log.debug("   updated route: %s", updated_route_entry)
 
-                self._advertiseRoute(updatedRouteEntry)
+                self._advertise_route(updated_route_entry)
 
-    def _parseIPAddressPrefix(self, ipAddressPrefix):
-        ipAddress = ""
+    def _parse_ipaddress_prefix(self, ip_address_prefix):
+        ip_address = ""
         mask = 0
         try:
-            net = IPNetwork(ipAddressPrefix)
-            (ipAddress, mask) = (str(net.ip), net.prefixlen)
+            net = IPNetwork(ip_address_prefix)
+            (ip_address, mask) = (str(net.ip), net.prefixlen)
         except netaddr.core.AddrFormatError:
-            raise APIException("Bogus IP prefix: %s" % ipAddressPrefix)
+            raise APIException("Bogus IP prefix: %s" % ip_address_prefix)
 
-        return (ipAddress, mask)
+        return (ip_address, mask)
 
-    def _genEncapExtendedCommunities(self):
+    def _gen_encap_extended_communities(self):
         ecommunities = ec.ExtendedCommunities()
-        for encap in self.dataplaneDriver.supportedEncaps():
+        for encap in self.dataplane_driver.supported_encaps():
             if not isinstance(encap, ec.Encapsulation):
-                raise Exception("dataplaneDriver.supportedEncaps() should "
+                raise Exception("dataplane_driver.supported_encaps() should "
                                 "return a list of Encapsulation objects (%s)",
                                 type(encap))
 
@@ -456,410 +454,412 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         return ecommunities
 
     @abstractmethod
-    def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label, rd):
+    def generate_vif_bgp_route(self, mac_address, ip_prefix, plen, label, rd):
         '''
         returns a RouteEntry
         '''
         pass
 
-    def synthesizeVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label,
-                              lbConsistentHashOrder,
-                              routeDistinguisher=None):
-        rd = routeDistinguisher if routeDistinguisher else self.instanceRD
-        routeEntry = self.generateVifBGPRoute(macAddress, ipPrefix, prefixLen,
+    def synthesize_vif_bgp_route(self, mac_address, ip_prefix, plen, label,
+                              lb_consistent_hash_order,
+                              route_distinguisher=None):
+        rd = route_distinguisher if route_distinguisher else self.instance_rd
+        route_entry = self.generate_vif_bgp_route(mac_address, ip_prefix, plen,
                                               label, rd)
-        assert isinstance(routeEntry, RouteEntry)
+        assert isinstance(route_entry, RouteEntry)
 
-        routeEntry.attributes.add(self._genEncapExtendedCommunities())
-        routeEntry.setRouteTargets(self.exportRTs)
+        route_entry.attributes.add(self._gen_encap_extended_communities())
+        route_entry.set_route_targets(self.export_rts)
 
         ecommunities = ec.ExtendedCommunities()
         ecommunities.communities.append(
-            ec.ConsistentHashSortOrder(lbConsistentHashOrder))
-        routeEntry.attributes.add(ecommunities)
+            ec.ConsistentHashSortOrder(lb_consistent_hash_order))
+        route_entry.attributes.add(ecommunities)
 
-        self.log.debug("Synthesized Vif route entry: %s", routeEntry)
-        return routeEntry
+        self.log.debug("Synthesized Vif route entry: %s", route_entry)
+        return route_entry
 
-    def synthesizeRedirectBGPRoute(self, rules):
-        self.log.info("synthesizeRedirectBGPRoute called for rules %s", rules)
-        nlri = FlowRouteFactory(self.afi, self.instanceRD)
+    def synthesize_redirect_bgp_route(self, rules):
+        self.log.info("synthesize_redirect_bgp_route called for rules %s", rules)
+        nlri = FlowRouteFactory(self.afi, self.instance_rd)
         for rule in rules:
             nlri.add(rule)
 
-        routeEntry = RouteEntry(nlri)
+        route_entry = RouteEntry(nlri)
 
-        assert isinstance(routeEntry, RouteEntry)
+        assert isinstance(route_entry, RouteEntry)
 
         ecommunities = ec.ExtendedCommunities()
 
         # checked at __init__:
-        assert len(self.readvertiseToRTs) == 1
-        rt = self.readvertiseToRTs[0]
+        assert len(self.readvertise_to_rts) == 1
+        rt = self.readvertise_to_rts[0]
         ecommunities.communities.append(
             ec.TrafficRedirect(ASN(int(rt.asn)), int(rt.number))
         )
 
-        routeEntry.attributes.add(ecommunities)
-        routeEntry.setRouteTargets(self.attractRTs)
+        route_entry.attributes.add(ecommunities)
+        route_entry.set_route_targets(self.attract_rts)
 
-        self.log.debug("Synthesized redirect route entry: %s", routeEntry)
-        return routeEntry
+        self.log.debug("Synthesized redirect route entry: %s", route_entry)
+        return route_entry
 
     @utils.synchronized
-    @logDecorator.logInfo
-    def vifPlugged(self, macAddress, ipAddressPrefix, localPort,
-                   advertiseSubnet=False,
-                   lbConsistentHashOrder=0):
+    @log_decorator.log_info
+    def vif_plugged(self, mac_address, ip_address_prefix, localport,
+                    advertise_subnet=False,
+                    lb_consistent_hash_order=0):
         # Check if this port has already been plugged
         # - Verify port informations consistency
-        if macAddress in self.macAddress2LocalPortData:
+        if mac_address in self.mac_2_localport_data:
             self.log.debug("MAC address already plugged, checking port "
                            "consistency")
-            portData = self.macAddress2LocalPortData[macAddress]
+            pdata = self.mac_2_localport_data[mac_address]
 
-            if portData.get("port_info") != localPort:
+            if pdata.get("port_info") != localport:
                 raise APIException("Port information is not consistent. MAC "
                                    "address cannot be bound to two different"
                                    "ports. Previous plug for port %s "
-                                   "(%s != %s)" % (localPort['linuxif'],
-                                                   portData.get("port_info"),
-                                                   localPort))
+                                   "(%s != %s)" % (localport['linuxif'],
+                                                   pdata.get("port_info"),
+                                                   localport))
 
         try:
             # Parse address/mask
-            (ipPrefix, prefixLen) = self._parseIPAddressPrefix(ipAddressPrefix)
+            (ip_prefix, plen) = self._parse_ipaddress_prefix(ip_address_prefix)
 
-            if not advertiseSubnet and prefixLen != 32:
-                self.log.debug("Using /32 instead of /%d", prefixLen)
-                prefixLen = 32
+            if not advertise_subnet and plen != 32:
+                self.log.debug("Using /32 instead of /%d", plen)
+                plen = 32
 
             # - Verify (MAC address, IP address) tuple consistency
-            if ipAddressPrefix in self.ipAddress2MacAddress and prefixLen == 32:
-                if macAddress not in self.ipAddress2MacAddress[ipAddressPrefix]:
+            if ip_address_prefix in self.ip_address_2_mac and plen == 32:
+                if mac_address not in self.ip_address_2_mac[ip_address_prefix]:
                     raise APIException("Inconsistent endpoint info: %s already "
                                        "bound to a MAC address different from %s" %
-                                       (ipAddressPrefix, macAddress))
+                                       (ip_address_prefix, mac_address))
                 else:
                     return
 
-            self.log.debug("Plugging port (%s)", ipPrefix)
+            self.log.debug("Plugging port (%s)", ip_prefix)
 
-            portData = self.macAddress2LocalPortData.get(macAddress, dict())
-            if not portData:
-                portData['label'] = self.vpnManager.labelAllocator.getNewLabel(
+            pdata = self.mac_2_localport_data.get(mac_address, dict())
+            if not pdata:
+                pdata['label'] = self.vpn_manager.label_allocator.get_new_label(
                     "Incoming traffic for %s %d, interface %s, endpoint %s/%s" %
-                    (self.instanceType, self.instanceId, localPort['linuxif'],
-                     macAddress, ipAddressPrefix)
+                    (self.instance_type, self.instance_id, localport['linuxif'],
+                     mac_address, ip_address_prefix)
                 )
-                portData["port_info"] = localPort
-                portData["lbConsistentHashOrder"] = lbConsistentHashOrder
+                pdata["port_info"] = localport
+                pdata["lb_consistent_hash_order"] = lb_consistent_hash_order
 
-            endpoint_rd = self.vpnManager.rdAllocator.getNewRD(
+            endpoint_rd = self.vpn_manager.rd_allocator.get_new_rd(
                 "Route distinguisher for %s %d, interface %s, "
-                "endpoint %s/%s" % (self.instanceType, self.instanceId,
-                                    localPort['linuxif'], macAddress,
-                                    ipAddressPrefix)
+                "endpoint %s/%s" % (self.instance_type, self.instance_id,
+                                    localport['linuxif'], mac_address,
+                                    ip_address_prefix)
             )
 
-            rd = self.instanceRD if prefixLen == 32 else endpoint_rd
+            rd = self.instance_rd if plen == 32 else endpoint_rd
 
             # Call driver to setup the dataplane for incoming traffic
-            self.dataplane.vifPlugged(macAddress, ipPrefix,
-                                      localPort, portData['label'])
+            self.dataplane.vif_plugged(mac_address, ip_prefix,
+                                      localport, pdata['label'])
 
             self.log.info("Synthesizing and advertising BGP route for VIF %s "
-                          "endpoint (%s, %s/%d)", localPort['linuxif'],
-                          macAddress, ipPrefix, prefixLen)
-            routeEntry = self.synthesizeVifBGPRoute(macAddress,
-                                                    ipPrefix, prefixLen,
-                                                    portData['label'],
-                                                    lbConsistentHashOrder,
+                          "endpoint (%s, %s/%d)", localport['linuxif'],
+                          mac_address, ip_prefix, plen)
+            route_entry = self.synthesize_vif_bgp_route(mac_address,
+                                                    ip_prefix, plen,
+                                                    pdata['label'],
+                                                    lb_consistent_hash_order,
                                                     rd)
 
-            self._advertiseRoute(routeEntry)
+            self._advertise_route(route_entry)
 
-            if localPort['linuxif'] not in self.localPort2Endpoints:
-                self.localPort2Endpoints[localPort['linuxif']] = list()
+            if localport['linuxif'] not in self.localport_2_endpoints:
+                self.localport_2_endpoints[localport['linuxif']] = list()
 
-            self.localPort2Endpoints[localPort['linuxif']].append(
-                {'mac': macAddress, 'ip': ipAddressPrefix}
+            self.localport_2_endpoints[localport['linuxif']].append(
+                {'mac': mac_address, 'ip': ip_address_prefix}
             )
-            self.endpoint2RD[(macAddress, ipAddressPrefix)] = endpoint_rd
-            self.macAddress2LocalPortData[macAddress] = portData
+            self.endpoint_2_rd[(mac_address, ip_address_prefix)] = endpoint_rd
+            self.mac_2_localport_data[mac_address] = pdata
 
-            if ipAddressPrefix not in self.ipAddress2MacAddress:
-                self.ipAddress2MacAddress[ipAddressPrefix] = list()
+            if ip_address_prefix not in self.ip_address_2_mac:
+                self.ip_address_2_mac[ip_address_prefix] = list()
 
-            self.ipAddress2MacAddress[ipAddressPrefix].append(macAddress)
+            self.ip_address_2_mac[ip_address_prefix].append(mac_address)
 
         except Exception as e:
-            self.log.error("Error in vifPlugged: %s", e)
-            if localPort['linuxif'] in self.localPort2Endpoints:
-                endpoint = {'mac': macAddress, 'ip': ipAddressPrefix}
-                if endpoint in self.localPort2Endpoints[localPort['linuxif']]:
-                    self.localPort2Endpoints[localPort['linuxif']].remove(
+            self.log.error("Error in vif_plugged: %s", e)
+            if localport['linuxif'] in self.localport_2_endpoints:
+                endpoint = {'mac': mac_address, 'ip': ip_address_prefix}
+                if endpoint in self.localport_2_endpoints[localport['linuxif']]:
+                    self.localport_2_endpoints[localport['linuxif']].remove(
                         endpoint
                     )
-                if not self.localPort2Endpoints[localPort['linuxif']]:
-                    del self.localPort2Endpoints[localPort['linuxif']]
-            if macAddress in self.macAddress2LocalPortData:
-                del self.macAddress2LocalPortData[macAddress]
-            if ipAddressPrefix in self.ipAddress2MacAddress:
-                self.ipAddress2MacAddress[ipAddressPrefix].remove(macAddress)
+                if not self.localport_2_endpoints[localport['linuxif']]:
+                    del self.localport_2_endpoints[localport['linuxif']]
+            if mac_address in self.mac_2_localport_data:
+                del self.mac_2_localport_data[mac_address]
+            if ip_address_prefix in self.ip_address_2_mac:
+                self.ip_address_2_mac[ip_address_prefix].remove(mac_address)
 
             raise
 
-        self.log.info("localPort2Endpoints: %s", self.localPort2Endpoints)
-        self.log.info("endpoint2RD: %s", self.endpoint2RD)
-        self.log.info("macAddress2LocalPortData: %s",
-                      self.macAddress2LocalPortData)
-        self.log.info("ipAddress2MacAddress: %s", self.ipAddress2MacAddress)
+        self.log.info("localport_2_endpoints: %s", self.localport_2_endpoints)
+        self.log.info("endpoint_2_rd: %s", self.endpoint_2_rd)
+        self.log.info("mac_2_localport_data: %s",
+                      self.mac_2_localport_data)
+        self.log.info("ip_address_2_mac: %s", self.ip_address_2_mac)
 
     @utils.synchronized
-    @logDecorator.logInfo
-    def vifUnplugged(self, macAddress, ipAddressPrefix,
-                     advertiseSubnet=False,
-                     lbConsistentHashOrder=0):
+    @log_decorator.log_info
+    def vif_unplugged(self, mac_address, ip_address_prefix,
+                     advertise_subnet=False,
+                     lb_consistent_hash_order=0):
         # Verify port and endpoint (MAC address, IP address) tuple consistency
-        portData = self.macAddress2LocalPortData.get(macAddress)
-        if (not portData or
-                (ipAddressPrefix in self.ipAddress2MacAddress and
-                 macAddress not in self.ipAddress2MacAddress[ipAddressPrefix])
+        pdata = self.mac_2_localport_data.get(mac_address)
+        if (not pdata or
+                (ip_address_prefix in self.ip_address_2_mac and
+                 mac_address not in self.ip_address_2_mac[ip_address_prefix])
                  ):
-            self.log.error("vifUnplugged called for endpoint (%s, %s), but no "
+            self.log.error("vif_unplugged called for endpoint (%s, %s), but no "
                            "consistent informations or was not plugged yet",
-                           macAddress, ipAddressPrefix)
+                           mac_address, ip_address_prefix)
             raise APIException("No consistent endpoint (%s, %s) informations "
                                "or was not plugged yet, cannot unplug" %
-                               (macAddress, ipAddressPrefix))
+                               (mac_address, ip_address_prefix))
 
         # Finding label and local port informations
-        label = portData.get('label')
-        endpoint_rd = self.endpoint2RD[(macAddress, ipAddressPrefix)]
-        localPort = portData.get('port_info')
-        if not label or not localPort:
-            self.log.error("vifUnplugged called for endpoint (%s, %s), but "
+        label = pdata.get('label')
+        endpoint_rd = self.endpoint_2_rd[(mac_address, ip_address_prefix)]
+        localport = pdata.get('port_info')
+        if not label or not localport:
+            self.log.error("vif_unplugged called for endpoint (%s, %s), but "
                            "port data (%s, %s) is incomplete",
-                           macAddress, ipAddressPrefix, label, localPort)
+                           mac_address, ip_address_prefix, label, localport)
             raise Exception("Inconsistent informations for port, bug ?")
 
-        if localPort['linuxif'] in self.localPort2Endpoints:
+        if localport['linuxif'] in self.localport_2_endpoints:
             # Parse address/mask
-            (ipPrefix, prefixLen) = self._parseIPAddressPrefix(ipAddressPrefix)
+            (ip_prefix, plen) = self._parse_ipaddress_prefix(ip_address_prefix)
 
-            lastEndpoint = len(
-                self.localPort2Endpoints[localPort['linuxif']]) <= 1
+            last_endpoint = len(
+                self.localport_2_endpoints[localport['linuxif']]) <= 1
 
-            if not advertiseSubnet and prefixLen != 32:
-                self.log.debug("Using /32 instead of /%d", prefixLen)
-                prefixLen = 32
+            if not advertise_subnet and plen != 32:
+                self.log.debug("Using /32 instead of /%d", plen)
+                plen = 32
 
-            rd = self.instanceRD if prefixLen == 32 else endpoint_rd
+            rd = self.instance_rd if plen == 32 else endpoint_rd
 
             self.log.info("Synthesizing and withdrawing BGP route for VIF %s "
-                          "endpoint (%s, %s/%d)", localPort['linuxif'],
-                          macAddress, ipPrefix, prefixLen)
-            routeEntry = self.synthesizeVifBGPRoute(macAddress,
-                                                    ipPrefix, prefixLen,
+                          "endpoint (%s, %s/%d)", localport['linuxif'],
+                          mac_address, ip_prefix, plen)
+            route_entry = self.synthesize_vif_bgp_route(mac_address,
+                                                    ip_prefix, plen,
                                                     label,
-                                                    lbConsistentHashOrder,
+                                                    lb_consistent_hash_order,
                                                     rd)
-            self._withdrawRoute(routeEntry)
+            self._withdraw_route(route_entry)
 
             # Unplug endpoint from data plane
-            self.dataplane.vifUnplugged(
-                macAddress, ipPrefix, localPort, label, lastEndpoint)
+            self.dataplane.vif_unplugged(
+                mac_address, ip_prefix, localport, label, last_endpoint)
 
             # Forget data for this port if last endpoint
-            if lastEndpoint:
+            if last_endpoint:
                 self.log.info("Last endpoint, freeing label %s", label)
                 # Free label to the allocator
-                self.vpnManager.labelAllocator.release(label)
+                self.vpn_manager.label_allocator.release(label)
 
-                del self.localPort2Endpoints[localPort['linuxif']]
+                del self.localport_2_endpoints[localport['linuxif']]
             else:
-                self.localPort2Endpoints[localPort['linuxif']].remove(
-                    {'mac': macAddress, 'ip': ipAddressPrefix}
+                self.localport_2_endpoints[localport['linuxif']].remove(
+                    {'mac': mac_address, 'ip': ip_address_prefix}
                 )
 
-            del self.endpoint2RD[(macAddress, ipAddressPrefix)]
+            del self.endpoint_2_rd[(mac_address, ip_address_prefix)]
             # Free route distinguisher to the allocator
-            self.vpnManager.rdAllocator.release(endpoint_rd)
+            self.vpn_manager.rd_allocator.release(endpoint_rd)
 
-            if not lastEndpoint:
-                if not any([endpoint['mac'] == macAddress
+            if not last_endpoint:
+                if not any([endpoint['mac'] == mac_address
                             for endpoint
-                            in self.localPort2Endpoints[localPort['linuxif']]]
+                            in self.localport_2_endpoints[localport['linuxif']]]
                            ):
-                    del self.macAddress2LocalPortData[macAddress]
+                    del self.mac_2_localport_data[mac_address]
             else:
-                del self.macAddress2LocalPortData[macAddress]
+                del self.mac_2_localport_data[mac_address]
 
-            self.ipAddress2MacAddress[ipAddressPrefix].remove(macAddress)
+            self.ip_address_2_mac[ip_address_prefix].remove(mac_address)
 
-            if not self.ipAddress2MacAddress[ipAddressPrefix]:
-                del self.ipAddress2MacAddress[ipAddressPrefix]
+            if not self.ip_address_2_mac[ip_address_prefix]:
+                del self.ip_address_2_mac[ip_address_prefix]
         else:
-            self.log.error("vifUnplugged called for endpoint {%s, %s}, but"
-                           " port data is incomplete", macAddress,
-                           ipAddressPrefix)
+            self.log.error("vif_unplugged called for endpoint {%s, %s}, but"
+                           " port data is incomplete", mac_address,
+                           ip_address_prefix)
             raise Exception("BGP component bug, check its logs")
 
-        self.log.info("localPort2Endpoints: %s", self.localPort2Endpoints)
-        self.log.info("macAddress2LocalPortData: %s",
-                      self.macAddress2LocalPortData)
-        self.log.info("ipAddress2MacAddress: %s", self.ipAddress2MacAddress)
+        self.log.info("localport_2_endpoints: %s", self.localport_2_endpoints)
+        self.log.info("mac_2_localport_data: %s",
+                      self.mac_2_localport_data)
+        self.log.info("ip_address_2_mac: %s", self.ip_address_2_mac)
 
     @utils.synchronized
-    def registerRedirectedInstance(self, instanceId):
-        self.redirectedInstances.add(instanceId)
+    def register_redirected_instance(self, instance_id):
+        self.redirected_instances.add(instance_id)
 
     @utils.synchronized
-    def unregisterRedirectedInstance(self, instanceId):
-        self.redirectedInstances.remove(instanceId)
+    def unregister_redirected_instance(self, instance_id):
+        self.redirected_instances.remove(instance_id)
 
     @utils.synchronized
-    @logDecorator.log
-    def stopIfNoRedirectedInstance(self):
-        self.log.debug("redirectedInstances: %s", self.redirectedInstances)
-        if not self.redirectedInstances:
+    @log_decorator.log
+    def stop_if_no_redirected_instance(self):
+        self.log.debug("redirected_instances: %s", self.redirected_instances)
+        if not self.redirected_instances:
             self._stop()
             return True
 
         return False
 
-    @logDecorator.log
-    def startRedirectTraffic(self, redirectRT, rules):
+    @log_decorator.log
+    def start_redirect_traffic(self, redirect_rt, rules):
         self.log.debug("Start redirecting traffic to VPN instance importing "
-                       "route target %s based on rules %s", redirectRT, rules)
+                       "route target %s based on rules %s", redirect_rt, rules)
         # Create redirection instance if first FlowSpec route for this
         # redirect route target
-        redirectInstance = self.vpnManager.redirectTrafficToVPN(
-            self.externalInstanceId, self.type, redirectRT
+        redirect_instance = self.vpn_manager.redirect_traffic_to_vpn(
+            self.external_instance_id, self.type, redirect_rt
         )
-        redirectPort = redirectInstance.dataplane.getRedirectPort()
+        redirect_port = redirect_instance.dataplane.get_redirect_port()
 
         # Create traffic classifier from FlowSpec rules
         classifier = TrafficClassifier()
-        classifier.mapRedirectRules2TrafficClassifier(rules)
+        classifier.map_redirect_rules_2_traffic_classifier(rules)
 
-        self.dataplane.addDataplaneForTrafficClassifier(classifier,
-                                                        redirectPort)
+        self.dataplane.add_dataplane_for_traffic_classifier(classifier,
+                                                            redirect_port)
 
-        if not hasattr(self, 'redirectRT2classifiers'):
+        if not hasattr(self, 'redirect_rt_2_classifiers'):
             # One redirect route target -> Multiple traffic classifiers (One
             # per prefix)
             # Can be inverted to one traffic classifier -> Multiple redirect
             # route targets
-            self.redirectRT2classifiers = defaultdict(set)
+            self.redirect_rt_2_classifiers = defaultdict(set)
 
-        self.redirectRT2classifiers[redirectRT].add(classifier)
+        self.redirect_rt_2_classifiers[redirect_rt].add(classifier)
 
-    @logDecorator.log
-    def stopRedirectTraffic(self, redirectRT, rules):
+    @log_decorator.log
+    def stop_redirect_traffic(self, redirect_rt, rules):
         self.log.debug("Stop redirecting traffic to VPN instance importing "
-                       "route target %s based on rules %s", redirectRT, rules)
+                       "route target %s based on rules %s", redirect_rt, rules)
         # Create traffic classifier from FlowSpec rule
         classifier = TrafficClassifier()
-        classifier.mapRedirectRules2TrafficClassifier(rules)
+        classifier.map_redirect_rules_2_traffic_classifier(rules)
 
-        if (redirectRT in self.redirectRT2classifiers and
-                classifier in self.redirectRT2classifiers[redirectRT]):
-            self.redirectRT2classifiers[redirectRT].remove(classifier)
+        if (redirect_rt in self.redirect_rt_2_classifiers and
+                classifier in self.redirect_rt_2_classifiers[redirect_rt]):
+            self.redirect_rt_2_classifiers[redirect_rt].remove(classifier)
 
             if not utils.invert_dict_of_sets(
-                    self.redirectRT2classifiers)[classifier]:
-                self.dataplane.removeDataplaneForTrafficClassifier(
+                    self.redirect_rt_2_classifiers)[classifier]:
+                self.dataplane.remove_dataplane_for_traffic_classifier(
                     classifier)
 
-            if not self.redirectRT2classifiers[redirectRT]:
-                self.vpnManager.stopRedirectTrafficToVPN(
-                    self.externalInstanceId, self.type, redirectRT
+            if not self.redirect_rt_2_classifiers[redirect_rt]:
+                self.vpn_manager.stop_redirect_to_vpn(
+                    self.external_instance_id, self.type, redirect_rt
                 )
-                del self.redirectRT2classifiers[redirectRT]
+                del self.redirect_rt_2_classifiers[redirect_rt]
         else:
-            self.log.error("stopRedirectTraffic called for redirect route "
+            self.log.error("stop_redirect_traffic called for redirect route "
                            "target %s and classifier %s, but doesn't exist",
-                           redirectRT, classifier)
+                           redirect_rt, classifier)
             raise Exception("BGP component bug, check its logs")
 
-    def _checkEncaps(self, route):
+    def _check_encaps(self, route):
         '''
         returns a list of encaps supported by both the dataplane driver and the
         advertized route (based on BGP Encapsulation community)
 
         logs a warning if there is no common encap
         '''
-        advEncaps = None
+        adv_encaps = None
         try:
-            advEncaps = route.extendedCommunities(ec.Encapsulation)
-            self.log.debug("Advertized Encaps: %s", advEncaps)
+            adv_encaps = route.extended_communities(ec.Encapsulation)
+            self.log.debug("Advertized Encaps: %s", adv_encaps)
         except KeyError:
             self.log.debug("no encap advertized, let's use default")
 
-        if not advEncaps:
-            advEncaps = [ec.Encapsulation(ec.Encapsulation.Type.DEFAULT)]
+        if not adv_encaps:
+            adv_encaps = [ec.Encapsulation(ec.Encapsulation.Type.DEFAULT)]
 
-        goodEncaps = set(advEncaps) & set(
-            self.dataplaneDriver.supportedEncaps())
+        good_encaps = set(adv_encaps) & set(
+            self.dataplane_driver.supported_encaps())
 
-        if not goodEncaps:
+        if not good_encaps:
             self.log.warning("No encap supported by dataplane driver for route"
                              " %s, advertized: %s, dataplane supports: {%s}",
-                             route, advEncaps,
+                             route, adv_encaps,
                              ", ".join([repr(encap) for encap in
-                                        self.dataplaneDriver.supportedEncaps()]
+                                        self.dataplane_driver.supported_encaps()]
                                        ))
 
-        return goodEncaps
+        return good_encaps
 
-    def _skipRouteRemoval(self, last):
+    def _skip_route_removal(self, last):
         '''
         returns true if the removal of the route should be skipped, based
         whether or not the route removed is the last one and depending on
         the desired behavior for the dataplane driver
         '''
-        return not last and not (self.dataplaneDriver.makeB4BreakSupport or
-                                 self.dataplaneDriver.ecmpSupport)
+        return not last and not (self.dataplane_driver.makebefore4break_support
+                                 or self.dataplane_driver.ecmp_support)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
     @utils.synchronized
-    @logDecorator.log
-    def _newBestRoute(self, entry, newRoute):
+    @log_decorator.log
+    def _new_best_route(self, entry, new_route):
         pass
 
     @utils.synchronized
-    @logDecorator.log
-    def _bestRouteRemoved(self, entry, oldRoute, last):
+    @log_decorator.log
+    def _best_route_removed(self, entry, old_route, last):
         pass
 
     # Looking Glass ####
 
-    def getLGMap(self):
+    def get_lg_map(self):
         return {
-            "external_instance_id":   (lg.VALUE, self.externalInstanceId),
+            "external_instance_id":   (lg.VALUE, self.external_instance_id),
             "dataplane":     (lg.DELEGATE, self.dataplane),
-            "route_targets": (lg.SUBITEM, self.getRTs),
-            "gateway_ip":    (lg.VALUE, self.gatewayIP),
+            "route_targets": (lg.SUBITEM, self.get_rts),
+            "gateway_ip":    (lg.VALUE, self.gateway_ip),
             "subnet_mask":   (lg.VALUE, self.mask),
-            "instance_dataplane_id": (lg.VALUE, self.instanceLabel),
-            "ports":         (lg.SUBTREE, self.getLGLocalPortData),
-            "readvertise":   (lg.SUBITEM, self.getLGReadvertise)
+            "instance_dataplane_id": (lg.VALUE, self.instance_label),
+            "ports":         (lg.SUBTREE, self.get_lg_local_port_data),
+            "readvertise":   (lg.SUBITEM, self.get_lg_readvertise)
+            #TODO: "type": self.instance_type
         }
 
-    def getLGLocalPortData(self, pathPrefix):
+    def get_lg_local_port_data(self, path_prefix):
         r = {}
-        for (port, endpoints) in self.localPort2Endpoints.iteritems():
+        for (port, endpoints) in self.localport_2_endpoints.iteritems():
             eps = []
             for endpoint in endpoints:
                 eps.append({
                     'label':
-                    self.macAddress2LocalPortData[endpoint['mac']]['label'],
-                    'macAddress': endpoint['mac'],
-                    'ipAddress': endpoint['ip'],
-                    'rd': repr(self.endpoint2RD[(endpoint['mac'], endpoint['ip'])])
+                    self.mac_2_localport_data[endpoint['mac']]['label'],
+                    'mac_address': endpoint['mac'],
+                    'ip_address': endpoint['ip'],
+                    'rd': repr(self.endpoint_2_rd[(endpoint['mac'],
+                                                   endpoint['ip'])])
                 })
 
             r[port] = {
@@ -867,21 +867,21 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             }
         return r
 
-    def getRTs(self):
+    def get_rts(self):
         return {
-            "import": [repr(rt) for rt in self.importRTs],
-            "export": [repr(rt) for rt in self.exportRTs]
+            "import": [repr(rt) for rt in self.import_rts],
+            "export": [repr(rt) for rt in self.export_rts]
         }
 
-    def getLGReadvertise(self):
+    def get_lg_readvertise(self):
         r = {}
         if self.readvertise:
-            r = {'from': [repr(rt) for rt in self.readvertiseFromRTs],
-                 'to': [repr(rt) for rt in self.readvertiseToRTs]}
+            r = {'from': [repr(rt) for rt in self.readvertise_from_rts],
+                 'to': [repr(rt) for rt in self.readvertise_to_rts]}
 
-            if self.attractTraffic:
+            if self.attract_traffic:
                 r['attract_traffic'] = {
-                    'redirect_rts': [repr(rt) for rt in self.attractRTs],
-                    'classifier': self.attractClassifier
+                    'redirect_rts': [repr(rt) for rt in self.attract_rts],
+                    'classifier': self.attract_classifier
                 }
         return r

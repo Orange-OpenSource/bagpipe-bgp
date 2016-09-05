@@ -32,7 +32,7 @@ from bagpipe.bgp.engine.worker import Worker
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 
 from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.update.attribute.community.extended import \
@@ -43,17 +43,17 @@ log = logging.getLogger(__name__)
 
 class Match(object):
 
-    def __init__(self, afi, safi, routeTarget):
+    def __init__(self, afi, safi, route_target):
         assert isinstance(afi, AFI)
         assert isinstance(safi, SAFI)
-        assert routeTarget is None or isinstance(routeTarget, RouteTarget)
+        assert route_target is None or isinstance(route_target, RouteTarget)
         self.afi = afi
         self.safi = safi
-        self.routeTarget = routeTarget
+        self.route_target = route_target
 
     def __hash__(self):
         # FIXME, could use a tuple, but RT not yet hashable
-        # return hash((self.afi, self.safi, self.routeTarget))
+        # return hash((self.afi, self.safi, self.route_target))
         return hash(str(self))
 
     def __repr__(self):
@@ -61,18 +61,18 @@ class Match(object):
 
     def __str__(self):
         return "%s/%s,%s" % (self.afi or "*", self.safi or "*",
-                             self.routeTarget or "*")
+                             self.route_target or "*")
 
     def __cmp__(self, other):
         assert isinstance(other, Match)
 
         self_afi = self.afi or AFI(0)
         self_safi = self.safi or SAFI(0)
-        self_rt = self.routeTarget or RouteTarget(0, 0)
+        self_rt = self.route_target or RouteTarget(0, 0)
 
         other_afi = other.afi or AFI(0)
         other_safi = other.safi or SAFI(0)
-        other_rt = other.routeTarget or RouteTarget(0, 0)
+        other_rt = other.route_target or RouteTarget(0, 0)
 
         val = cmp((self_afi, self_safi, str(self_rt)),
                   (other_afi, other_safi, str(other_rt)))
@@ -85,16 +85,16 @@ MATCH_ANY = Match(Subscription.ANY_AFI,
                   Subscription.ANY_RT)
 
 
-def matchesFor(afi, safi, routeTargets):
+def matches_for(afi, safi, route_targets):
     # generate all possible match entries for this afi/safi
     # and these routetargets, with all possible wildcards
     #
-    # There are 4*(n+1) possible Match object (for n routeTargets)
+    # There are 4*(n+1) possible Match object (for n route_targets)
     for _afi in (Subscription.ANY_AFI, afi):
         for _safi in (Subscription.ANY_SAFI, safi):
             yield Match(_afi, _safi, None)
-            if routeTargets is not None:
-                for rt in routeTargets:
+            if route_targets is not None:
+                for rt in route_targets:
                     yield Match(_afi, _safi, rt)
 
 
@@ -103,44 +103,44 @@ class WorkersAndEntries(object):
     def __init__(self):
         self.workers = set()
         self.entries = set()
-        self.nLocalWorkers = 0
+        self.n_local_workers = 0
 
     def __repr__(self):
         return "workers: %s\nentries: %s" % (self.workers,
                                              self.entries)
 
-    def addWorker(self, worker):
+    def add_worker(self, worker):
         """ returns True iif first local worker """
         self.workers.add(worker)
         if not isinstance(worker, BGPPeerWorker):
-            self.nLocalWorkers += 1
-            return self.nLocalWorkers == 1
+            self.n_local_workers += 1
+            return self.n_local_workers == 1
 
-    def delWorker(self, worker):
+    def del_worker(self, worker):
         """ returns True iif last local worker """
         self.workers.remove(worker)
         if not isinstance(worker, BGPPeerWorker):
-            self.nLocalWorkers -= 1
-            return self.nLocalWorkers == 0
+            self.n_local_workers -= 1
+            return self.n_local_workers == 0
 
-    def isEmpty(self):
+    def is_empty(self):
         return (len(self.workers) == 0 and
                 len(self.entries) == 0)
 
 
-StopEvent = "StopEvent"
+STOP_EVENT = "STOP_EVENT"
 
 
-def testShouldDispatch(routeEvent, targetWorker):
+def test_should_dispatch(route_event, target_worker):
     '''
     returns a (boolean,string) tuple
-    the string contains the reason why the routeEvent should not be
-    dispatched to targetWorker
+    the string contains the reason why the route_event should not be
+    dispatched to target_worker
     '''
-    if routeEvent.source == targetWorker:
+    if route_event.source == target_worker:
         return (False, "not dispatching an update back to its source")
-    elif (isinstance(routeEvent.source, BGPPeerWorker)
-          and isinstance(targetWorker, BGPPeerWorker)):
+    elif (isinstance(route_event.source, BGPPeerWorker)
+          and isinstance(target_worker, BGPPeerWorker)):
         return (False, "do not dispatch a route between BGP peers")
     else:
         return (True, "")
@@ -160,28 +160,29 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
     class can source a route.
     """
 
-    def __init__(self, firstLocalSubscriberCB, lastLocalSubscriberCB):
+    def __init__(self, first_local_subscriber_cb, last_local_subscriber_cb):
         Thread.__init__(self, name="RouteTableManager")
         self.setDaemon(True)
 
         # keys are Matches, values are WorkersAndEntries objects:
-        self._match2workersAndEntries = defaultdict(WorkersAndEntries)
+        self._match_2_workers_entries = defaultdict(WorkersAndEntries)
 
         # workers known to us
         # name -> worker dict
         self._workers = {}
 
         # keys are (source,nlri) tuples, values are Entry objects:
-        self._source_nlri2entry = {}
+        self._source_nlri_2_entry = {}
 
-        self.firstLocalSubscriberCallback = firstLocalSubscriberCB
-        self.lastLocalSubscriberCallback = lastLocalSubscriberCB
+        self.first_local_subscriber_callback = first_local_subscriber_cb
+        self.last_local_subscriber_callback = last_local_subscriber_cb
 
         self._queue = Queue()
 
-    @logDecorator.logInfo
+    @log_decorator.log_info
     def stop(self):
-        self.enqueue(StopEvent)
+        #FIXME: what about Worker.stop ?
+        self.enqueue(STOP_EVENT)
 
     def run(self):
         while True:
@@ -190,15 +191,15 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
             log.debug("RouteTableManager received event %s", event)
             try:
                 if event.__class__ == RouteEvent:
-                    self._receiveRouteEvent(event)
+                    self._receive_route_event(event)
                 elif event.__class__ == Subscription:
-                    self._workerSubscribes(event)
+                    self._worker_subscribes(event)
                 elif event.__class__ == Unsubscription:
-                    self._workerUnsubscribes(event)
+                    self._worker_unsubscribes(event)
                 elif event.__class__ == WorkerCleanupEvent:
-                    self._workerCleanup(event.worker)
-                elif event == StopEvent:
-                    log.info("StopEvent => breaking main loop")
+                    self._worker_cleanup(event.worker)
+                elif event == STOP_EVENT:
+                    log.info("STOP_EVENT => breaking main loop")
                     break
             except Exception as e:
                 log.error("Exception during processing of event: %s", repr(e))
@@ -212,27 +213,27 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
     def enqueue(self, event):
         self._queue.put(event)
 
-    def _checkMatch2workersAndEntriesCleanup(self, match):
-        wa = self._match2workersAndEntries.get(match)
+    def _check_match_2_workers_and_entries_cleanup(self, match):
+        wa = self._match_2_workers_entries.get(match)
         if wa is None:
             log.warning("why are we here ?")
             # nothing to cleanup
             return
         else:
-            if wa.isEmpty():
-                del self._match2workersAndEntries[match]
+            if wa.is_empty():
+                del self._match_2_workers_entries[match]
 
-    def callbackFirstLocalSubscriber(self, sub):
-        if self.firstLocalSubscriberCallback:
+    def callback_first_local_subscriber(self, sub):
+        if self.first_local_subscriber_callback:
             log.debug("first local subscriber callback for %s ...", sub)
-            self.firstLocalSubscriberCallback(sub)
+            self.first_local_subscriber_callback(sub)
 
-    def callbackLastLocalSubscriber(self, sub):
-        if self.lastLocalSubscriberCallback:
+    def callback_last_local_subscriber(self, sub):
+        if self.last_local_subscriber_callback:
             log.debug("last local subscriber callback for %s ...", sub)
-            self.lastLocalSubscriberCallback(sub)
+            self.last_local_subscriber_callback(sub)
 
-    def _workerSubscribes(self, sub):
+    def _worker_subscribes(self, sub):
         # TODO: this function currently will not consider whether or not
         # is already subscribed to set of route events, before considering
         # a subscription.  In particular, multiple identical subscriptions
@@ -248,13 +249,13 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
 
         self._workers[worker.name] = worker
 
-        match = Match(sub.afi, sub.safi, sub.routeTarget)
+        match = Match(sub.afi, sub.safi, sub.route_target)
 
-        wa = self._match2workersAndEntries[match]
+        wa = self._match_2_workers_entries[match]
 
         # update match2worker
-        if wa.addWorker(worker):
-            self.callbackFirstLocalSubscriber(sub)
+        if wa.add_worker(worker):
+            self.callback_first_local_subscriber(sub)
 
         log.debug("match2workers: %s", wa.workers)
 
@@ -262,21 +263,21 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         for entry in wa.entries:
             log.debug("Found an entry for this match: %s", entry)
             event = RouteEvent(RouteEvent.ADVERTISE, entry)
-            (shouldDispatch, reason) = testShouldDispatch(event, worker)
+            (dispatch, reason) = test_should_dispatch(event, worker)
 
-            if shouldDispatch:
-                # check if the entry carries a routeTarget to which the worker
+            if dispatch:
+                # check if the entry carries a route_target to which the worker
                 # was already subscribed
-                for rt in entry.routeTargets:
+                for rt in entry.route_targets:
                     if Match(entry.afi,
                              entry.safi,
                              rt) in worker._rtm_matches:
-                        (shouldDispatch, reason) = (
+                        (dispatch, reason) = (
                             False,
                             "worker already had a subscription for this route")
                         break
 
-            if shouldDispatch:
+            if dispatch:
                 log.info("Dispatching re-synthesized event for %s", entry)
                 worker.enqueue(event)
             else:
@@ -286,16 +287,16 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         # update worker matches
         worker._rtm_matches.add(match)
 
-        # self._dumpState()
+        # self._dump_state()
 
-    def _workerUnsubscribes(self, sub):
+    def _worker_unsubscribes(self, sub):
         assert isinstance(sub.worker, Worker)
 
         worker = sub.worker
 
-        # self._dumpState()
+        # self._dump_state()
 
-        match = Match(sub.afi, sub.safi, sub.routeTarget)
+        match = Match(sub.afi, sub.safi, sub.route_target)
 
         # update worker matches
         try:
@@ -306,12 +307,12 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
                         " this is a bug)", worker, match)
 
         # synthesize withdraw events
-        wa = self._match2workersAndEntries.get(match)
+        wa = self._match_2_workers_entries.get(match)
         if wa:
             for entry in wa.entries:
-                intersect = set(matchesFor(entry.afi,
+                intersect = set(matches_for(entry.afi,
                                            entry.safi,
-                                           entry.routeTargets)
+                                           entry.route_targets)
                                 ).intersection(worker._rtm_matches)
                 if len(intersect) > 0:
                     log.debug("Will not synthesize withdraw event for %s, "
@@ -320,9 +321,8 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
                 else:
                     log.debug("Found an entry for this match: %s", entry)
                     event = RouteEvent(RouteEvent.WITHDRAW, entry)
-                    (shouldDispatch, reason) = testShouldDispatch(event,
-                                                                  worker)
-                    if shouldDispatch:
+                    (dispatch, reason) = test_should_dispatch(event, worker)
+                    if dispatch:
                         log.info("Dispatching re-synthesized event for %s",
                                  entry)
                         worker.enqueue(event)
@@ -330,12 +330,12 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
                         log.info("%s => not dispatching re-synthesized event"
                                  " for %s", reason, entry)
 
-            # update _match2workersAndEntries
+            # update _match_2_workers_entries
             try:
-                if wa.delWorker(worker):
+                if wa.del_worker(worker):
                     log.debug("see if need to callback on last local worker")
-                    self.callbackLastLocalSubscriber(sub)
-                    self._checkMatch2workersAndEntriesCleanup(match)
+                    self.callback_last_local_subscriber(sub)
+                    self._check_match_2_workers_and_entries_cleanup(match)
             except KeyError:
                 log.warning("worker %s unsubscribed from %s but was not"
                             " subscribed yet", worker, match)
@@ -346,69 +346,69 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         if len(worker._rtm_matches) == 0:
             self._workers.pop(worker.name, None)
 
-        # self._dumpState()
+        # self._dump_state()
 
-    def _propagateRouteEvent(self, routeEvent, exceptWorkers=None):
-        '''Propagate routeEvent to workers subscribed to the route RTs
-        or wildcards, except the workers in exceptWorkers. Returns the list of
+    def _propagate_route_event(self, route_event, except_workers=None):
+        '''Propagate route_event to workers subscribed to the route RTs
+        or wildcards, except the workers in except_workers. Returns the list of
         workers to which the event was propagated.'''
 
-        log.debug("Propagate event to interested workers: %s", routeEvent)
+        log.debug("Propagate event to interested workers: %s", route_event)
 
-        re = routeEvent.routeEntry
+        re = route_event.route_entry
 
-        if exceptWorkers is None:
-            exceptWorkers = []
+        if except_workers is None:
+            except_workers = []
 
-        targetWorkers = set()
-        for match in matchesFor(re.afi, re.safi, re.routeTargets):
+        target_workers = set()
+        for match in matches_for(re.afi, re.safi, re.route_targets):
             log.debug("Finding interested workers for match %s", match)
 
-            interestedWorkers = self._match2workersAndEntries[match].workers
+            interested_workers = self._match_2_workers_entries[match].workers
 
             log.debug("   Workers interested in this match: %s",
-                      interestedWorkers)
+                      interested_workers)
 
-            for worker in interestedWorkers:
-                (shouldDispatch, reason) = testShouldDispatch(routeEvent, worker)
-                if shouldDispatch:
-                    if worker not in exceptWorkers:
+            for worker in interested_workers:
+                (dispatch, reason) = test_should_dispatch(route_event, worker)
+                if dispatch:
+                    if worker not in except_workers:
                         log.debug("Will dispatch event to %s: %s",
-                                  worker, routeEvent)
-                        targetWorkers.add(worker)
+                                  worker, route_event)
+                        target_workers.add(worker)
                     else:
                         log.debug("Decided not to dispatch to %s, based on"
-                                  " exceptWorkers: %s", worker, routeEvent)
+                                  " except_workers: %s", worker, route_event)
                 else:
                     log.debug("Decided not to dispatch to %s: %s (%s)",
-                              worker, reason, routeEvent)
+                              worker, reason, route_event)
 
-        for worker in targetWorkers:
-            log.info("Dispatching event to %s: %s", worker, routeEvent)
-            worker.enqueue(routeEvent)
+        for worker in target_workers:
+            log.info("Dispatching event to %s: %s", worker, route_event)
+            worker.enqueue(route_event)
 
-        return targetWorkers
+        return target_workers
 
-    def _receiveRouteEvent(self, routeEvent):
-        log.info("receive: %s", routeEvent)
+    def _receive_route_event(self, route_event):
+        log.info("receive: %s", route_event)
 
-        entry = routeEvent.routeEntry
+        entry = route_event.route_entry
 
         log.debug("Try to find an entry from same worker with same nlri")
-        replacedEntry = self._source_nlri2entry.get((entry.source, entry.nlri))
+        replaced_entry = self._source_nlri_2_entry.get((entry.source, entry.nlri))
 
-        log.debug("   Result: %s", replacedEntry)
+        log.debug("   Result: %s", replaced_entry)
 
-        # replacedEntry should be non-empty for a withdraw
-        if replacedEntry is None and (routeEvent.type == RouteEvent.WITHDRAW):
+        # replaced_entry should be non-empty for a withdraw
+        if replaced_entry is None and (route_event.type == RouteEvent.WITHDRAW):
             log.warning("WITHDRAW but found no route that we could remove: %s",
-                        routeEvent.routeEntry)
+                        route_event.route_entry)
             return
 
         # Propagate events to interested workers...
-        if routeEvent.type == RouteEvent.ADVERTISE:
+        if route_event.type == RouteEvent.ADVERTISE:
 
-            if replacedEntry == routeEvent.routeEntry:
+            if replaced_entry == route_event.route_entry:
                 log.warning("The route advertized is the same as the one"
                             " previously advertized by the source, ignoring")
                 return
@@ -416,66 +416,66 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
             # propagate event to interested worker
             # and include the info on the route are replaced by this
             # route, if any
-            routeEvent.setReplacedRoute(replacedEntry)
+            route_event.set_replaced_route(replaced_entry)
 
-            workersAlreadyNotified = self._propagateRouteEvent(routeEvent)
+            workers_already_notified = self._propagate_route_event(route_event)
         else:  # WITHDRAW
-            workersAlreadyNotified = None
+            workers_already_notified = None
 
         # Synthesize and dispatch a withdraw event for the route entry that
         # was withdrawn or replaced, except, in the case of a replaced route,
         # to workers that had the ADVERTISE event
-        if replacedEntry is not None:
+        if replaced_entry is not None:
             log.debug("Synthesizing a withdraw event for replaced route %s",
-                      replacedEntry)
-            removalEvent = RouteEvent(RouteEvent.WITHDRAW,
-                                      replacedEntry,
-                                      routeEvent.source)
+                      replaced_entry)
+            removal_event = RouteEvent(RouteEvent.WITHDRAW,
+                                       replaced_entry,
+                                       route_event.source)
 
-            self._propagateRouteEvent(removalEvent, workersAlreadyNotified)
+            self._propagate_route_event(removal_event, workers_already_notified)
 
-            # Update match2entries for the replacedRoute
-            for match in matchesFor(replacedEntry.afi,
-                                    replacedEntry.safi,
-                                    replacedEntry.routeTargets):
-                wa = self._match2workersAndEntries.get(match, None)
+            # Update match2entries for the replaced_route
+            for match in matches_for(replaced_entry.afi,
+                                     replaced_entry.safi,
+                                     replaced_entry.route_targets):
+                wa = self._match_2_workers_entries.get(match, None)
                 if wa is None:
                     log.error("Trying to remove a route from a match, but"
                               " match %s not found - not supposed to happen"
-                              " (route: %s)", match, replacedEntry)
+                              " (route: %s)", match, replaced_entry)
                 else:
-                    wa.entries.discard(replacedEntry)
-                    self._checkMatch2workersAndEntriesCleanup(match)
+                    wa.entries.discard(replaced_entry)
+                    self._check_match_2_workers_and_entries_cleanup(match)
 
             # update the route entries for this source
-            replacedEntry.source._rtm_routeEntries.discard(replacedEntry)
+            replaced_entry.source._rtm_route_entries.discard(replaced_entry)
 
-        if routeEvent.type == RouteEvent.ADVERTISE:
+        if route_event.type == RouteEvent.ADVERTISE:
             # Update match2entries and source2entries for the newly
             # advertized route
-            for match in matchesFor(entry.afi,
+            for match in matches_for(entry.afi,
                                     entry.safi,
-                                    entry.routeTargets):
-                self._match2workersAndEntries[match].entries.add(entry)
+                                    entry.route_targets):
+                self._match_2_workers_entries[match].entries.add(entry)
 
-            entry.source._rtm_routeEntries.add(entry)
+            entry.source._rtm_route_entries.add(entry)
 
-            # Update _source_nlri2entry
-            self._source_nlri2entry[(entry.source, entry.nlri)] = entry
+            # Update _source_nlri_2_entry
+            self._source_nlri_2_entry[(entry.source, entry.nlri)] = entry
         else:  # WITHDRAW
             # Update source2entries
-            entry.source._rtm_routeEntries.discard(entry)
+            entry.source._rtm_route_entries.discard(entry)
 
-            # Update _source_nlri2entry
+            # Update _source_nlri_2_entry
             try:
-                del self._source_nlri2entry[(entry.source, entry.nlri)]
+                del self._source_nlri_2_entry[(entry.source, entry.nlri)]
             except KeyError:
                 log.error("BUG: withdraw, but nothing could be removed in "
-                          "_sourcenlri2entryRemove")
+                          "_source_nlri_2_entry")
 
-        #  self._dumpState()
+        #  self._dump_state()
 
-    def _workerCleanup(self, worker):
+    def _worker_cleanup(self, worker):
         '''
         Consider all routes announced by this worker as withdrawn.
         Consider this worker unsubscribed from all of its current
@@ -485,22 +485,22 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         log.info("Cleanup for worker %s", worker.name)
         # synthesize withdraw events for all routes from this worker
         log.info("  Preparing to withdraw %d routes that were advertised "
-                 "by worker", len(worker._rtm_routeEntries))
-        for entry in worker._rtm_routeEntries:
+                 "by worker", len(worker._rtm_route_entries))
+        for entry in worker._rtm_route_entries:
             log.info("  Enqueue event to Withdraw route %s", entry)
             self.enqueue(RouteEvent(RouteEvent.WITHDRAW, entry))
 
         # remove worker from all of its subscriptions
         for match in worker._rtm_matches:
-            wa = self._match2workersAndEntries[match]
-            wa.delWorker(worker)
-            self._checkMatch2workersAndEntriesCleanup(match)
+            wa = self._match_2_workers_entries[match]
+            wa.del_worker(worker)
+            self._check_match_2_workers_and_entries_cleanup(match)
 
         worker._rtm_matches.clear()
 
-        # self._dumpState()
+        # self._dump_state()
 
-    def _dumpState(self):
+    def _dump_state(self):
         if not log.isEnabledFor(logging.DEBUG):
             return
 
@@ -514,41 +514,41 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
             for match in matches:
                 dump.append("    %s" % match)
 
-        match2workerDump = []
-        match2entriesDump = []
+        match_2_worker_dump = []
+        match_2_entries_dump = []
 
-        matches = list(self._match2workersAndEntries.keys())
+        matches = list(self._match_2_workers_entries.keys())
         matches.sort()
         for match in matches:
-            match2workerDump.append("  %s" % match)
-            match2entriesDump.append("  %s" % match)
-            wa = self._match2workersAndEntries.get(match)
+            match_2_worker_dump.append("  %s" % match)
+            match_2_entries_dump.append("  %s" % match)
+            wa = self._match_2_workers_entries.get(match)
             if wa:
                 for worker in wa.workers:
-                    match2workerDump.append("    %s" % worker)
+                    match_2_worker_dump.append("    %s" % worker)
                 for re in wa.entries:
-                    match2entriesDump.append("    %s" % re)
+                    match_2_entries_dump.append("    %s" % re)
 
         dump.append("\n~~~ Match -> Workers ~~~\n%s\n" %
-                    "\n".join(match2workerDump))
+                    "\n".join(match_2_worker_dump))
 
         dump.append("~~~ Match -> Entries ~~~\n%s\n" %
-                    "\n".join(match2entriesDump))
+                    "\n".join(match_2_entries_dump))
 
         dump.append("~~~ (source,nlri) ->  entries ~~~")
-        for ((source, nlri), entry) in self._source_nlri2entry.iteritems():
+        for ((source, nlri), entry) in self._source_nlri_2_entry.iteritems():
             dump.append("  (%s, %s): %s" % (source, nlri, entry))
 
         log.debug("RouteTableManager data dump:\n\n%s\n", "\n".join(dump))
 
     # Looking Glass #####
 
-    def getLGMap(self):
-        return {"workers": (lg.COLLECTION, (self.getLGWorkerList,
-                                            self.getLGWorkerFromPathItem)),
-                "routes": (lg.SUBTREE, self.getLGRoutes)}
+    def get_lg_map(self):
+        return {"workers": (lg.COLLECTION, (self.get_lg_worker_list,
+                                            self.get_lg_worker_from_path_item)),
+                "routes": (lg.SUBTREE, self.get_lg_routes)}
 
-    def getLGRoutes(self, pathPrefix):
+    def get_lg_routes(self, path_prefix):
         result = {}
 
         match_IPVPN = Match(
@@ -560,37 +560,37 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
                                   SAFI(SAFI.flow_vpn),
                                   Subscription.ANY_RT)
         for match in [match_IPVPN, match_EVPN, match_RTC, match_FlowSpecVPN]:
-            matchResult = []
-            wa = self._match2workersAndEntries.get(match)
+            match_result = []
+            wa = self._match_2_workers_entries.get(match)
             if wa is not None:
                 for entry in wa.entries:
-                    matchResult.append(
-                        entry.getLookingGlassInfo(pathPrefix))
-            result[str(match)] = matchResult
+                    match_result.append(
+                        entry.get_looking_glass_info(path_prefix))
+            result[str(match)] = match_result
         return result
 
-    def getLGWorkerList(self):
+    def get_lg_worker_list(self):
         return [{"id": worker.name} for worker in self._workers.itervalues()]
 
-    def getLGWorkerFromPathItem(self, pathItem):
-        return self._workers.get(pathItem, None)
+    def get_lg_worker_from_path_item(self, path_item):
+        return self._workers.get(path_item, None)
 
-    def getAllRoutesButRTC(self):
-        return [re for re in self._match2workersAndEntries[MATCH_ANY].entries
+    def get_all_routes_but_rtc(self):
+        return [re for re in self._match_2_workers_entries[MATCH_ANY].entries
                 if not (re.afi == AFI(AFI.ipv4) and
                         re.safi == SAFI(SAFI.rtc))
                 ]
 
-    def getLocalRoutesCount(self):
+    def get_local_routes_count(self):
         return reduce(
             lambda count, entry:
             count + (not isinstance(entry.source, BGPPeerWorker)),
-            self.getAllRoutesButRTC(),
+            self.get_all_routes_but_rtc(),
             0)
 
-    def getReceivedRoutesCount(self):
+    def get_received_routes_count(self):
         return reduce(
             lambda count, entry:
             count + isinstance(entry.source, BGPPeerWorker),
-            self.getAllRoutesButRTC(),
+            self.get_all_routes_but_rtc(),
             0)

@@ -48,12 +48,12 @@ class RESTAPI(lg.LookingGlassMixin):
     # Random generated sequence number
     BGP_SEQ_NUM = int(uuid.uuid4())
 
-    def __init__(self, config, daemon, vpnManager, catchAllLGLogHandler):
+    def __init__(self, config, daemon, vpn_manager, catchall_lg_log_handler):
         self.config = config
         self.daemon = daemon
 
-        self.vpnManager = vpnManager
-        self.catchAllLGLogHandler = catchAllLGLogHandler
+        self.vpn_manager = vpn_manager
+        self.catch_all_lg_log_handler = catchall_lg_log_handler
 
         self.bottle = Bottle()
 
@@ -69,12 +69,12 @@ class RESTAPI(lg.LookingGlassMixin):
 
         self.bottle.error_handler[500] = self.error500
 
-        self.startTime = time.time()
+        self.start_time = time.time()
 
-        lg.setRoot(LOOKING_GLASS_BASE)
-        lg.setReferencePath("BGP_WORKERS", ["bgp", "workers"])
-        lg.setReferencePath("VPN_INSTANCES", ["vpns", "instances"])
-        lg.setReferencePath("DATAPLANE_DRIVERS",
+        lg.set_references_root(LOOKING_GLASS_BASE)
+        lg.set_reference_path("BGP_WORKERS", ["bgp", "workers"])
+        lg.set_reference_path("VPN_INSTANCES", ["vpns", "instances"])
+        lg.set_reference_path("DATAPLANE_DRIVERS",
                             ["vpns", "dataplane", "drivers"])
 
     def ping(self):
@@ -84,15 +84,15 @@ class RESTAPI(lg.LookingGlassMixin):
 
     def _check_attach_parameters(self, params, attach):
         log.debug("checking params: %s", params)
-        paramList = ('vpn_instance_id', 'mac_address', 'ip_address',
+        param_list = ('vpn_instance_id', 'mac_address', 'ip_address',
                      'local_port')
         if attach:
-            paramList += ('vpn_type', 'import_rt', 'export_rt', 'gateway_ip')
+            param_list += ('vpn_type', 'import_rt', 'export_rt', 'gateway_ip')
 
-        for paramName in paramList:
-            if paramName not in params:
-                log.warning("Mandatory parameter '%s' is missing", paramName)
-                abort(400, "Mandatory parameter '%s' is missing" % paramName)
+        for param_name in param_list:
+            if param_name not in params:
+                log.warning("Mandatory parameter '%s' is missing", param_name)
+                abort(400, "Mandatory parameter '%s' is missing" % param_name)
 
         # if local_port is not a dict, then assume it designates a linux
         # interface
@@ -219,7 +219,7 @@ class RESTAPI(lg.LookingGlassMixin):
 
         try:
             log.debug('Local port attach received: %s', attach_params)
-            self.vpnManager.plugVifToVPN(
+            self.vpn_manager.plug_vif_to_vpn(
                 attach_params['vpn_instance_id'],
                 attach_params['vpn_type'],
                 attach_params['import_rt'],
@@ -255,7 +255,7 @@ class RESTAPI(lg.LookingGlassMixin):
 
         try:
             log.debug('Local port detach received: %s', detach_params)
-            self.vpnManager.unplugVifFromVPN(
+            self.vpn_manager.unplug_vif_from_vpn(
                 detach_params['vpn_instance_id'],
                 detach_params['mac_address'],
                 detach_params['ip_address'],
@@ -275,28 +275,28 @@ class RESTAPI(lg.LookingGlassMixin):
         return self.looking_glass('/')
 
     def looking_glass(self, path):
-        urlPathElements = [urllib.unquote(elem)
-                           for elem in path.split('/') if elem is not '']
+        url_path_elements = [urllib.unquote(elem)
+                             for elem in path.split('/') if elem is not '']
 
-        pathPrefix = "%s://%s/%s" % (
+        path_prefix = "%s://%s/%s" % (
             request.environ['wsgi.url_scheme'],  # http
             request.environ['HTTP_HOST'],
             LOOKING_GLASS_BASE
         )
-        log.debug("pathPrefix: %s", pathPrefix)
-        log.debug("urlPathElements: %s", urlPathElements)
+        log.debug("path_prefix: %s", path_prefix)
+        log.debug("url_path_elements: %s", url_path_elements)
 
         try:
-            lgInfo = self.getLookingGlassInfo(pathPrefix, urlPathElements)
+            lg_info = self.get_looking_glass_info(path_prefix, url_path_elements)
 
-            log.debug("lgInfo: %s...", repr(lgInfo)[:40])
-            log.debug("lgInfo: %s", repr(lgInfo))
+            log.debug("lg_info: %s...", repr(lg_info)[:40])
+            log.debug("lg_info: %s", repr(lg_info))
 
-            if lgInfo is None:
-                raise lg.NoSuchLookingGlassObject(pathPrefix, urlPathElements[0])
+            if lg_info is None:
+                raise lg.NoSuchLookingGlassObject(path_prefix, url_path_elements[0])
 
             response.content_type = 'application/json'
-            return json.dumps(lgInfo)
+            return json.dumps(lg_info)
         except lg.NoSuchLookingGlassObject as e:
             log.info('looking_glass: %s', repr(e))
             abort(404, repr(e))
@@ -307,38 +307,38 @@ class RESTAPI(lg.LookingGlassMixin):
 
     # Looking glass hooks #################
 
-    def getLGMap(self):
+    def get_lg_map(self):
         return {
-            "summary":  (lg.SUBITEM, self.getLGSummary),
+            "summary":  (lg.SUBITEM, self.get_lg_summary),
             "config":   (lg.DELEGATE, self.daemon),
-            "bgp":      (lg.DELEGATE, self.vpnManager.bgpManager),
-            "vpns":     (lg.DELEGATE, self.vpnManager),
-            "logs":     (lg.SUBTREE, self.getLogs),
+            "bgp":      (lg.DELEGATE, self.vpn_manager.bgp_manager),
+            "vpns":     (lg.DELEGATE, self.vpn_manager),
+            "logs":     (lg.SUBTREE, self.get_logs),
         }
 
-    def getLGSummary(self):
+    def get_lg_summary(self):
         return {
             "BGP_established_peers":
-                self.vpnManager.bgpManager.getEstablishedPeersCount(),
+                self.vpn_manager.bgp_manager.get_established_peers_count(),
             "local_routes_count":
-                self.vpnManager.bgpManager.routeTableManager.
-                getLocalRoutesCount(),
+                self.vpn_manager.bgp_manager.rtm.
+                get_local_routes_count(),
             "received_routes_count":
-                self.vpnManager.bgpManager.routeTableManager.
-                getReceivedRoutesCount(),
-            "vpn_instances_count": self.vpnManager.getVPNInstancesCount(),
-            "warnings_and_errors": len(self.catchAllLGLogHandler),
+                self.vpn_manager.bgp_manager.rtm.
+                get_received_routes_count(),
+            "vpn_instances_count": self.vpn_manager.get_vpn_instances_count(),
+            "warnings_and_errors": len(self.catch_all_lg_log_handler),
             "start_time": time.strftime("%Y-%m-%d %H:%M:%S",
-                                        time.localtime(self.startTime))
+                                        time.localtime(self.start_time))
         }
 
-    def getLogs(self, pathPrefix):
+    def get_logs(self, path_prefix):
         return [{'level': record.levelname,
                  'time':
-                 self.catchAllLGLogHandler.formatter.formatTime(record),
+                 self.catch_all_lg_log_handler.formatter.formatTime(record),
                  'name': record.name,
                  'message': record.msg}
-                for record in self.catchAllLGLogHandler.getRecords()]
+                for record in self.catch_all_lg_log_handler.get_records()]
 
     def error500(self, error):
         log.error("Bottle catched an error: %s", error.exception)

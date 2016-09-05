@@ -19,24 +19,24 @@
 import subprocess
 
 
-def runCommand(log, command, raiseExceptionOnError=True,
-               acceptableReturnCodes=[0]):
+def run_command(log, command, raise_on_error=True,
+               acceptable_return_codes=[0]):
     '''
     Executes 'command' in a subshell.
-    Returns (command_output,exitCode)
+    Returns (command_output,exit_code)
         - command_output is the list of lines output on stdout by the command
     Raises an exception based on the following:
-        - will only raise an Exception if raiseExceptionOnError optional
+        - will only raise an Exception if raise_on_error optional
           parameter is True
         - the exit code is acceptable
         - exit code is acceptable by default if it is zero
         - exit code is acceptable if it is in the (optional)
-          acceptableReturnCodes list parameter
-        - putting -1 in the acceptableReturnCodes list means that *any* exit
+          acceptable_return_codes list parameter
+        - putting -1 in the acceptable_return_codes list means that *any* exit
         code is acceptable
     '''
-    log.info("Running command: %s   [raiseExceptionOnError:%s]",
-             command, raiseExceptionOnError)
+    log.info("Running command: %s   [raise_on_error:%s]",
+             command, raise_on_error)
     process = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     # Poll process for new output until finished
@@ -46,26 +46,26 @@ def runCommand(log, command, raiseExceptionOnError=True,
         if nextline == '' and process.poll() is not None:
             break
         if nextline != '':
-            log.debug("runCommand output: %s", nextline.rstrip())
+            log.debug("run_command output: %s", nextline.rstrip())
             output.append(nextline)
 
-    exitCode = process.returncode
+    exit_code = process.returncode
 
-    if (exitCode in acceptableReturnCodes) or (-1 in acceptableReturnCodes):
-        return (output, exitCode)
+    if (exit_code in acceptable_return_codes) or (-1 in acceptable_return_codes):
+        return (output, exit_code)
     else:
         if len(output) > 0:
             message = \
-                "Exit code %d when running '%s': %s" % (exitCode, command,
+                "Exit code %d when running '%s': %s" % (exit_code, command,
                                                         output[-1])
         else:
             message = \
-                "Exit code %d when running '%s' (no output)" % (exitCode,
+                "Exit code %d when running '%s' (no output)" % (exit_code,
                                                                 command)
 
-        if raiseExceptionOnError:
+        if raise_on_error:
             log.error(message)
             raise Exception(message)
         else:
             log.warning(message)
-            return (output, exitCode)
+            return (output, exit_code)

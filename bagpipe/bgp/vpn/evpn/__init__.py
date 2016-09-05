@@ -18,7 +18,7 @@
 from abc import ABCMeta, abstractmethod
 
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 
 from bagpipe.bgp.engine import RouteEntry
 
@@ -61,15 +61,15 @@ class VPNInstanceDataplane(_VPNInstanceDataplane):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri, encaps):
+    def add_dataplane_for_bum_endpoint(self, remote_pe, label, nlri, encaps):
         pass
 
     @abstractmethod
-    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
+    def remove_dataplane_for_bum_endpoint(self, remote_pe, label, nlri):
         pass
 
     @abstractmethod
-    def setGatewayPort(self, linuxif):
+    def set_gateway_port(self, linuxif):
         '''
         Used to determine a port to which traffic at the destination of the
         IP gateway should be sent.  This is used to plug an EVI into an IP VPN
@@ -78,9 +78,9 @@ class VPNInstanceDataplane(_VPNInstanceDataplane):
         pass
 
     @abstractmethod
-    def gatewayPortDown(self, linuxif):
+    def gateway_port_down(self, linuxif):
         '''
-        Used to revert the action done when setGatewayPort was called.
+        Used to revert the action done when set_gateway_port was called.
         Relevant only when an EVI had been plugged into an IP VPN VRF.
         '''
         pass
@@ -92,20 +92,20 @@ class DummyVPNInstanceDataplane(_DummyVPNInstanceDataplane,
     Dummy, do-nothing dataplane driver
     '''
 
-    @logDecorator.logInfo
-    def addDataplaneForBroadcastEndpoint(self, remotePE, label, nlri, encaps):
+    @log_decorator.log_info
+    def add_dataplane_for_bum_endpoint(self, remote_pe, label, nlri, encaps):
         pass
 
-    @logDecorator.logInfo
-    def removeDataplaneForBroadcastEndpoint(self, remotePE, label, nlri):
+    @log_decorator.log_info
+    def remove_dataplane_for_bum_endpoint(self, remote_pe, label, nlri):
         pass
 
-    @logDecorator.logInfo
-    def setGatewayPort(self, linuxif):
+    @log_decorator.log_info
+    def set_gateway_port(self, linuxif):
         pass
 
-    @logDecorator.logInfo
-    def gatewayPortDown(self, linuxif):
+    @log_decorator.log_info
+    def gateway_port_down(self, linuxif):
         pass
 
 
@@ -113,14 +113,12 @@ class DummyDataplaneDriver(_DummyDataplaneDriver):
 
     type = EVPN
 
-    dataplaneInstanceClass = DummyVPNInstanceDataplane
+    dataplane_instance_class = DummyVPNInstanceDataplane
     encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 
     def __init__(self, *args):
         _DummyDataplaneDriver.__init__(self, *args)
 
-
-# EVI
 
 class EVI(VPNInstance, lg.LookingGlassMixin):
 
@@ -133,66 +131,67 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
     afi = AFI(AFI.l2vpn)
     safi = SAFI(SAFI.evpn)
 
-    @logDecorator.log
+    @log_decorator.log
     def __init__(self, *args, **kwargs):
 
         VPNInstance.__init__(self, *args, **kwargs)
 
-        self.gwPort = None
+        self.gw_port = None
 
         # Advertise route to receive multi-destination traffic
         self.log.info("Generating BGP route for broadcast/multicast traffic")
 
-        rd = RouteDistinguisher.fromElements(self.bgpManager.getLocalAddress(),
-                                             self.instanceId)
+        rd = RouteDistinguisher.fromElements(self.bgp_manager.get_local_address(),
+                                             self.instance_id)
 
         nlri = EVPNMulticast(rd,
                              EthernetTag(),
-                             IP.create(self.bgpManager.getLocalAddress()),
+                             IP.create(self.bgp_manager.get_local_address()),
                              None,
-                             IP.create(self.bgpManager.getLocalAddress()))
+                             IP.create(self.bgp_manager.get_local_address()))
 
         attributes = Attributes()
 
-        attributes.add(self._genEncapExtendedCommunities())
+        attributes.add(self._gen_encap_extended_communities())
 
         # add PMSI Tunnel Attribute route
         attributes.add(PMSIIngressReplication(
-            self.dataplaneDriver.getLocalAddress(), self.instanceLabel))
+            self.dataplane_driver.get_local_address(), self.instance_label))
 
-        self.multicastRouteEntry = RouteEntry(nlri, self.exportRTs, attributes)
+        self.multicast_route_entry = RouteEntry(nlri, self.export_rts,
+                                                attributes)
 
-        self._advertiseRoute(self.multicastRouteEntry)
+        self._advertise_route(self.multicast_route_entry)
 
-    def generateVifBGPRoute(self, macAddress, ipPrefix, prefixLen, label, rd):
+    def generate_vif_bgp_route(self, mac_address, ip_prefix, plen, label, rd):
         # Generate BGP route and advertise it...
 
-        assert(prefixLen == 32)
+        assert(plen == 32)
 
         # label parameter ignored, we need to use instance label
-        nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(macAddress), 6*8,
-                       Labels([self.instanceLabel]),
-                       IP.create(ipPrefix), None,
-                       IP.create(self.dataplaneDriver.getLocalAddress()))
+        nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(mac_address), 6*8,
+                       Labels([self.instance_label]),
+                       IP.create(ip_prefix), None,
+                       IP.create(self.dataplane_driver.get_local_address()))
 
         return RouteEntry(nlri)
 
-    @logDecorator.log
-    def setGatewayPort(self, linuxif, ipvpn):
-        self.dataplane.setGatewayPort(linuxif)
-        self.gwPort = (linuxif, ipvpn)
+    @log_decorator.log
+    def set_gateway_port(self, linuxif, ipvpn):
+        self.dataplane.set_gateway_port(linuxif)
+        self.gw_port = (linuxif, ipvpn)
 
-    @logDecorator.log
-    def gatewayPortDown(self, linuxif):
-        self.dataplane.gatewayPortDown(linuxif)
-        self.gwPort = None
+    @log_decorator.log
+    def gateway_port_down(self, linuxif):
+        self.dataplane.gateway_port_down(linuxif)
+        self.gw_port = None
 
-    def hasGatewayPort(self):
-        return (self.gwPort is not None)
+    def has_gateway_port(self):
+        return (self.gw_port is not None)
 
     # TrackerWorker callbacks for BGP route updates ##########################
 
-    def _route2trackedEntry(self, route):
+    def _route_2_tracked_entry(self, route):
         if isinstance(route.nlri, EVPNMAC):
             return (EVPNMAC, route.nlri.mac)
         elif isinstance(route.nlri, EVPNMulticast):
@@ -203,33 +202,33 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
             return None
         else:
             raise Exception("EVI %d should not receive routes of type %s" %
-                            (self.instanceId, type(route.nlri)))
+                            (self.instance_id, type(route.nlri)))
 
     @utils.synchronized
-    @logDecorator.log
-    def _newBestRoute(self, entry, newRoute):
-        (entryClass, info) = entry
+    @log_decorator.log
+    def _new_best_route(self, entry, new_route):
+        (entry_class, info) = entry
 
-        encaps = self._checkEncaps(newRoute)
+        encaps = self._check_encaps(new_route)
         if not encaps:
             return
 
-        if entryClass == EVPNMAC:
+        if entry_class == EVPNMAC:
             prefix = info
 
-            remotePE = newRoute.nexthop
+            remote_pe = new_route.nexthop
 
-            label = newRoute.nlri.label.labels[0]
+            label = new_route.nlri.label.labels[0]
 
-            self.dataplane.setupDataplaneForRemoteEndpoint(
-                prefix, remotePE, label, newRoute.nlri, encaps)
+            self.dataplane.setup_dataplane_for_remote_endpoint(
+                prefix, remote_pe, label, new_route.nlri, encaps)
 
-        elif entryClass == EVPNMulticast:
+        elif entry_class == EVPNMulticast:
             remote_endpoint = info
 
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
-            pmsi_tunnel = newRoute.attributes.get(PMSI.ID)
+            pmsi_tunnel = new_route.attributes.get(PMSI.ID)
             if not isinstance(pmsi_tunnel, PMSIIngressReplication):
                 self.log.warning("Received PMSITunnel of unsupported type: %s",
                                  type(pmsi_tunnel))
@@ -239,37 +238,37 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
 
                 self.log.info("Setting up dataplane for new ingress "
                               "replication destination %s", remote_endpoint)
-                self.dataplane.addDataplaneForBroadcastEndpoint(
-                    remote_endpoint, label, newRoute.nlri, encaps)
+                self.dataplane.add_dataplane_for_bum_endpoint(
+                    remote_endpoint, label, new_route.nlri, encaps)
         else:
-            self.log.warning("unsupported entryClass: %s", entryClass.__name__)
+            self.log.warning("unsupported entry_class: %s", entry_class.__name__)
 
     @utils.synchronized
-    @logDecorator.log
-    def _bestRouteRemoved(self, entry, oldRoute, last):
-        (entryClass, info) = entry
+    @log_decorator.log
+    def _best_route_removed(self, entry, old_route, last):
+        (entry_class, info) = entry
 
-        if entryClass == EVPNMAC:
+        if entry_class == EVPNMAC:
 
-            if self._skipRouteRemoval(last):
+            if self._skip_route_removal(last):
                 self.log.debug("Skipping removal of non-last route because "
                                "dataplane does not want it")
                 return
 
             prefix = info
 
-            remotePE = oldRoute.nexthop
-            label = oldRoute.nlri.label.labels[0]
+            remote_pe = old_route.nexthop
+            label = old_route.nlri.label.labels[0]
 
-            self.dataplane.removeDataplaneForRemoteEndpoint(
-                prefix, remotePE, label, oldRoute.nlri)
+            self.dataplane.remove_dataplane_for_remote_endpoint(
+                prefix, remote_pe, label, old_route.nlri)
 
-        elif entryClass == EVPNMulticast:
+        elif entry_class == EVPNMulticast:
             remote_endpoint = info
 
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
-            pmsi_tunnel = oldRoute.attributes.get(PMSI.ID)
+            pmsi_tunnel = old_route.attributes.get(PMSI.ID)
             if not isinstance(pmsi_tunnel, PMSIIngressReplication):
                 self.log.warning("PMSITunnel of suppressed route is of"
                                  " unsupported type")
@@ -278,26 +277,26 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
                 label = pmsi_tunnel.label
                 self.log.info("Cleaning up dataplane for ingress replication "
                               "destination %s", remote_endpoint)
-                self.dataplane.removeDataplaneForBroadcastEndpoint(
-                    remote_endpoint, label, oldRoute.nlri)
+                self.dataplane.remove_dataplane_for_bum_endpoint(
+                    remote_endpoint, label, old_route.nlri)
         else:
-            self.log.warning("unsupported entryClass: %s", entryClass.__name__)
+            self.log.warning("unsupported entry_class: %s", entry_class.__name__)
 
     # Looking Glass ####
 
-    def getLookingGlassLocalInfo(self, pathPrefix):
-        if not self.gwPort:
+    def get_log_local_info(self, path_prefix):
+        if not self.gw_port:
             return {"gateway_port": None}
         else:
-            (linuxif, ipvpn) = self.gwPort
+            (linuxif, ipvpn) = self.gw_port
             return {"gateway_port": {
                     "interface": repr(linuxif),
                     "ipvpn": {"href":
-                              lg.getAbsolutePath(
-                                  "VPN_INSTANCES", pathPrefix,
-                                  [ipvpn.externalInstanceId]),
+                              lg.get_absolute_path(
+                                  "VPN_INSTANCES", path_prefix,
+                                  [ipvpn.external_instance_id]),
                               "id": ipvpn.name,
                               "external_instance_id":
-                                  ipvpn.externalInstanceId
+                                  ipvpn.external_instance_id
                               },
                     }}

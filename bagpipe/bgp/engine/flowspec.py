@@ -24,6 +24,6 @@ class Flow(ExaBGPFlow):
 
 
 def FlowRouteFactory(afi, rd):
-    flowRoute = Flow(afi, safi=SAFI.flow_vpn)
-    flowRoute.rd = rd
-    return flowRoute
+    flow_route = Flow(afi, safi=SAFI.flow_vpn)
+    flow_route.rd = rd
+    return flow_route

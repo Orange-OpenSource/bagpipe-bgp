@@ -40,7 +40,7 @@ import logging
 
 from bagpipe.bgp.common import looking_glass as lg
 
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 
 from exabgp.bgp.message.update import Attributes
 from exabgp.bgp.message.update.attribute.attribute import Attribute
@@ -65,14 +65,14 @@ class RouteEntry(lg.LookingGlassMixin):
   that advertizes the route)
 """
 
-    def __init__(self, nlri, RTs=None, attributes=None,
+    def __init__(self, nlri, rts=None, attributes=None,
                  source=None):
         if attributes is None:
             attributes = Attributes()
         assert isinstance(attributes, Attributes)
-        if RTs is not None:
-            assert isinstance(RTs, list)
-            assert len(RTs) == 0 or isinstance(RTs[0], RouteTarget)
+        if rts is not None:
+            assert isinstance(rts, list)
+            assert len(rts) == 0 or isinstance(rts[0], RouteTarget)
 
         self.source = source
         self.afi = nlri.afi
@@ -83,26 +83,26 @@ class RouteEntry(lg.LookingGlassMixin):
         self.attributes = attributes
         # a list of exabgp.bgp.message.update.attribute.community.
         #   extended.RouteTargetASN2Number
-        self._routeTargets = []
+        self._route_targets = []
         if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
             ecoms = self.attributes[
                 Attribute.CODE.EXTENDED_COMMUNITY].communities
             # use type(..) because isinstance(rtrecord, RouteTarget) is True
-            self._routeTargets = [ecom for ecom in ecoms
+            self._route_targets = [ecom for ecom in ecoms
                                   if type(ecom) == RouteTarget]
-            if RTs:
-                ecoms += RTs
-                self._routeTargets += RTs
+            if rts:
+                ecoms += rts
+                self._route_targets += rts
         else:
-            if RTs:
-                self.attributes.add(ExtendedCommunities(RTs))
-                self._routeTargets += RTs
+            if rts:
+                self.attributes.add(ExtendedCommunities(rts))
+                self._route_targets += rts
 
     @property
-    def routeTargets(self):
-        return self._routeTargets
+    def route_targets(self):
+        return self._route_targets
 
-    def extendedCommunities(self, filter_=None):
+    def extended_communities(self, filter_=None):
         if filter_ is None:
             def filter_real(ecom):
                 return True
@@ -120,22 +120,22 @@ class RouteEntry(lg.LookingGlassMixin):
         else:
             return []
 
-    @logDecorator.log
-    def setRouteTargets(self, routeTargets):
+    @log_decorator.log
+    def set_route_targets(self, route_targets):
         # first build a list of ecoms without any RT
-        eComs = self.extendedCommunities(lambda ecom:
+        ecoms = self.extended_communities(lambda ecom:
                                          not isinstance(ecom, RouteTarget))
 
         # then add the right RTs
-        newEComs = ExtendedCommunities()
-        newEComs.communities += eComs
-        newEComs.communities += routeTargets
+        new_ecoms = ExtendedCommunities()
+        new_ecoms.communities += ecoms
+        new_ecoms.communities += route_targets
 
         # update
-        self._routeTargets = routeTargets
+        self._route_targets = route_targets
 
-        self.attributes.remove(newEComs.ID)
-        self.attributes.add(newEComs)
+        self.attributes.remove(new_ecoms.ID)
+        self.attributes.add(new_ecoms)
 
     @property
     def nexthop(self):
@@ -166,20 +166,20 @@ class RouteEntry(lg.LookingGlassMixin):
                      str(self.nexthop), self.nlri,
                      self.attributes))
 
-    def __repr__(self, skipNextHop=False):
-        fromString = " from:%s" % self.source if self.source else ""
+    def __repr__(self, skip_nexthop=False):
+        from_string = " from:%s" % self.source if self.source else ""
 
         nexthop = ""
-        if not skipNextHop:
+        if not skip_nexthop:
             nexthop = str(self.nexthop)
 
         return "[RouteEntry: %s/%s %s nh:%s %s%s]" % (
             self.afi, self.safi, self.nlri, nexthop,
-            self.attributes, fromString)
+            self.attributes, from_string)
 
-    def getLookingGlassLocalInfo(self, pathPrefix):
+    def get_log_local_info(self, path_prefix):
 
-        attDict = {}
+        att_dict = {}
 
         for attribute in self.attributes.itervalues():
 
@@ -189,22 +189,22 @@ class RouteEntry(lg.LookingGlassMixin):
                     attribute.ID == Attribute.CODE.LOCAL_PREF):
                 continue
 
-            attDict[repr(Attribute.CODE(attribute.ID))] = str(attribute)
+            att_dict[repr(Attribute.CODE(attribute.ID))] = str(attribute)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
-               "attributes": attDict,
+               "attributes": att_dict,
                "next_hop": self.nexthop
                }
 
         if self.source:
             res["source"] = {"id": self.source.name,
-                             "href": lg.getAbsolutePath("BGP_WORKERS",
-                                                        pathPrefix,
+                             "href": lg.get_absolute_path("BGP_WORKERS",
+                                                        path_prefix,
                                                         [self.source.name])
                              }
 
         if self.safi in [SAFI.mpls_vpn, SAFI.evpn]:
-            res["route_targets"] = [str(rt) for rt in self.routeTargets]
+            res["route_targets"] = [str(rt) for rt in self.route_targets]
 
         return {
             repr(self.nlri): res
@@ -223,66 +223,66 @@ class RouteEvent(object):
     type2name = {ADVERTISE: "Advertise",
                  WITHDRAW: "Withdraw"}
 
-    def __init__(self, eventType, routeEntry, source=None):
-        assert(eventType == RouteEvent.ADVERTISE or
-               eventType == RouteEvent.WITHDRAW)
-        assert isinstance(routeEntry, RouteEntry)
-        self.type = eventType
-        self.routeEntry = routeEntry
+    def __init__(self, event_type, route_entry, source=None):
+        assert(event_type == RouteEvent.ADVERTISE or
+               event_type == RouteEvent.WITHDRAW)
+        assert isinstance(route_entry, RouteEntry)
+        self.type = event_type
+        self.route_entry = route_entry
         if source is not None:
             self.source = source
-            self.routeEntry.source = source
+            self.route_entry.source = source
         else:
-            self.source = routeEntry.source
+            self.source = route_entry.source
         assert self.source is not None
-        self.replacedRoute = None
+        self.replaced_route = None
 
         # this is required to overwrite the action field in an NLRI
         # in the case where we generate a withdraw from an existing NLRI
         # on a replaced route
         # and this spares us the pain of specifying the action
         # when creating an nlri
-        if eventType == RouteEvent.ADVERTISE:
-            self.routeEntry.nlri.action = OUT.ANNOUNCE
+        if event_type == RouteEvent.ADVERTISE:
+            self.route_entry.nlri.action = OUT.ANNOUNCE
         else:  # WITHDRAW
-            self.routeEntry.nlri.action = OUT.WITHDRAW
+            self.route_entry.nlri.action = OUT.WITHDRAW
 
-    @logDecorator.log
-    def setReplacedRoute(self, replacedRoute):
-        ''' Called only by RouteTableManager, replacedRoute should be a
+    @log_decorator.log
+    def set_replaced_route(self, replaced_route):
+        ''' Called only by RouteTableManager, replaced_route should be a
         RouteEntry '''
-        assert(isinstance(replacedRoute, RouteEntry)
-               or (replacedRoute is None))
-        assert replacedRoute != self.routeEntry
-        self.replacedRoute = replacedRoute
+        assert(isinstance(replaced_route, RouteEntry)
+               or (replaced_route is None))
+        assert replaced_route != self.route_entry
+        self.replaced_route = replaced_route
 
     def __repr__(self):
-        if self.replacedRoute:
-            replacesStr = "replaces one route"
+        if self.replaced_route:
+            replaces_str = "replaces one route"
         else:
-            replacesStr = "replaces no route"
-        return "[RouteEvent(%s): %s %s %s]" % (replacesStr,
+            replaces_str = "replaces no route"
+        return "[RouteEvent(%s): %s %s %s]" % (replaces_str,
                                                RouteEvent.type2name[self.type],
-                                               self.routeEntry,
+                                               self.route_entry,
                                                self.source)
 
 
 class _SubUnsubCommon(object):
 
-    def __init__(self, afi, safi, routeTarget, worker=None):
+    def __init__(self, afi, safi, route_target, worker=None):
         assert isinstance(afi, AFI)
         assert isinstance(safi, SAFI)
-        assert routeTarget is None or isinstance(routeTarget, RouteTarget)
+        assert route_target is None or isinstance(route_target, RouteTarget)
         self.afi = afi
         self.safi = safi
-        self.routeTarget = routeTarget
+        self.route_target = route_target
         self.worker = worker
 
     def __repr__(self):
-        byWorker = " by %s" % self.worker.name if self.worker else ""
+        by_worker = " by %s" % self.worker.name if self.worker else ""
         return "%s [%s/%s,%s]%s" % (self.__class__.__name__,
                                     self.afi or "*", self.safi or "*",
-                                    self.routeTarget or "*", byWorker)
+                                    self.route_target or "*", by_worker)
 
 
 class Subscription(_SubUnsubCommon):
@@ -303,14 +303,14 @@ Any of these (afi, safi or route target) can be replaced by a wildcard:
     ANY_SAFI = SAFI(0)
     ANY_RT = None
 
-    def __init__(self, afi, safi, routeTarget=None, worker=None):
-        _SubUnsubCommon.__init__(self, afi, safi, routeTarget, worker)
+    def __init__(self, afi, safi, route_target=None, worker=None):
+        _SubUnsubCommon.__init__(self, afi, safi, route_target, worker)
 
 
 class Unsubscription(_SubUnsubCommon):
 
-    def __init__(self, afi, safi, routeTarget=None, worker=None):
-        _SubUnsubCommon.__init__(self, afi, safi, routeTarget, worker)
+    def __init__(self, afi, safi, route_target=None, worker=None):
+        _SubUnsubCommon.__init__(self, afi, safi, route_target, worker)
 
 
 class EventSource(lg.LookingGlassMixin):
@@ -319,34 +319,32 @@ class EventSource(lg.LookingGlassMixin):
     need to have a 'name' attribute
     '''
 
-    def __init__(self, routeTableManager):
-        self.routeTableManager = routeTableManager
+    def __init__(self, route_table_manager):
+        self.rtm = route_table_manager
         # private data of RouteTableManager
-        self._rtm_routeEntries = set()
+        self._rtm_route_entries = set()
 
-    def getRouteEntries(self):
-        return self._rtm_routeEntries
+    def get_route_entries(self):
+        return self._rtm_route_entries
 
-    @logDecorator.logInfo
-    def _advertiseRoute(self, routeEntry):
+    @log_decorator.log_info
+    def _advertise_route(self, route_entry):
         log.debug("Publish advertise route event")
-        self.routeTableManager.enqueue(RouteEvent(RouteEvent.ADVERTISE,
-                                                  routeEntry, self))
+        self.rtm.enqueue(RouteEvent(RouteEvent.ADVERTISE, route_entry, self))
 
-    @logDecorator.logInfo
-    def _withdrawRoute(self, routeEntry):
+    @log_decorator.log_info
+    def _withdraw_route(self, route_entry):
         log.debug("Publish withdraw route event")
-        self.routeTableManager.enqueue(RouteEvent(RouteEvent.WITHDRAW,
-                                                  routeEntry, self))
+        self.rtm.enqueue(RouteEvent(RouteEvent.WITHDRAW, route_entry, self))
 
-    def getLGMap(self):
+    def get_lg_map(self):
         return {
-            "adv_routes": (lg.SUBTREE, self.getLGRoutes)
+            "adv_routes": (lg.SUBTREE, self.get_lg_routes)
         }
 
-    def getLGRoutes(self, pathPrefix):
-        return [route.getLookingGlassInfo(pathPrefix) for route in
-                self.getRouteEntries()]
+    def get_lg_routes(self, path_prefix):
+        return [route.get_looking_glass_info(path_prefix) for route in
+                self.get_route_entries()]
 
 
 class WorkerCleanupEvent(object):

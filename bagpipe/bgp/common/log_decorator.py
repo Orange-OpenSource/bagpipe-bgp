@@ -41,5 +41,5 @@ def log(method, level=logging.DEBUG):
     return wrapper
 
 
-def logInfo(method):
+def log_info(method):
     return log(method, logging.INFO)

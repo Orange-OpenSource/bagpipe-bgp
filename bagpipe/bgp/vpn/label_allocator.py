@@ -38,7 +38,7 @@ class LabelAllocator(lg.LookingGlassMixin):
 
     def __init__(self):
         # (Labels below 16 are reserved)
-        self.currentLabel = random.randint(100, 200)
+        self.current_label = random.randint(100, 200)
         # using a random start value will illustrate during demos and tests
         # that the label for a VRF does not
         # need be the same on all compute nodes
@@ -47,17 +47,17 @@ class LabelAllocator(lg.LookingGlassMixin):
         self.lock = Lock()
 
     @utils.synchronized
-    def getNewLabel(self, description):
+    def get_new_label(self, description):
 
-        if self.currentLabel == MAX_LABEL+1:
+        if self.current_label == MAX_LABEL+1:
             # Looking forward to the day will hit this one:
             log.error("All the 2^20 possible labels have been used at least "
                       "once, and this piece of code doesn't know how to reuse "
                       "them")
             raise Exception("Out of labels")
 
-        label = self.currentLabel
-        self.currentLabel += 1
+        label = self.current_label
+        self.current_label += 1
         self.labels[label] = description
 
         log.debug("Allocated label %d for '%s'", label, description)
@@ -71,5 +71,5 @@ class LabelAllocator(lg.LookingGlassMixin):
         else:
             log.warn("asked to release a non registered label: %d", label)
 
-    def getLookingGlassLocalInfo(self, prefix):
+    def get_log_local_info(self, prefix):
         return self.labels

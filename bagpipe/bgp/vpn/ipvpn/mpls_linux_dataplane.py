@@ -34,7 +34,7 @@ from bagpipe.bgp.vpn.ipvpn import IPVPN
 from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.common import constants as consts
-from bagpipe.bgp.common import logDecorator
+from bagpipe.bgp.common import log_decorator
 
 from pyroute2.common import AF_MPLS
 
@@ -83,12 +83,12 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         self.ip = self.driver.ip
 
         self.vrf_if = ("%s%d" % (VRF_INTERFACE_PREFIX,
-                                 self.instanceId))[:consts.LINUX_DEV_LEN]
+                                 self.instance_id))[:consts.LINUX_DEV_LEN]
 
-        self.rt_table = RT_TABLE_BASE + self.instanceId
+        self.rt_table = RT_TABLE_BASE + self.instance_id
 
         self.log.info("VRF %d: Initializing VRF interface %s",
-                      self.instanceId, self.vrf_if)
+                      self.instance_id, self.vrf_if)
 
         self.flush_routes()
 
@@ -137,7 +137,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
     def flush_routes(self):
         ipr.flush_routes(table=self.rt_table)
 
-    @logDecorator.logInfo
+    @log_decorator.log_info
     def cleanup(self):
         # bring down and disconnect all interfaces from vrf interface
         with self.ip.interfaces[self.vrf_if_idx] as vrf:
@@ -150,10 +150,10 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         ipr.flush_rules(oifname=self.vrf_if)
         self.flush_routes()
 
-    @logDecorator.logInfo
-    def vifPlugged(self, macAddress, ipAddress, localPort, label):
+    @log_decorator.log_info
+    def vif_plugged(self, mac_address, ip_address, localport, label):
 
-        interface = localPort['linuxif']
+        interface = localport['linuxif']
 
         if interface not in self.ip.interfaces:
             self.log.warning("interface %s not in interfaces, ignoring plug",
@@ -169,8 +169,8 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # add static ARP entry toward interface (because we can)
         ipr.neigh('add',
-                  dst=ipAddress,
-                  lladdr=macAddress,
+                  dst=ip_address,
+                  lladdr=mac_address,
                   ifindex=self.ip.interfaces[interface].index,
                   state=ndmsg.states['permanent'])
 
@@ -180,18 +180,18 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # Configure gateway address on this port
         # FIXME: that would need to be per vif port
         # Retrieve broadcast IP address
-        broadcastIP = str(IPNetwork("%s/%s" % (self.gatewayIP, self.mask)
+        broadcast_ip = str(IPNetwork("%s/%s" % (self.gateway_ip, self.mask)
                                     ).broadcast)
 
         try:
             ipr.addr('add', index=self.ip.interfaces[interface].index,
-                     address=self.gatewayIP, mask=self.mask,
-                     broadcast=broadcastIP)
+                     address=self.gateway_ip, mask=self.mask,
+                     broadcast=broadcast_ip)
         except nl_exceptions.NetlinkError as x:
             if x.code == errno.EEXIST:
                 # the route already exists, fine
                 self.log.warning("route %s already exists on %s",
-                                 self.gatewayIP,
+                                 self.gateway_ip,
                                  interface)
                 pass
             else:
@@ -203,7 +203,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                'oif': self.ip.interfaces[interface].index,
                'dst': label,  # FIXME how to check for BoS?
                'via': {'family': AF_INET,
-                       'addr': ipAddress}
+                       'addr': ip_address}
                }
 
         try:
@@ -216,10 +216,10 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             else:
                 raise
 
-    @logDecorator.logInfo
-    def vifUnplugged(self, macAddress, ipAddress, localPort, label,
-                     lastEndpoint=True):
-        interface = localPort['linuxif']
+    @log_decorator.log_info
+    def vif_unplugged(self, mac_address, ip_address, localport, label,
+                     last_endpoint=True):
+        interface = localport['linuxif']
 
         if interface not in self.ip.interfaces:
             self.log.warning("interface %s not in interfaces, ignoring plug",
@@ -241,12 +241,12 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # Unconfigure gateway address on this port
         # FIXME: that would need to be per vif port
         # Retrieve broadcast IP address
-        ip = IPNetwork("%s/%s" % (self.gatewayIP, self.mask))
-        broadcastIP = str(ip.broadcast)
+        ip = IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
+        broadcast_ip = str(ip.broadcast)
 
         ipr.addr('del', index=self.ip.interfaces[interface].index,
-                 address=self.gatewayIP, mask=self.mask,
-                 broadcast=broadcastIP)
+                 address=self.gateway_ip, mask=self.mask,
+                 broadcast=broadcast_ip)
 
         with self.ip.routes.tables['mpls'][label] as r:
             r.remove()
@@ -259,14 +259,14 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         self.log.debug("Found %s for %d with IPDB", res, label)
         return res
 
-    def _nh(self, remotePE, label, encaps):
+    def _nh(self, remote_pe, label, encaps):
         mpls = True
-        if str(remotePE) == self.driver.getLocalAddress():
+        if str(remote_pe) == self.driver.get_local_address():
             # FIXME: does not work yet, from this table,
             #        'gateway' is considered unreachable
             #        we could drop 'gateway' and just keep oif
             #        but this would only work for connected routes
-            # if remotePE is ourselves
+            # if remote_pe is ourselves
             # we lookup the route for the label and deliver directly
             # to this oif/gateway
             # (oif, gateway) = self._read_mpls_in(label)
@@ -274,7 +274,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             gateway = '127.0.0.1'
             oif = self.ip.interfaces['lo'].index
         else:
-            gateway = remotePE
+            gateway = remote_pe
             oif = self.driver.mpls_interface_index
 
         nh = {'oif': oif}
@@ -288,60 +288,60 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         self.log.debug("nh: %s", nh)
         return nh
 
-    def _getRoute(self, prefix):
+    def _get_route(self, prefix):
         return self.ip.routes.tables[self.rt_table][prefix]
 
-    @logDecorator.logInfo
-    def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                        encaps, lbConsistentHashOrder=0):
+    @log_decorator.log_info
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
+                                        encaps, lb_consistent_hash_order=0):
         prefix = str(prefix)
 
         if prefix == "0.0.0.0/0":
             prefix = 'default'
 
         try:
-            with self._getRoute(prefix) as r:
+            with self._get_route(prefix) as r:
                 self.log.debug("a route to %s already exists, adding nexthop",
                                prefix)
-                r.add_nh(self._nh(remotePE, label, encaps))
+                r.add_nh(self._nh(remote_pe, label, encaps))
         except KeyError:
             self.log.debug("no route to %s yet, creating", prefix)
             req = {'table': self.rt_table,
                    'dst': prefix,
-                   'multipath': [self._nh(remotePE, label, encaps)]}
+                   'multipath': [self._nh(remote_pe, label, encaps)]}
             self.log.debug("adding route: %s", req)
             self.add_route(req)
 
-    @logDecorator.logInfo
-    def removeDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
-                                         encaps, lbConsistentHashOrder=0):
+    @log_decorator.log_info
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
+                                         encaps, lb_consistent_hash_order=0):
         prefix = str(prefix)
 
         if prefix == "0.0.0.0/0":
             prefix = 'default'
 
         try:
-            with self._getRoute(prefix) as r:
+            with self._get_route(prefix) as r:
                 # FIXME: encap info is missing here
                 if r['multipath']:
-                    r.del_nh(self._nh(remotePE, label, None))
+                    r.del_nh(self._nh(remote_pe, label, None))
                 else:  # last route
                     r.remove()
 
         except KeyError:
             self.log.warning("no route found on "
-                             "removeDataplaneForRemoteEndpoint for %s", prefix)
+                             "remove_dataplane_for_remote_endpoint for %s", prefix)
 
     # Looking Glass ##
 
-    def getLGMap(self):
-        return {"routes": (lg.SUBTREE, self.getLGRoutes),
+    def get_lg_map(self):
+        return {"routes": (lg.SUBTREE, self.get_lg_routes),
                 "route_table": (lg.VALUE, self.rt_table),
                 "vrf_if": (lg.VALUE, self.vrf_if),
                 }
 
-    @logDecorator.logInfo
-    def getLGRoutes(self, pathPrefix):
+    @log_decorator.log_info
+    def get_lg_routes(self, path_prefix):
         routes = self.ip.routes.tables[self.rt_table]
         return [{r['dst']: json.loads(json.dumps(r, default=json_set_default))}
                 for r in routes]
@@ -354,10 +354,10 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     and on linux vrf interfaces.
     """
 
-    requiredKernel = "4.4"
-    dataplaneInstanceClass = MPLSLinuxVRFDataplane
+    required_kernel = "4.4"
+    dataplane_instance_class = MPLSLinuxVRFDataplane
     type = IPVPN
-    ecmpSupport = True
+    ecmp_support = True
 
     def __init__(self, config, init=True):
         lg.LookingGlassLocalLogger.__init__(self)
@@ -366,14 +366,14 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
         DataplaneDriver.__init__(self, config, init)
 
-    @logDecorator.logInfo
-    def _initReal(self, config):
+    @log_decorator.log_info
+    def _init_real(self, config):
         self.config = config
 
-        self._runCommand("modprobe mpls_router")
-        self._runCommand("modprobe mpls_gso")
-        self._runCommand("modprobe mpls_iptunnel")
-        self._runCommand("modprobe vrf")
+        self._run_command("modprobe mpls_router")
+        self._run_command("modprobe mpls_gso")
+        self._run_command("modprobe mpls_iptunnel")
+        self._run_command("modprobe vrf")
 
         sysctl('net.mpls.platform_labels', 2**20-1)
 
@@ -393,8 +393,8 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # enable forwarding
         sysctl('net.ipv4.ip_forward', 1)
 
-    @logDecorator.logInfo
-    def resetState(self):
+    @log_decorator.log_info
+    def reset_state(self):
         # remove all VRF interfaces
         for itf in self.ip.interfaces.keys():
             if isinstance(itf, str) and itf.startswith(VRF_INTERFACE_PREFIX):
@@ -412,17 +412,17 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # (just in case, should be covered by the above)
         ipr.flush_routes(family=AF_MPLS)
 
-    def supportedEncaps(self):
+    def supported_encaps(self):
         yield Encapsulation(Encapsulation.Type.MPLS)
         # we also accept route with no encap specified
         yield Encapsulation(Encapsulation.Type.DEFAULT)
 
     # Looking glass ####
 
-    def getLGMap(self):
-        return {"mpls": (lg.SUBTREE, self.getLGMPLSRoutes),
+    def get_lg_map(self):
+        return {"mpls": (lg.SUBTREE, self.get_lg_mpls_routes),
                 }
 
-    def getLGMPLSRoutes(self, pathPrefix):
+    def get_lg_mpls_routes(self, path_prefix):
         return [{r['dst']: json.loads(json.dumps(r, default=json_set_default))}
                 for r in self.ip.routes.tables['mpls']]

@@ -18,8 +18,8 @@
 
 class VPNNotFound(Exception):
 
-    def __init__(self, vrfId):
-        self.message = "VRF %s could not be found" % vrfId
+    def __init__(self, vrf_id):
+        self.message = "VRF %s could not be found" % vrf_id
 
     def __str__(self):
         return repr(self.message)
@@ -27,8 +27,8 @@ class VPNNotFound(Exception):
 
 class MalformedIPAddress(Exception):
 
-    def __init__(self, ipAddress):
-        self.message = "Address %s doesn't look valid" % ipAddress
+    def __init__(self, ip_address):
+        self.message = "Address %s doesn't look valid" % ip_address
 
     def __str__(self):
         return repr(self.message)
@@ -55,9 +55,9 @@ class OVSBridgePortNotFound(Exception):
 
 class RemotePEMACAddressNotFound(Exception):
 
-    def __init__(self, ipAddress):
+    def __init__(self, ip_address):
         self.message = ("MAC address for %s could not "
-            "be found. CAUTION: Need direct MPLS/Eth connection" % ipAddress)
+            "be found. CAUTION: Need direct MPLS/Eth connection" % ip_address)
 
     def __str__(self):
         return repr(self.message)
