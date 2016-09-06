@@ -80,9 +80,9 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         # Delete only EVPN Bridge (Created by dataplane driver)
         if BRIDGE_NAME_PREFIX in self.bridge_name:
             self._run_command("ip link set %s down" %
-                             self.bridge_name, raise_on_error=False)
+                              self.bridge_name, raise_on_error=False)
             self._run_command("brctl delbr %s" %
-                             self.bridge_name, raise_on_error=False)
+                              self.bridge_name, raise_on_error=False)
 
     def _create_and_plug_vxlan_if(self):
         self.log.debug("Creating and plugging VXLAN interface %s",
@@ -106,7 +106,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         # Plug VXLAN interface into bridge
         self._run_command("brctl addif %s %s" % (self.bridge_name,
-                                                self.vxlan_if_name))
+                                                 self.vxlan_if_name))
 
     def _cleanup_vxlan_if(self):
         if self._is_vxlan_if_on_bridge():
@@ -130,26 +130,26 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     def _interface_exists(self, interface):
         """Check if interface exists."""
         (_, exit_code) = self._run_command("ip link show dev %s" % interface,
-                                         raise_on_error=False,
-                                         acceptable_return_codes=[-1])
+                                           raise_on_error=False,
+                                           acceptable_return_codes=[-1])
         return (exit_code == 0)
 
     def _unplug_from_bridge(self, interface):
         if self._interface_exists(self.bridge_name):
             self._run_command("brctl delif %s %s" %
-                             (self.bridge_name, interface),
-                             acceptable_return_codes=[0, 1])
+                              (self.bridge_name, interface),
+                              acceptable_return_codes=[0, 1])
 
     def set_gateway_port(self, linuxif):
         gw_ip = self.gateway_ip
         gw_mac = "01:00:00:00:00:00"  # FIXME
 
         self._run_command("brctl addif %s %s" %
-                         (self.bridge_name, linuxif),
-                         raise_on_error=False)
+                          (self.bridge_name, linuxif),
+                          raise_on_error=False)
 
         self._run_command("bridge fdb replace %s dev %s" %
-                         (gw_mac, linuxif))
+                          (gw_mac, linuxif))
 
         self._run_command(
             "ip neighbor replace %s lladdr %s dev %s nud permanent" %
@@ -158,8 +158,8 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
     def gateway_port_down(self, linuxif):
         self._run_command("brctl delif %s %s" %
-                         (self.bridge_name, linuxif),
-                         raise_on_error=False)
+                          (self.bridge_name, linuxif),
+                          raise_on_error=False)
         # TODO: need to cleanup bridge fdb and ip neigh ?
 
     def set_bridge_name(self, linuxbr):
@@ -172,15 +172,15 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
             self.log.debug("Plugging localport %s into EVPN bridge %s",
                            localport['linuxif'], self.bridge_name)
             self._run_command("brctl addif %s %s" %
-                             (self.bridge_name, localport['linuxif']),
-                             raise_on_error=False)
+                              (self.bridge_name, localport['linuxif']),
+                              raise_on_error=False)
 
         self._run_command("bridge fdb replace %s dev %s" %
-                         (mac_address, localport['linuxif']))
+                          (mac_address, localport['linuxif']))
 
     @log_decorator.log_info
     def vif_unplugged(self, mac_address, ip_address, localport, label,
-                     last_endpoint=True):
+                      last_endpoint=True):
         # unplug localport only if bridge was created by us
         if BRIDGE_NAME_PREFIX in self.bridge_name:
             self.log.debug("Unplugging localport %s from EVPN bridge %s",
@@ -188,11 +188,11 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
             self._unplug_from_bridge(localport['linuxif'])
 
     @log_decorator.log
-    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                        encaps):
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                            nlri, encaps):
         if self._cleaning_up:
-            self.log.debug("setup_dataplane_for_remote_endpoint: instance cleaning"
-                           " up, do nothing")
+            self.log.debug("setup_dataplane_for_remote_endpoint: instance"
+                           " cleaning up, do nothing")
             return
 
         mac = prefix
@@ -201,12 +201,12 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         # populate bridge forwarding db
         self._run_command("bridge fdb replace %s dev %s dst %s vni %s" %
-                         (mac, self.vxlan_if_name, remote_pe, vni))
+                          (mac, self.vxlan_if_name, remote_pe, vni))
 
         # populate ARP cache
         if ip is not None:
             self._run_command("ip neighbor replace %s lladdr %s dev %s nud "
-                             "permanent" % (ip, mac, self.vxlan_if_name))
+                              "permanent" % (ip, mac, self.vxlan_if_name))
         else:
             self.log.warning("No IP in E-VPN route, ARP will not work for this"
                              "IP/MAC")
@@ -214,11 +214,11 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         self._fdb_dump()
 
     @log_decorator.log
-    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri):
-
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                             nlri):
         if self._cleaning_up:
-            self.log.debug("setup_dataplane_for_remote_endpoint: instance cleaning"
-                           " up, do nothing")
+            self.log.debug("setup_dataplane_for_remote_endpoint: instance"
+                           " cleaning up, do nothing")
             return
 
         mac = prefix
@@ -228,17 +228,17 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         self._fdb_dump()
 
         self._run_command("ip neighbor del %s lladdr %s dev %s nud permanent" %
-                         (ip, mac, self.vxlan_if_name))
+                          (ip, mac, self.vxlan_if_name))
         self._run_command("bridge fdb del %s dev %s dst %s vni %s" %
-                         (mac, self.vxlan_if_name, remote_pe, vni))
+                          (mac, self.vxlan_if_name, remote_pe, vni))
 
         self._fdb_dump()
 
     @log_decorator.log
     def add_dataplane_for_bum_endpoint(self, remote_pe, label, nlri, encaps):
         if self._cleaning_up:
-            self.log.debug("setup_dataplane_for_remote_endpoint: instance cleaning"
-                           " up, do nothing")
+            self.log.debug("setup_dataplane_for_remote_endpoint: instance"
+                           " cleaning up, do nothing")
             return
 
         vni = label
@@ -246,15 +246,15 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         # 00:00:00:00:00 usable as default since kernel commit
         # 58e4c767046a35f11a55af6ce946054ddf4a8580 (2013-06-25)
         self._run_command("bridge fdb append 00:00:00:00:00:00 dev %s dst %s "
-                         "vni %s" % (self.vxlan_if_name, remote_pe, vni))
+                          "vni %s" % (self.vxlan_if_name, remote_pe, vni))
 
         self._fdb_dump()
 
     @log_decorator.log
     def remove_dataplane_for_bum_endpoint(self, remote_pe, label, nlri):
         if self._cleaning_up:
-            self.log.debug("setup_dataplane_for_remote_endpoint: instance cleaning"
-                           " up, do nothing")
+            self.log.debug("setup_dataplane_for_remote_endpoint: instance"
+                           " cleaning up, do nothing")
             return
 
         vni = label
@@ -262,7 +262,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         self._fdb_dump()
 
         self._run_command("bridge fdb delete 00:00:00:00:00:00 dev %s dst %s "
-                         "vni %s" % (self.vxlan_if_name, remote_pe, vni))
+                          "vni %s" % (self.vxlan_if_name, remote_pe, vni))
 
         self._fdb_dump()
 
@@ -317,16 +317,16 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
         # delete all EVPN bridges
         cmd = "brctl show | tail -n +2 | awk '{print $1}'| grep '%s'"
         for bridge in self._run_command(cmd % BRIDGE_NAME_PREFIX,
-                                       raise_on_error=False,
-                                       acceptable_return_codes=[0, 1])[0]:
+                                        raise_on_error=False,
+                                        acceptable_return_codes=[0, 1])[0]:
             self._run_command("ip link set %s down" % bridge)
             self._run_command("brctl delbr %s" % bridge)
 
         # delete all VXLAN interfaces
         cmd = "ip link show | awk '{print $2}' | tr -d ':' | grep '%s'"
         for interface in self._run_command(cmd % VXLAN_INTERFACE_PREFIX,
-                                          raise_on_error=False,
-                                          acceptable_return_codes=[0, 1])[0]:
+                                           raise_on_error=False,
+                                           acceptable_return_codes=[0, 1])[0]:
             self._run_command("ip link set %s down" % interface)
             self._run_command("ip link delete %s" % interface)
 

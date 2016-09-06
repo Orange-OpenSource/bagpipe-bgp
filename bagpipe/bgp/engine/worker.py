@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 STOP_EVENT = "STOP_EVENT"
 
+
 class Worker(EventSource, lg.LookingGlassMixin):
 
     """This is the base class for objects that interact with the route table

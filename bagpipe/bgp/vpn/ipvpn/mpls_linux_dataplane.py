@@ -181,7 +181,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # FIXME: that would need to be per vif port
         # Retrieve broadcast IP address
         broadcast_ip = str(IPNetwork("%s/%s" % (self.gateway_ip, self.mask)
-                                    ).broadcast)
+                                     ).broadcast)
 
         try:
             ipr.addr('add', index=self.ip.interfaces[interface].index,
@@ -218,7 +218,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def vif_unplugged(self, mac_address, ip_address, localport, label,
-                     last_endpoint=True):
+                      last_endpoint=True):
         interface = localport['linuxif']
 
         if interface not in self.ip.interfaces:
@@ -292,8 +292,9 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         return self.ip.routes.tables[self.rt_table][prefix]
 
     @log_decorator.log_info
-    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                        encaps, lb_consistent_hash_order=0):
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                            nlri, encaps,
+                                            lb_consistent_hash_order=0):
         prefix = str(prefix)
 
         if prefix == "0.0.0.0/0":
@@ -313,8 +314,9 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             self.add_route(req)
 
     @log_decorator.log_info
-    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                         encaps, lb_consistent_hash_order=0):
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                             nlri, encaps,
+                                             lb_consistent_hash_order=0):
         prefix = str(prefix)
 
         if prefix == "0.0.0.0/0":
@@ -329,8 +331,8 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                     r.remove()
 
         except KeyError:
-            self.log.warning("no route found on "
-                             "remove_dataplane_for_remote_endpoint for %s", prefix)
+            self.log.warning("no route found on remove_dataplane_for"
+                             "_remote_endpoint for %s", prefix)
 
     # Looking Glass ##
 

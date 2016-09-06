@@ -28,15 +28,16 @@ class TestRouteTableManager(TestCase):
     def setUp(self):
         super(TestRouteTableManager, self).setUp()
         self.bgp_manager = Manager({'my_as': '64512',
-                                   'local_address': '1.2.3.4',
-                                   'peers': []
-                                   })
+                                    'local_address': '1.2.3.4',
+                                    'peers': []
+                                    })
 
     def test1(self):
         subscription = Subscription(Subscription.ANY_AFI,
                                     Subscription.ANY_SAFI,
                                     Subscription.ANY_RT)
 
-        route_entry = self.bgp_manager._subscription_2_rtc_route_entry(subscription)
+        route_entry = self.bgp_manager._subscription_2_rtc_route_entry(
+            subscription)
 
         self.assertEqual(route_entry.safi, SAFI.rtc, "wrong RTC route")

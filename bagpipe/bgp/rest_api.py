@@ -52,7 +52,7 @@ class RESTAPI(lg.LookingGlassMixin):
         self.config = config
         self.daemon = daemon
 
-        self.vpn_manager = vpn_manager
+        self.manager = vpn_manager
         self.catch_all_lg_log_handler = catchall_lg_log_handler
 
         self.bottle = Bottle()
@@ -75,7 +75,7 @@ class RESTAPI(lg.LookingGlassMixin):
         lg.set_reference_path("BGP_WORKERS", ["bgp", "workers"])
         lg.set_reference_path("VPN_INSTANCES", ["vpns", "instances"])
         lg.set_reference_path("DATAPLANE_DRIVERS",
-                            ["vpns", "dataplane", "drivers"])
+                              ["vpns", "dataplane", "drivers"])
 
     def ping(self):
         log.debug('Ping received, returning sequence number: %d',
@@ -85,7 +85,7 @@ class RESTAPI(lg.LookingGlassMixin):
     def _check_attach_parameters(self, params, attach):
         log.debug("checking params: %s", params)
         param_list = ('vpn_instance_id', 'mac_address', 'ip_address',
-                     'local_port')
+                      'local_port')
         if attach:
             param_list += ('vpn_type', 'import_rt', 'export_rt', 'gateway_ip')
 
@@ -219,7 +219,7 @@ class RESTAPI(lg.LookingGlassMixin):
 
         try:
             log.debug('Local port attach received: %s', attach_params)
-            self.vpn_manager.plug_vif_to_vpn(
+            self.manager.plug_vif_to_vpn(
                 attach_params['vpn_instance_id'],
                 attach_params['vpn_type'],
                 attach_params['import_rt'],
@@ -255,7 +255,7 @@ class RESTAPI(lg.LookingGlassMixin):
 
         try:
             log.debug('Local port detach received: %s', detach_params)
-            self.vpn_manager.unplug_vif_from_vpn(
+            self.manager.unplug_vif_from_vpn(
                 detach_params['vpn_instance_id'],
                 detach_params['mac_address'],
                 detach_params['ip_address'],
@@ -287,13 +287,15 @@ class RESTAPI(lg.LookingGlassMixin):
         log.debug("url_path_elements: %s", url_path_elements)
 
         try:
-            lg_info = self.get_looking_glass_info(path_prefix, url_path_elements)
+            lg_info = self.get_looking_glass_info(path_prefix,
+                                                  url_path_elements)
 
             log.debug("lg_info: %s...", repr(lg_info)[:40])
             log.debug("lg_info: %s", repr(lg_info))
 
             if lg_info is None:
-                raise lg.NoSuchLookingGlassObject(path_prefix, url_path_elements[0])
+                raise lg.NoSuchLookingGlassObject(path_prefix,
+                                                  url_path_elements[0])
 
             response.content_type = 'application/json'
             return json.dumps(lg_info)
@@ -311,22 +313,22 @@ class RESTAPI(lg.LookingGlassMixin):
         return {
             "summary":  (lg.SUBITEM, self.get_lg_summary),
             "config":   (lg.DELEGATE, self.daemon),
-            "bgp":      (lg.DELEGATE, self.vpn_manager.bgp_manager),
-            "vpns":     (lg.DELEGATE, self.vpn_manager),
+            "bgp":      (lg.DELEGATE, self.manager.bgp_manager),
+            "vpns":     (lg.DELEGATE, self.manager),
             "logs":     (lg.SUBTREE, self.get_logs),
         }
 
     def get_lg_summary(self):
         return {
             "BGP_established_peers":
-                self.vpn_manager.bgp_manager.get_established_peers_count(),
+                self.manager.bgp_manager.get_established_peers_count(),
             "local_routes_count":
-                self.vpn_manager.bgp_manager.rtm.
+                self.manager.bgp_manager.rtm.
                 get_local_routes_count(),
             "received_routes_count":
-                self.vpn_manager.bgp_manager.rtm.
+                self.manager.bgp_manager.rtm.
                 get_received_routes_count(),
-            "vpn_instances_count": self.vpn_manager.get_vpn_instances_count(),
+            "vpn_instances_count": self.manager.get_vpn_instances_count(),
             "warnings_and_errors": len(self.catch_all_lg_log_handler),
             "start_time": time.strftime("%Y-%m-%d %H:%M:%S",
                                         time.localtime(self.start_time))

@@ -227,7 +227,8 @@ Example: bagpipe-impex2dot --server s1 --server s2 | dot -Tpdf > impex.pdf
             print ('    port_%s_%s -> dest_%s_%s [style=dashed,'
                    'dir=none,color="gray"'
                    ',weight=5];' %
-                   (normalize(server), normalize(port), normalize(server), dest))
+                   (normalize(server), normalize(port), normalize(server),
+                    dest))
             dests.add((server, dest))
 
     for (server, dest) in dests:

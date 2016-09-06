@@ -106,8 +106,8 @@ class BaseTestBagPipeBGP():
             attributes.add(ecoms)
 
         route_event = RouteEvent(event_type,
-                                RouteEntry(nlri, rts, attributes, source),
-                                source)
+                                 RouteEntry(nlri, rts, attributes, source),
+                                 source)
         route_event.set_replaced_route(replaced_route_entry)
 
         self.event_target_worker.enqueue(route_event)
@@ -132,9 +132,9 @@ class BaseTestBagPipeBGP():
         attributes.add(ecommunities)
 
         flow_event = RouteEvent(event_type,
-                               RouteEntry(nlri, attract_rts, attributes,
-                                          source),
-                               source)
+                                RouteEntry(nlri, attract_rts, attributes,
+                                           source),
+                                source)
 
         self.event_target_worker.enqueue(flow_event)
 

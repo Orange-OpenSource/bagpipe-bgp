@@ -20,7 +20,7 @@ import subprocess
 
 
 def run_command(log, command, raise_on_error=True,
-               acceptable_return_codes=[0]):
+                acceptable_return_codes=[0]):
     '''
     Executes 'command' in a subshell.
     Returns (command_output,exit_code)
@@ -51,7 +51,8 @@ def run_command(log, command, raise_on_error=True,
 
     exit_code = process.returncode
 
-    if (exit_code in acceptable_return_codes) or (-1 in acceptable_return_codes):
+    if (exit_code in acceptable_return_codes or
+            -1 in acceptable_return_codes):
         return (output, exit_code)
     else:
         if len(output) > 0:

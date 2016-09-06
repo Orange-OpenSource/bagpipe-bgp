@@ -95,7 +95,8 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
 
     @log_decorator.log_info
     def initialize_dataplane_instance(self, instance_id, external_instance_id,
-                                    gateway_ip, mask, instance_label, **kwargs):
+                                      gateway_ip, mask,
+                                      instance_label, **kwargs):
         '''
         returns a VPNInstanceDataplane subclass
         after calling reset_state on the dataplane driver, if this is the first
@@ -113,8 +114,9 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
             self.log.debug("(not resetting dataplane state)")
 
         return self.dataplane_instance_class(self, instance_id,
-                                           external_instance_id, gateway_ip, mask,
-                                           instance_label, **kwargs)
+                                             external_instance_id,
+                                             gateway_ip, mask,
+                                             instance_label, **kwargs)
 
     def cleanup(self):
         # FIXME: to be clarified: can be removed ? should call reset_state ?
@@ -167,17 +169,19 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
 
     @abstractmethod
     def vif_unplugged(self, mac_address, ip_address_prefix, localport, label,
-                     last_endpoint=True):
+                      last_endpoint=True):
         pass
 
     @abstractmethod
-    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                        encaps, lb_consistent_hash_order=0):
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                            nlri, encaps,
+                                            lb_consistent_hash_order=0):
         pass
 
     @abstractmethod
-    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                         encaps, lb_consistent_hash_order=0):
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                             nlri, encaps,
+                                             lb_consistent_hash_order=0):
         pass
 
     def _run_command(self, *args, **kwargs):
@@ -206,17 +210,15 @@ class DummyVPNInstanceDataplane(VPNInstanceDataplane):
 
     @log_decorator.log
     def vif_unplugged(self, mac_address, ip_address_prefix, localport, label,
-                     last_endpoint=True):
+                      last_endpoint=True):
         pass
 
     @log_decorator.log
-    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                        encaps, lb_consistent_hash_order=0):
+    def setup_dataplane_for_remote_endpoint(self, *args):
         pass
 
     @log_decorator.log
-    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                        encaps, lb_consistent_hash_order=0):
+    def remove_dataplane_for_remote_endpoint(self, *args):
         pass
 
     @log_decorator.log

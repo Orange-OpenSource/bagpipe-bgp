@@ -68,8 +68,7 @@ log = logging.getLogger(__name__)
 
 def setup_exabgp_env():
     # initialize ExaBGP config
-    from exabgp.configuration.environment import environment
-    import exabgp.configuration.setup  # initialises environment.configuration
+    from exabgp.configuration.setup import environment
     environment.application = 'bagpipe-bgp'
     env = environment.setup(None)
     # tell exabgp to parse routes:
@@ -87,20 +86,20 @@ def setup_exabgp_env():
 
 
 TRANSLATE_EXABGP_STATE = {ExaFSM.IDLE: FSM.Idle,
-                        ExaFSM.ACTIVE: FSM.Active,
-                        ExaFSM.CONNECT: FSM.Connect,
-                        ExaFSM.OPENSENT: FSM.OpenSent,
-                        ExaFSM.OPENCONFIRM: FSM.OpenConfirm,
-                        ExaFSM.ESTABLISHED: FSM.Established,
-                        }
+                          ExaFSM.ACTIVE: FSM.Active,
+                          ExaFSM.CONNECT: FSM.Connect,
+                          ExaFSM.OPENSENT: FSM.OpenSent,
+                          ExaFSM.OPENCONFIRM: FSM.OpenConfirm,
+                          ExaFSM.ESTABLISHED: FSM.Established,
+                          }
 
 
 class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
     enabled_families = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
-                       # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
-                       (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
-                       (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn))]
+                        # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
+                        (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
+                        (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn))]
 
     def __init__(self, route_table_manager, peer_address, config):
         BGPPeerWorker.__init__(self, route_table_manager, peer_address)
@@ -291,7 +290,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                         raise Exception("should not be reached (action:%s)",
                                         nlri.action)
                     self._process_received_route(action, nlri,
-                                               message.attributes)
+                                                 message.attributes)
         return 1
 
     def _process_received_route(self, action, nlri, attributes):

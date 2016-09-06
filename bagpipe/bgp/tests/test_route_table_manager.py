@@ -122,7 +122,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
             self._wait()
 
     def _worker_unsubscriptions(self, worker, rts, wait=True,
-                               afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
+                                afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
         for rt in rts:
             unsubscribe = Unsubscription(afi, safi, rt, worker)
             self.rtm.enqueue(unsubscribe)
@@ -217,10 +217,10 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                   [RT1, RT2], bgp_peer_worker1, NH1)
+                                     [RT1, RT2], bgp_peer_worker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
         evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI2,
-                                   [RT2], bgp_peer_worker1, NH1)
+                                     [RT2], bgp_peer_worker1, NH1)
         # BGPPeerWorker1 subscribes to RT1
         self._worker_subscriptions(bgp_peer_worker1, [RT1])
         # Worker1 subscribes to RT1 and RT2
@@ -248,7 +248,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self.assertEqual(2, worker1.enqueue.call_count,
                          "2 advertise events should be synthesized to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [evt1.route_entry, evt2.route_entry], [])
+                                 [evt1.route_entry, evt2.route_entry], [])
         self.assertEqual(1, worker2.enqueue.call_count,
                          "1 advertise event should be synthesized to Worker2")
         self._check_events_calls(
@@ -258,7 +258,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         route_event = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                         [RT1, RT2], bgp_peer_worker1, NH1)
+                                            [RT1, RT2], bgp_peer_worker1, NH1)
         # Worker1 subscribes to RT1 and RT2
         worker1 = self._new_worker("Worker-1", Worker)
         self._worker_subscriptions(worker1, [RT1, RT2])
@@ -273,11 +273,11 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route advertised should be synthesized to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [route_event.route_entry], [])
+                                 [route_event.route_entry], [])
         self.assertEqual(1, worker2.enqueue.call_count,
                          "1 route advertised should be synthesized to Worker2")
         self._check_events_calls(worker2.enqueue.call_args_list,
-                               [route_event.route_entry], [])
+                                 [route_event.route_entry], [])
 
     def test_a4_two_subscriptions(self):
         # Worker1 subscribes to RT1
@@ -314,10 +314,10 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                   bgp_peer_worker1, NH1)
+                                     bgp_peer_worker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
         evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI2, [RT2],
-                                   bgp_peer_worker1, NH1)
+                                     bgp_peer_worker1, NH1)
         # BGPPeerWorker1 subscribes to RT1
         self._worker_subscriptions(bgp_peer_worker1, [RT1])
         # Worker1 subscribes to RT1 and RT2
@@ -352,13 +352,14 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self.assertEqual(2, worker1.enqueue.call_count,
                          "2 advertise event should be synthesized to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [evt1.route_entry, evt2.route_entry], [])
+                                 [evt1.route_entry, evt2.route_entry], [])
         self.assertEqual(4, worker2.enqueue.call_count,
                          "4 events should be synthesized to Worker2: "
                          "2 advertise and 2 withdraw")
         self._check_events_calls(worker2.enqueue.call_args_list,
-                               [evt1.route_entry, evt2.route_entry],
-                               [evt1.route_entry.nlri, evt2.route_entry.nlri])
+                                 [evt1.route_entry, evt2.route_entry],
+                                 [evt1.route_entry.nlri,
+                                  evt2.route_entry.nlri])
 
     def test_b3_unsubscription_not_registered(self):
         # Worker1 subscribes to RT1
@@ -377,7 +378,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # Worker1 advertises a route for RT1 and RT2
         worker1 = self._new_worker("Worker-1", Worker)
         route_event = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                         [RT1, RT2], worker1, NH1)
+                                            [RT1, RT2], worker1, NH1)
         # check route entry has been inserted
         self.assertIn(route_event.route_entry, worker1._rtm_route_entries,
                       "Route entry not found")
@@ -386,9 +387,9 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # Worker1 advertises then withdraws a route
         worker1 = self._new_worker("Worker-1", Worker)
         self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                            [RT1, RT2], worker1, NH1)
+                              [RT1, RT2], worker1, NH1)
         route_event = self._new_route_event(RouteEvent.WITHDRAW, NLRI1,
-                                         [RT1], worker1, NH1)
+                                            [RT1], worker1, NH1)
         # check route entry has been removed
         self.assertNotIn(route_event.route_entry, worker1._rtm_route_entries,
                          "Route entry found")
@@ -408,12 +409,12 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._worker_subscriptions(bgp_peer_worker2, [RT1, RT2])
         # BGPPeerWorker1 advertises a route for RT1
         route_event = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                         [RT1], bgp_peer_worker1, NH1)
+                                            [RT1], bgp_peer_worker1, NH1)
         # check route_event propagation
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route should be propagated to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [route_event.route_entry], [])
+                                 [route_event.route_entry], [])
         self.assertEqual(0, worker2.enqueue.call_count,
                          "no route should be propagated to Worker2")
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
@@ -439,21 +440,21 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._worker_subscriptions(bgp_peer_worker2, [RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         route_eventA = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                          [RT1, RT2], bgp_peer_worker1, NH1)
+                                             [RT1, RT2], bgp_peer_worker1, NH1)
         # BGPPeerWorker1 withdraw previous route (without RT
         route_eventW = self._new_route_event(RouteEvent.WITHDRAW, NLRI1,
-                                          [], bgp_peer_worker1, NH1)
+                                             [], bgp_peer_worker1, NH1)
         # check route_event propagation
         self.assertEqual(2, worker1.enqueue.call_count,
                          "2 routes should be propagated to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [route_eventA.route_entry],
-                               [route_eventW.route_entry.nlri])
+                                 [route_eventA.route_entry],
+                                 [route_eventW.route_entry.nlri])
         self.assertEqual(2, worker2.enqueue.call_count,
                          "2 routes should be propagated to Worker2")
         self._check_events_calls(worker2.enqueue.call_args_list,
-                               [route_eventA.route_entry],
-                               [route_eventW.route_entry.nlri])
+                                 [route_eventA.route_entry],
+                                 [route_eventW.route_entry.nlri])
         self.assertEqual(0, worker3.enqueue.call_count,
                          "No route should be propagated to Worker3")
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
@@ -474,11 +475,11 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1, RT2 and RT3
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                   [RT1, RT2, RT3], bgp_peer_worker1, NH1)
+                                     [RT1, RT2, RT3], bgp_peer_worker1, NH1)
         # BGPPeerWorker1 advertises the same nlri with attributes NH and RTs
         # modification
         evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                   [RT1, RT2], bgp_peer_worker1, NH2)
+                                     [RT1, RT2], bgp_peer_worker1, NH2)
         # check route event propagation
         # TO DO : check route_event.replaced_route
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
@@ -486,15 +487,15 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self.assertEqual(2, worker1.enqueue.call_count,
                          "2 routes should be advertised to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [evt1.route_entry, evt2.route_entry], [])
+                                 [evt1.route_entry, evt2.route_entry], [])
         self.assertEqual(2, worker2.enqueue.call_count,
                          "2 routes should be advertised to Worker2")
         self._check_events_calls(worker2.enqueue.call_args_list,
-                               [evt1.route_entry, evt2.route_entry], [])
+                                 [evt1.route_entry, evt2.route_entry], [])
         self.assertEqual(2, worker3.enqueue.call_count,
                          "2 routes should be advertised/withdrawn to Worker3")
         self._check_events_calls(worker3.enqueue.call_args_list,
-                               [evt1.route_entry], [evt1.route_entry.nlri])
+                                 [evt1.route_entry], [evt1.route_entry.nlri])
 
     def test_c6_route_readvertised(self):
         # Worker1 subscribes to RT1
@@ -503,17 +504,17 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1, RT2 and RT3
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                   bgp_peer_worker1, NH1)
+                                     bgp_peer_worker1, NH1)
         # BGPPeerWorker1 advertises the same nlri with same attributes and RTs
         self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                            bgp_peer_worker1, NH1)
+                              bgp_peer_worker1, NH1)
         # check route event propagation
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
                          "Route should not be propagated to its source")
         self.assertEqual(1, worker1.enqueue.call_count,
                          "only 1 route should be advertised to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [evt1.route_entry], [])
+                                 [evt1.route_entry], [])
 
     def test_c7_route_withdraw_not_registered(self):
         # Worker1 subscribes to RT1
@@ -522,17 +523,17 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                   bgp_peer_worker1, NH1)
+                                     bgp_peer_worker1, NH1)
         # BGPPeerWorker1 withdraw a not registered route (without RT
         self._new_route_event(RouteEvent.WITHDRAW, NLRI2, [],
-                            bgp_peer_worker1, NH1)
+                              bgp_peer_worker1, NH1)
         # Waiting for RouteTableManager thread finishes to process route_event
         self._wait()
         # check route_event propagation
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route1 should be propagated to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [evt1.route_entry], [])
+                                 [evt1.route_entry], [])
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
                          "Route should not be propagated back to its source")
 
@@ -548,10 +549,10 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self._worker_subscriptions(bgp_peer_worker1, [RT1, RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                   bgp_peer_worker1, NH1)
+                                     bgp_peer_worker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
         evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI2, [RT2],
-                                   bgp_peer_worker1, NH1)
+                                     bgp_peer_worker1, NH1)
         # Cleanup Worker1
         self.rtm.enqueue(WorkerCleanupEvent(bgp_peer_worker1))
         # Waiting for RouteTableManager thread finishes to process the
@@ -570,12 +571,13 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         self.assertEqual(2, worker1.enqueue.call_count,
                          "2 routes should be advert/withdraw to Worker1")
         self._check_events_calls(worker1.enqueue.call_args_list,
-                               [evt1.route_entry], [evt1.route_entry.nlri])
+                                 [evt1.route_entry], [evt1.route_entry.nlri])
         self.assertEqual(4, worker2.enqueue.call_count,
                          "4 routes should be advert/withdraw to Worker2")
         self._check_events_calls(worker2.enqueue.call_args_list,
-                               [evt1.route_entry, evt2.route_entry],
-                               [evt1.route_entry.nlri, evt2.route_entry.nlri])
+                                 [evt1.route_entry, evt2.route_entry],
+                                 [evt1.route_entry.nlri,
+                                  evt2.route_entry.nlri])
         # Check route entries have been removed for BGPPeerWorker1
         self.assertNotIn(evt1.route_entry, bgp_peer_worker1._rtm_route_entries,
                          "Route entry found")
@@ -586,10 +588,10 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
         bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
         self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                            [RT1, RT2], bgp_peer_worker1, NH1)
+                              [RT1, RT2], bgp_peer_worker1, NH1)
         # BGPPeerWorker1 advertises an other route for RT2
         self._new_route_event(RouteEvent.ADVERTISE, NLRI2,
-                            [RT2], bgp_peer_worker1, NH1)
+                              [RT2], bgp_peer_worker1, NH1)
         # BGPPeerWorker1 subscribes to RT1
         self._worker_subscriptions(bgp_peer_worker1, [RT1])
         # Worker1 subscribes to RT1 and RT2
@@ -635,8 +637,8 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         w2 = self._new_worker("Worker2", Worker)
 
         route_event = RouteEvent(RouteEvent.ADVERTISE,
-                                RouteEntry(NLRI1, None, Attributes()),
-                                w2)
+                                 RouteEntry(NLRI1, None, Attributes()),
+                                 w2)
 
         self.rtm.enqueue(route_event)
 

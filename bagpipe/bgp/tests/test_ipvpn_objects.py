@@ -18,6 +18,7 @@ from exabgp.reactor.protocol import AFI
 
 TEST_RD = RouteDistinguisher.fromElements("42.42.42.42", 5)
 
+
 def _create_test_ipvpn_nlri(label, nexthop):
     return IPVPNRouteFactory(AFI(AFI.ipv4),
                              "1.1.1.1/32", label, TEST_RD, nexthop)

@@ -176,7 +176,7 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
             if self.fsm.state == FSM.Established:
                 self._send(self._update_for_route_event(event))
             else:
-                raise Exception("cannot process route_event in '%s' state"
+                raise Exception("cannot process event in '%s' state"
                                 % self.fsm.state)
 
         elif event == SEND_KEEP_ALIVE:
@@ -269,7 +269,7 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
                     break
                 elif loop_result == 2:
                     self.log.warning("receive_loop_fun returned 2 (error), "
-                                     "aborting receive_loop and reinitializing")
+                                     "aborting receive_loop and reinit'ing")
                     # FIXME: use (Worker.)enqueue_high_priority so that
                     # ToIdle is treated before other events
                     self.enqueue(ToIdle(ERROR_RETRY_TIMER))
@@ -301,7 +301,7 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
     def init_send_keep_alive_timer(self):
         self.log.debug("INIT Send Keepalive timer (%ds)", self.kat_period)
         self.send_ka_timer = Timer(self.kat_period,
-                                 self.send_keep_alive_trigger)
+                                   self.send_keep_alive_trigger)
         self.send_ka_timer.name = "%s:send_ka_timer" % self.name
         self.send_ka_timer.start()
 

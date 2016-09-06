@@ -24,11 +24,11 @@
    TearDown: Stop TrackerWorker instance.
    TrackerWorker is in charge to receive RouteEvent from RouteTableManager.
    A RouteEvent contains an event type ADVERTIZE or WITHDRAW, and a RouteEntry.
-   TrackerWorker should call _new_best_route and/or _best_route_removed if the new
-   RouteEntry changes the current list of the known best routes. The current
-   list of the known best routes, which can be modified by the new RouteEntry,
-   is selected thanks to the tracked_entry associated to the new RouteEntry.
-   The tracked_entry is obtained thanks to _route2TrackedEntry.
+   TrackerWorker should call _new_best_route and/or _best_route_removed if the
+   new RouteEntry changes the current list of the known best routes. The
+   current list of the known best routes, which can be modified by the new
+   RouteEntry, is selected thanks to the tracked_entry associated to the new
+   RouteEntry. The tracked_entry is obtained thanks to _route2TrackedEntry.
    _compare_routes is used to compare 2 RouteEntry.
    Unit tests are organized as follow:
    TestA: basic tests, advertise several routes with different NLRI and same or
@@ -150,7 +150,7 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
                                     lambda a, b: cmp(repr(a[0]), repr(b[0])))
 
         for ((call_args, _), expected) in zip(call_args_list,
-                                             expected_list_copy):
+                                              expected_list_copy):
             self.assertEquals(expected[0], call_args[0], 'Bad prefix')
 
             observed_route_entry = call_args[1]
@@ -188,12 +188,13 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI2, [RT1, RT2], worker_a, NH1, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         self.assertEqual(2, self.tracker_worker._new_best_route.call_count,
                          '2 new best routes: 1 for NLRI1 and 1 for NLRI2')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route_nlri1a.route_entry),
-                          (NLRI2, route_nlri2a.route_entry)])
+                          [(NLRI1, route_nlri1a.route_entry),
+                           (NLRI2, route_nlri2a.route_entry)])
         self.assertEqual(2, self.tracker_worker._best_route_removed.call_count,
                          '2 old routes removed: 1 for NLRI1 and 1 for NLRI2')
         self._check_calls(
@@ -223,12 +224,13 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI2, [RT1, RT2], worker_b, NH1, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         self.assertEqual(2, self.tracker_worker._new_best_route.call_count,
                          '2 new_best_route calls: 1 for NLRI1 and 1 for NLRI2')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route_nlri1a.route_entry),
-                          (NLRI2, route_nlri2B.route_entry)])
+                          [(NLRI1, route_nlri1a.route_entry),
+                           (NLRI2, route_nlri2B.route_entry)])
         self.assertEqual(2, self.tracker_worker._best_route_removed.call_count,
                          '2 best_route_removed calls: 1 for NLRI1 and 1 for '
                          'NLRI2')
@@ -252,12 +254,13 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.ADVERTISE, NLRI1, [RT1, RT2], worker_a, NH1, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         self.assertEqual(1, self.tracker_worker._new_best_route.call_count,
                          'expected 1 new_best_route call for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route_nlri1a.route_entry),
-                          (NLRI1, route_nlri1a.route_entry)])
+                          [(NLRI1, route_nlri1a.route_entry),
+                           (NLRI1, route_nlri1a.route_entry)])
 
     def test_a4_withdraw_nlri_not_known(self):
         # A source A withdraws a route that does not exist.
@@ -306,7 +309,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_b, NH1, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         self.assertEqual(
             1, self.tracker_worker._new_best_route.call_count,
             '1 new best route call for NLRI1')
@@ -353,7 +357,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_a, NH1, 300)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", "RE3", "RE4", NBR, BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -361,8 +366,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new best route call for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1Nlri1.route_entry),
-                          (NLRI1, route2Nlri1.route_entry)])
+                          [(NLRI1, route1Nlri1.route_entry),
+                           (NLRI1, route2Nlri1.route_entry)])
         self.assertEqual(
             1, self.tracker_worker._best_route_removed.call_count,
             '1 best_route_removed call for NLRI1')
@@ -400,7 +405,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_b, NH1, 200)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", "RE3", NBR, BRR, "RE4", BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -408,8 +414,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route2_nlri1b.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route2_nlri1b.route_entry)])
         self.assertEqual(
             2, self.tracker_worker._best_route_removed.call_count,
             '2 best_route_removed calls for NLRI1')
@@ -443,7 +449,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_a, NH1, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", NBR, BRR, "RE3"]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -451,8 +458,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route2_nlri1b.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route2_nlri1b.route_entry)])
         self.assertEqual(
             1, self.tracker_worker._best_route_removed.call_count,
             '1 best_route_removed call for NLRI1')
@@ -498,18 +505,19 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_c, NH1, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", "RE3",
-                         "RE4", NBR, BRR, "RE5", NBR, BRR, "RE6", BRR]
+                          "RE4", NBR, BRR, "RE5", NBR, BRR, "RE6", BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
         self.assertEqual(
             3, self.tracker_worker._new_best_route.call_count,
             '3 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route2_nlri1b.route_entry),
-                          (NLRI1, route3_nlri1c.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route2_nlri1b.route_entry),
+                           (NLRI1, route3_nlri1c.route_entry)])
         self.assertEqual(
             3, self.tracker_worker._best_route_removed.call_count,
             '3 best_route_removed calls for NLRI1')
@@ -548,7 +556,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_a, NH2, 100)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", NBR, "RE3", BRR, "RE4", BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -556,8 +565,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route2_nlri1a.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route2_nlri1a.route_entry)])
         self.assertEqual(
             2, self.tracker_worker._best_route_removed.call_count,
             '2 best_route_removed calls for NLRI1')
@@ -588,7 +597,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
             worker_a, NH1, 100, route1_nlri1a.route_entry)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", NBR, BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -596,8 +606,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route2_nrli1a.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route2_nrli1a.route_entry)])
         self.assertEqual(
             1, self.tracker_worker._best_route_removed.call_count,
             '1 best_route_removed call for NLRI1')
@@ -636,7 +646,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_b, NH1, 200)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", "RE3", NBR, BRR, "RE4", NBR, BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -644,9 +655,9 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             3, self.tracker_worker._new_best_route.call_count,
             '3 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route2_nrli1b.route_entry),
-                             (NLRI1, route3_nrli1a.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route2_nrli1b.route_entry),
+                           (NLRI1, route3_nrli1a.route_entry)])
         self.assertEqual(
             2, self.tracker_worker._best_route_removed.call_count,
             '2 best_route_removed calls for NLRI1')
@@ -683,9 +694,10 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         # Source A advertises route3 which replaces route1
         self._append_call("RE4")
         self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                            worker_a, NH1, 100, route1_nlri1.route_entry)
+                              worker_a, NH1, 100, route1_nlri1.route_entry)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", "RE3", "RE4", NBR, BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -693,8 +705,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new best route call for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1.route_entry),
-                          (NLRI1, route2_nlri1.route_entry)])
+                          [(NLRI1, route1_nlri1.route_entry),
+                           (NLRI1, route2_nlri1.route_entry)])
         self.assertEqual(
             1, self.tracker_worker._best_route_removed.call_count,
             '1 best_route_removed call for NLRI1')
@@ -733,7 +745,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         self._new_route_event(
             RouteEvent.WITHDRAW, NLRI1, [RT1, RT2], worker_a, NH1, 300)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = ["RE1", NBR, "RE2", "RE3", "RE4", NBR, BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
@@ -741,8 +754,8 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
             2, self.tracker_worker._new_best_route.call_count,
             '2 new new_best_route calls for NLRI1')
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route1_nlri1a.route_entry),
-                          (NLRI1, route3_nlri1b.route_entry)])
+                          [(NLRI1, route1_nlri1a.route_entry),
+                           (NLRI1, route3_nlri1b.route_entry)])
         self.assertEqual(
             1, self.tracker_worker._best_route_removed.call_count,
             '1 best_route_removed call for NLRI1')
@@ -783,16 +796,17 @@ class TestTrackerWorker(TestCase, BaseTestBagPipeBGP):
         # Source A advertises route3 which replaces route1
         self._append_call("RE4")
         route4 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                     worker_a, NH3, 200, route1.route_entry)
+                                       worker_a, NH3, 200, route1.route_entry)
 
-        # Check calls and arguments list to _new_best_route and _best_route_removed
+        # Check calls and arguments list to _new_best_route and
+        # _best_route_removed
         expected_calls = [NBR, "RE2", "RE3", "RE4", NBR, NBR, NBR, BRR]
         self.assertEqual(expected_calls, self._calls, 'Wrong call sequence')
 
         self._check_calls(self.tracker_worker._new_best_route.call_args_list,
-                         [(NLRI1, route2.route_entry),
-                          (NLRI1, route3.route_entry),
-                          (NLRI1, route4.route_entry)], False)
+                          [(NLRI1, route2.route_entry),
+                           (NLRI1, route3.route_entry),
+                           (NLRI1, route4.route_entry)], False)
 
         self._check_calls(
             self.tracker_worker._best_route_removed.call_args_list,

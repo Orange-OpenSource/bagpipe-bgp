@@ -79,7 +79,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         VPNInstanceDataplane.__init__(self, *args)
 
         self.arp_netns = ("%s-vrf%d" %
-                         (ARPNETNS_PREFIX, self.instance_id))[:LINUX_DEV_LEN]
+                          (ARPNETNS_PREFIX, self.instance_id))[:LINUX_DEV_LEN]
 
         # Initialize dict where we store info on OVS ports (port numbers and
         # bound IP address)
@@ -88,7 +88,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # Initialize dict where we store label, remote_pe and
         # lb_consistent_hash_order infos list per prefix for remote endpoints
         # load balancing
-        self._load_balancing_endpoints = dict()
+        self._lb_endpoints = dict()
 
         # Find ethX MPLS interface MAC address
         if not self.driver.use_gre:
@@ -113,7 +113,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
             # Set up veth pair devices between OVS and ARP network namespace
             self._create_arp_netns_veth_pair(ovsbr_to_proxyarp_ns,
-                                            PROXYARP2OVS_IF)
+                                             PROXYARP2OVS_IF)
 
             # Retrieve broadcast IP address
             ip = IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
@@ -121,24 +121,24 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
             # Set up network namespace interface as gateway
             self._run_command("ip netns exec %s ip addr add %s/%s broadcast %s"
-                             " dev %s" %
-                             (self.arp_netns, self.gateway_ip,
-                              self.mask, broadcast_ip, PROXYARP2OVS_IF),
-                             raise_on_error=True)
+                              " dev %s" %
+                              (self.arp_netns, self.gateway_ip,
+                               self.mask, broadcast_ip, PROXYARP2OVS_IF),
+                              raise_on_error=True)
 
             # Setup IP forwarding
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys"
-                             "/net/ipv4/ip_forward\"" % self.arp_netns)
+                              "/net/ipv4/ip_forward\"" % self.arp_netns)
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys/net"
-                             "/ipv4/conf/all/forwarding\"" % self.arp_netns)
+                              "/ipv4/conf/all/forwarding\"" % self.arp_netns)
 
             # Setup ARP proxying
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys/net"
-                             "/ipv4/conf/%s/proxy_arp\"" %
-                             (self.arp_netns, PROXYARP2OVS_IF))
+                              "/ipv4/conf/%s/proxy_arp\"" %
+                              (self.arp_netns, PROXYARP2OVS_IF))
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys/net"
-                             "/ipv4/conf/%s/proxy_arp_pvlan\"" %
-                             (self.arp_netns, PROXYARP2OVS_IF))
+                              "/ipv4/conf/%s/proxy_arp_pvlan\"" %
+                              (self.arp_netns, PROXYARP2OVS_IF))
         else:
             self.log.debug("VRF network namespace already exists...")
 
@@ -147,8 +147,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # Find gateway ("network namespace to OVS" port) MAC address
         self.gw_mac_address = get_device_mac(self._run_command,
-                                           PROXYARP2OVS_IF,
-                                           self.arp_netns)
+                                             PROXYARP2OVS_IF,
+                                             self.arp_netns)
 
         # Create OVS patch ports
         self.log.debug(
@@ -156,19 +156,21 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         self.patch_port_in = 'ipvpn%d-pp-in' % self.instance_id
         self.patch_port_out = 'ipvpn%d-pp-out' % self.instance_id
         self._run_command("ovs-vsctl --may-exist add-port %s %s -- "
-                         "set Interface %s type=patch options:peer=%s" %
-                         (self.bridge, self.patch_port_in,
-                          self.patch_port_in, self.patch_port_out))
+                          "set Interface %s type=patch options:peer=%s" %
+                          (self.bridge, self.patch_port_in,
+                           self.patch_port_in, self.patch_port_out))
         self._run_command("ovs-vsctl --may-exist add-port %s %s -- "
-                         "set Interface %s type=patch options:peer=%s" %
-                         (self.bridge, self.patch_port_out,
-                          self.patch_port_out, self.patch_port_in))
+                          "set Interface %s type=patch options:peer=%s" %
+                          (self.bridge, self.patch_port_out,
+                           self.patch_port_out, self.patch_port_in))
 
-        self.patch_port_in_number = self.driver.find_ovs_port(self.patch_port_in)
-        self.patch_port_out_number = self.driver.find_ovs_port(self.patch_port_out)
+        self.patch_port_in_number = self.driver.find_ovs_port(
+            self.patch_port_in)
+        self.patch_port_out_number = self.driver.find_ovs_port(
+            self.patch_port_out)
         # Map traffic from patch port to gateway
-        self._ovs_flow_add('in_port=%s,ip,nw_dst=%s' % (self.patch_port_in_number,
-                                                        self.gateway_ip),
+        self._ovs_flow_add('in_port=%s,ip,nw_dst=%s' %
+                           (self.patch_port_in_number, self.gateway_ip),
                            'output:%s' % self.arp_net_nsport,
                            self.driver.ovs_table_vrfs)
 
@@ -185,9 +187,9 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             self.patch_port_in_number, self.gateway_ip),
             self.driver.ovs_table_vrfs)
         self._run_command("ovs-vsctl del-port %s %s" %
-                         (self.bridge, self.patch_port_in))
+                          (self.bridge, self.patch_port_in))
         self._run_command("ovs-vsctl del-port %s %s" %
-                         (self.bridge, self.patch_port_out))
+                          (self.bridge, self.patch_port_out))
 
         self.log.info("Cleaning VRF network namespace %s", self.arp_netns)
         # Detach network namespace veth pair device from OVS bridge
@@ -204,43 +206,43 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         return (self.arp_netns in output)
 
     def _create_arp_netns_veth_pair(self, ovsbr_to_proxyarp_ns,
-                                   proxyarp_ns_to_ovsbr):
+                                    proxyarp_ns_to_ovsbr):
         """ Create a pair of veth devices, one end being created in the ARP
         netns """
 
         try:
             self._run_command("ip netns exec %s ip link del %s" %
-                             (self.arp_netns, proxyarp_ns_to_ovsbr),
-                             raise_on_error=False,
-                             acceptable_return_codes=[0, 1])
+                              (self.arp_netns, proxyarp_ns_to_ovsbr),
+                              raise_on_error=False,
+                              acceptable_return_codes=[0, 1])
             self._run_command("ip link del %s" % ovsbr_to_proxyarp_ns,
-                             raise_on_error=False,
-                             acceptable_return_codes=[0, 1])
-            self._run_command("ip link add %s mtu 65535 type veth peer name %s "
-                             "netns %s" % (ovsbr_to_proxyarp_ns,
-                                           proxyarp_ns_to_ovsbr,
-                                           self.arp_netns),
-                             acceptable_return_codes=[0, 2])
+                              raise_on_error=False,
+                              acceptable_return_codes=[0, 1])
+            self._run_command("ip link add %s mtu 65535 type veth peer name "
+                              "%s netns %s" % (ovsbr_to_proxyarp_ns,
+                                               proxyarp_ns_to_ovsbr,
+                                               self.arp_netns),
+                              acceptable_return_codes=[0, 2])
             self._run_command("ip link set dev %s up" % ovsbr_to_proxyarp_ns)
             self._run_command("ip netns exec %s ip link set dev %s up" %
-                             (self.arp_netns, proxyarp_ns_to_ovsbr))
+                              (self.arp_netns, proxyarp_ns_to_ovsbr))
             self._run_command("ovs-vsctl del-port %s %s" %
-                             (self.bridge, ovsbr_to_proxyarp_ns),
-                             raise_on_error=False,
-                             acceptable_return_codes=[0, 1, 2])
+                              (self.bridge, ovsbr_to_proxyarp_ns),
+                              raise_on_error=False,
+                              acceptable_return_codes=[0, 1, 2])
             self._run_command("ovs-vsctl add-port %s %s" %
-                             (self.bridge, ovsbr_to_proxyarp_ns))
+                              (self.bridge, ovsbr_to_proxyarp_ns))
         except Exception:
             self._run_command("ovs-vsctl del-port %s %s" %
-                             (self.bridge, ovsbr_to_proxyarp_ns),
-                             raise_on_error=False,
-                             acceptable_return_codes=[0, 1, 2])
+                              (self.bridge, ovsbr_to_proxyarp_ns),
+                              raise_on_error=False,
+                              acceptable_return_codes=[0, 1, 2])
             self._run_command("ip netns exec %s ip link del %s" %
-                             (self.arp_netns, proxyarp_ns_to_ovsbr),
-                             raise_on_error=False)
+                              (self.arp_netns, proxyarp_ns_to_ovsbr),
+                              raise_on_error=False)
             self._run_command("ip link del %s" %
-                             ovsbr_to_proxyarp_ns,
-                             raise_on_error=False)
+                              ovsbr_to_proxyarp_ns,
+                              raise_on_error=False)
             raise
 
     @log_decorator.log
@@ -253,8 +255,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         """ Find MAC address for a remote IP address """
         # PING remote IP address
         (_, exit_code) = self._run_command("fping -r4 -t100 -q %s" % remote_ip,
-                                         raise_on_error=False,
-                                         acceptable_return_codes=[-1])
+                                           raise_on_error=False,
+                                           acceptable_return_codes=[-1])
         if exit_code != 0:
             raise exc.RemotePEMACAddressNotFound(remote_ip)
 
@@ -291,8 +293,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                       "(ovsbr_interfaces_mtu specified in config)", itf, mtu)
 
         (_, exit_code) = self._run_command("ip link show %s" % itf,
-                                         raise_on_error=False,
-                                         acceptable_return_codes=[0, 1])
+                                           raise_on_error=False,
+                                           acceptable_return_codes=[0, 1])
 
         if exit_code != 0:
             self.log.warning("No %s if, not trying to fix MTU", itf)
@@ -341,7 +343,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                     port = self.driver.find_ovs_port(port_name)
                 except:
                     self._run_command("ovs-vsctl --may-exist add-port %s %s" %
-                                     (self.bridge, port_name))
+                                      (self.bridge, port_name))
                     port = self.driver.find_ovs_port(port_name)
                 self.log.debug("Corresponding port number: %s", port)
 
@@ -455,7 +457,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def _mpls_in_port(self):
         if self.driver.use_gre:
-            return self.driver.ovs_gre_tunnel_port_number
+            return self.driver.gre_tunnel_port_number
         else:
             return self.driver.ovs_mpls_if_port_number
 
@@ -465,11 +467,11 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def _match_vxlan_in(self, vnid):
         return ('in_port=%s,tun_id=%d' %
-                (self.driver.ovs_vxlan_tunnel_port_number, vnid))
+                (self.driver.vxlan_tunnel_port_number, vnid))
 
     @log_decorator.log
     def vif_unplugged(self, mac_address, ip_address, localport, label,
-                     last_endpoint=True):
+                      last_endpoint=True):
 
         localport_match = self._ovs_port_info[
             localport['linuxif']]['localport_match']
@@ -504,7 +506,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             if port_unplug_action:
                 # Run port unplug action if necessary (OVS port delete)
                 self._run_command(port_unplug_action,
-                                 acceptable_return_codes=[0, 1])
+                                  acceptable_return_codes=[0, 1])
 
             # Remove OVS port number from list for local port plugged in VRF
             del self._ovs_port_info[localport['linuxif']]
@@ -524,7 +526,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             if (self.driver.vxlan_encap and
                     Encapsulation(Encapsulation.Type.VXLAN) in encaps):
                 return ("resubmit(%d,%d)" %
-                        (self.driver.ovs_vxlan_tunnel_port_number,
+                        (self.driver.vxlan_tunnel_port_number,
                          self.driver.ovs_table_vrfs))
             else:
                 return "resubmit(%d,%d)" % (self._mpls_in_port(),
@@ -534,11 +536,11 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                     Encapsulation(Encapsulation.Type.VXLAN) in encaps):
                 self.log.debug("Will use a VXLAN encap for this destination")
                 return "set_field:%s->tun_dst,output:%s" % (
-                    str(remote_pe), self.driver.ovs_vxlan_tunnel_port_number)
+                    str(remote_pe), self.driver.vxlan_tunnel_port_number)
             elif self.driver.use_gre:
                 self.log.debug("Using MPLS/GRE encap")
                 return "set_field:%s->tun_dst,output:%s" % (
-                    str(remote_pe), self.driver.ovs_gre_tunnel_port_number)
+                    str(remote_pe), self.driver.gre_tunnel_port_number)
             else:
                 self.log.debug("Using bare MPLS encap")
                 # Find remote router MAC address
@@ -578,11 +580,11 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                                          self.mask)):
             dec_ttl_action = "dec_ttl"
 
-        for index, endpoint in enumerate(self._load_balancing_endpoints[prefix]):
+        for index, endpoint in enumerate(self._lb_endpoints[prefix]):
             label_action = self._match_label_action(endpoint['label'],
-                                                  endpoint['encaps'])
-            output_action = self._match_output_action(endpoint['remote_pe'],
                                                     endpoint['encaps'])
+            output_action = self._match_output_action(endpoint['remote_pe'],
+                                                      endpoint['encaps'])
 
             lb_endpoint_flow = self._ovs_flow_add(
                 'ip,in_port=%s%s,reg0=%d' % (self.patch_port_in_number,
@@ -594,38 +596,39 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             lb_flows_file.write('add %s\n' % lb_endpoint_flow)
 
     def _write_del_lb_flows_2_file(self, lb_flows_file, prefix, nw_dst_match):
-        for index, _ in enumerate(self._load_balancing_endpoints[prefix]):
+        for index, _ in enumerate(self._lb_endpoints[prefix]):
             lb_endpoint_flow = self._ovs_flow_del(
                 'ip,in_port=%s%s,reg0=%d' % (self.patch_port_in_number,
                                              nw_dst_match, index),
                 self.driver.ovs_table_vrfs_lb, True)
             lb_flows_file.write('del %s\n' % lb_endpoint_flow)
 
-    def _write_lb_multipath_flows_2_file(self, lb_flows_file, prefix, nw_dst_match):
+    def _write_lb_multipath_flows_2_file(self, lb_flows_file, prefix,
+                                         nw_dst_match):
         self.log.info('Prefix %s: nw_dst_match %s, %s', prefix, nw_dst_match,
-                      self._load_balancing_endpoints[prefix])
-        if self._load_balancing_endpoints[prefix]:
+                      self._lb_endpoints[prefix])
+        if self._lb_endpoints[prefix]:
             multipath_action = ('multipath(symmetric_l3l4+udp,1024,hrw,%d,0,'
                                 'NXM_NX_REG0[])' %
-                                len(self._load_balancing_endpoints[prefix]))
+                                len(self._lb_endpoints[prefix]))
             multipath_output = 'resubmit(,%d)' % self.driver.ovs_table_vrfs_lb
 
             lb_multipath_flow = (
-                self._ovs_flow_add('ip,in_port=%s%s' % (self.patch_port_in_number,
-                                                        nw_dst_match),
+                self._ovs_flow_add('ip,in_port=%s%s' %
+                                   (self.patch_port_in_number, nw_dst_match),
                                    ','.join(filter(None, (multipath_action,
                                                           multipath_output))),
                                    self.driver.ovs_table_vrfs, True)
             )
             self.log.info('Multipath flow: %s', lb_multipath_flow)
-            if len(self._load_balancing_endpoints[prefix]) > 1:
+            if len(self._lb_endpoints[prefix]) > 1:
                 lb_multipath_op = 'modify_strict'
             else:
                 lb_multipath_op = 'add'
         else:
             lb_multipath_flow = (
-                self._ovs_flow_del('ip,in_port=%s%s' % (self.patch_port_in_number,
-                                                        nw_dst_match),
+                self._ovs_flow_del('ip,in_port=%s%s' %
+                                   (self.patch_port_in_number, nw_dst_match),
                                    self.driver.ovs_table_vrfs, True)
             )
 
@@ -635,32 +638,37 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                          lb_multipath_flow))
 
     @log_decorator.log_info
-    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                        encaps, lb_consistent_hash_order=0):
+    def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                            nlri, encaps,
+                                            lb_consistent_hash_order=0):
         lb_flows_file_name = self._get_lb_flows_file_name('setup', prefix)
         lb_flows_file = open(lb_flows_file_name, 'w')
 
-        lb_endpoint_info = {'label': label,
-                          'remote_pe': remote_pe,
-                          'encaps': encaps,
-                          'lb_consistent_hash_order': lb_consistent_hash_order}
+        lb_endpoint_info = {
+            'label': label,
+            'remote_pe': remote_pe,
+            'encaps': encaps,
+            'lb_consistent_hash_order': lb_consistent_hash_order
+        }
 
-        if (prefix in self._load_balancing_endpoints and
-                lb_endpoint_info in self._load_balancing_endpoints[prefix]):
+        if (prefix in self._lb_endpoints and
+                lb_endpoint_info in self._lb_endpoints[prefix]):
             return
 
         # Check if prefix is a default route
         nw_dst_match = self._match_default_route_prefix(prefix)
 
-        if prefix in self._load_balancing_endpoints:
-            self._write_del_lb_flows_2_file(lb_flows_file, prefix, nw_dst_match)
+        if prefix in self._lb_endpoints:
+            self._write_del_lb_flows_2_file(lb_flows_file,
+                                            prefix, nw_dst_match)
         else:
-            self._load_balancing_endpoints[prefix] = list()
+            self._lb_endpoints[prefix] = list()
 
-        self._load_balancing_endpoints[prefix].insert(lb_consistent_hash_order,
-                                                      lb_endpoint_info)
+        self._lb_endpoints[prefix].insert(lb_consistent_hash_order,
+                                          lb_endpoint_info)
 
-        self._write_lb_multipath_flows_2_file(lb_flows_file, prefix, nw_dst_match)
+        self._write_lb_multipath_flows_2_file(lb_flows_file, prefix,
+                                              nw_dst_match)
 
         self._write_lb_add_flows_2_file(lb_flows_file, prefix, nw_dst_match)
 
@@ -671,18 +679,21 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         self._delete_lb_flows_file(lb_flows_file_name)
 
     @log_decorator.log_info
-    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label, nlri,
-                                         encaps, lb_consistent_hash_order=0):
+    def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
+                                             nlri, encaps,
+                                             lb_consistent_hash_order=0):
         # Check if prefix is a default route
         nw_dst_match = self._match_default_route_prefix(prefix)
 
-        if prefix in self._load_balancing_endpoints:
-            lb_flows_file_name = self._get_lb_flows_file_name('remove', prefix)
+        if prefix in self._lb_endpoints:
+            lb_flows_file_name = self._get_lb_flows_file_name('remove',
+                                                              prefix)
             lb_flows_file = open(lb_flows_file_name, 'w')
 
-            self._write_del_lb_flows_2_file(lb_flows_file, prefix, nw_dst_match)
+            self._write_del_lb_flows_2_file(lb_flows_file, prefix,
+                                            nw_dst_match)
 
-            self._load_balancing_endpoints[prefix].remove(
+            self._lb_endpoints[prefix].remove(
                 {'label': label,
                  'remote_pe': remote_pe,
                  'encaps': encaps,
@@ -690,12 +701,13 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             )
 
             self._write_lb_multipath_flows_2_file(lb_flows_file, prefix,
-                                            nw_dst_match)
+                                                  nw_dst_match)
 
-            if self._load_balancing_endpoints[prefix]:
-                self._write_lb_add_flows_2_file(lb_flows_file, prefix, nw_dst_match)
+            if self._lb_endpoints[prefix]:
+                self._write_lb_add_flows_2_file(lb_flows_file, prefix,
+                                                nw_dst_match)
             else:
-                del self._load_balancing_endpoints[prefix]
+                del self._lb_endpoints[prefix]
 
             lb_flows_file.close()
 
@@ -711,7 +723,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # a delete action cannot selectively delete one next-hop
         # hence this driver does not support make-before-break
 
-    def _create_flow_match_from_traffic_classifier(self, classifier):
+    def _create_flow_match_from_tc(self, classifier):
         flow_match = ''
         if classifier.source_pfx:
             flow_match += ',nw_src=%s' % classifier.source_pfx
@@ -736,7 +748,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def add_dataplane_for_traffic_classifier(self, classifier, output):
-        flow_match = self._create_flow_match_from_traffic_classifier(classifier)
+        flow_match = self._create_flow_match_from_tc(classifier)
 
         # Map traffic to redirect VRF patch port
         self._ovs_flow_add('%s,in_port=%s%s' % (classifier.protocol,
@@ -747,7 +759,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def remove_dataplane_for_traffic_classifier(self, classifier):
-        flow_match = self._create_flow_match_from_traffic_classifier(classifier)
+        flow_match = self._create_flow_match_from_tc(classifier)
 
         # Unmap traffic to redirect VRF patch port
         self._ovs_flow_del('%s,in_port=%s%s' % (classifier.protocol,
@@ -757,7 +769,9 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def _ovs_flow_add(self, flow, actions, table, return_flow=False):
         return self.driver._ovs_flow_add("cookie=%d,priority=%d,%s" %
-                                         (self.instance_id, RULE_PRIORITY, flow),
+                                         (self.instance_id,
+                                          RULE_PRIORITY,
+                                          flow),
                                          actions, table, return_flow)
 
     def _ovs_flow_del(self, flow, table, return_flow=False):
@@ -832,7 +846,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
         try:
             (o, _) = self._run_command("ovs-ofctl -V | head -1 |"
-                                      " awk '{print $4}'")
+                                       " awk '{print $4}'")
             self.ovs_release = o[0]
             self.log.info("OVS version: %s", self.ovs_release)
         except:
@@ -855,7 +869,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
             self.use_gre = get_boolean(config["mpls_over_gre"])
         except KeyError:
             self.use_gre = not (self.mpls_interface and
-                               self.mpls_interface != "*gre*")
+                                self.mpls_interface != "*gre*")
 
         if not self.mpls_interface:
             if not self.use_gre:
@@ -948,8 +962,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     def _init_real(self, config):
         # Check if OVS bridge exist
         (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
-                                         self.bridge,
-                                         raise_on_error=False)
+                                           self.bridge,
+                                           raise_on_error=False)
 
         if exit_code == 2:
             raise exc.OVSBridgeNotFound(self.bridge)
@@ -959,8 +973,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                           "physical interface %s", self.mpls_interface)
             # Check if MPLS interface is attached to OVS bridge
             (output, exit_code) = self._run_command("ovs-vsctl port-to-br %s" %
-                                                  self.mpls_interface,
-                                                  raise_on_error=False)
+                                                    self.mpls_interface,
+                                                    raise_on_error=False)
             if not self.bridge == output[0]:
                 raise Exception("Specified mpls_interface is not plugged to "
                                 "OVS bridge %s" %
@@ -977,34 +991,34 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                 additional_tunnel_options = ""
 
             self._run_command("ovs-vsctl del-port %s %s" % (self.bridge,
-                                                           GRE_TUNNEL),
-                             acceptable_return_codes=[0, 1])
+                                                            GRE_TUNNEL),
+                              acceptable_return_codes=[0, 1])
             self._run_command("ovs-vsctl add-port %s %s -- set Interface %s"
-                             " type=gre options:local_ip=%s "
-                             "options:remote_ip=flow %s" %
-                             (self.bridge, GRE_TUNNEL, GRE_TUNNEL,
-                              self.get_local_address(),
-                              additional_tunnel_options))
+                              " type=gre options:local_ip=%s "
+                              "options:remote_ip=flow %s" %
+                              (self.bridge, GRE_TUNNEL, GRE_TUNNEL,
+                               self.get_local_address(),
+                               additional_tunnel_options))
 
-            self.ovs_gre_tunnel_port_number = self.find_ovs_port(GRE_TUNNEL)
+            self.gre_tunnel_port_number = self.find_ovs_port(GRE_TUNNEL)
 
         if self.vxlan_encap:
             self.log.info("Enabling VXLAN encapsulation")
 
             self._run_command("ovs-vsctl del-port %s %s" % (self.bridge,
-                                                           VXLAN_TUNNEL),
-                             acceptable_return_codes=[0, 1])
+                                                            VXLAN_TUNNEL),
+                              acceptable_return_codes=[0, 1])
             self._run_command("ovs-vsctl add-port %s %s -- set Interface %s"
-                             " type=vxlan options:local_ip=%s "
-                             "options:remote_ip=flow options:key=flow" %
-                             (self.bridge, VXLAN_TUNNEL, VXLAN_TUNNEL,
-                              self.get_local_address()))
-            self.ovs_vxlan_tunnel_port_number = self.find_ovs_port(VXLAN_TUNNEL)
+                              " type=vxlan options:local_ip=%s "
+                              "options:remote_ip=flow options:key=flow" %
+                              (self.bridge, VXLAN_TUNNEL, VXLAN_TUNNEL,
+                               self.get_local_address()))
+            self.vxlan_tunnel_port_number = self.find_ovs_port(VXLAN_TUNNEL)
 
         # Fixup openflow version
         self._run_command("ovs-vsctl set bridge %s "
-                         "protocols=OpenFlow10,OpenFlow12,OpenFlow13"
-                         ",OpenFlow14" % self.bridge)
+                          "protocols=OpenFlow10,OpenFlow12,OpenFlow13"
+                          ",OpenFlow14" % self.bridge)
 
     def get_ovsbr_2_arpns_if(self, namespace_id):
         i = namespace_id.replace(ARPNETNS_PREFIX, "")
@@ -1015,9 +1029,9 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # Flush all MPLS and ARP flows, if bridge exists
 
         (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
-                                         self.bridge,
-                                         raise_on_error=False,
-                                         acceptable_return_codes=[0, 2])
+                                           self.bridge,
+                                           raise_on_error=False,
+                                           acceptable_return_codes=[0, 2])
         if exit_code == 0:
             self.log.info("Cleaning up OVS rules")
             self._ovs_flow_del('mpls', self.ovs_table_incoming)
@@ -1046,7 +1060,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # Flush all VRF patch ports
         cmd = "ovs-vsctl list-ports br-mpls | grep 'ipvpn.*-pp-'"
         (output, _) = self._run_command(cmd, raise_on_error=False,
-                                       acceptable_return_codes=[0, 1])
+                                        acceptable_return_codes=[0, 1])
         if not output:
             self.log.debug("No VRF patch ports configured")
         else:
@@ -1060,15 +1074,15 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # corresponding veth pair devices
         cmd = r"ip netns | grep -v '\<q' | grep '%s'"
         (output, _) = self._run_command(cmd % ARPNETNS_PREFIX,
-                                       raise_on_error=False,
-                                       acceptable_return_codes=[0, 1])
+                                        raise_on_error=False,
+                                        acceptable_return_codes=[0, 1])
         if not output:
             self.log.debug("No network namespaces configured")
         else:
             for namespace_id in output:
                 self.log.info("Cleaning up netns %s", namespace_id)
                 self._run_command("ip netns delete %s" %
-                                 namespace_id, raise_on_error=False)
+                                  namespace_id, raise_on_error=False)
                 self._run_command(
                     "ovs-vsctl del-port %s %s" % (
                         self.bridge,
@@ -1082,7 +1096,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                 self.log.debug("All network namespace veth pairs flushed")
                 self._run_command("ifconfig")
                 self._run_command("ovs-vsctl list-ports %s" %
-                                 self.bridge, acceptable_return_codes=[0, 1])
+                                  self.bridge, acceptable_return_codes=[0, 1])
 
     def _cleanup_real(self):
         self.log.warning("not implemented yet!")
@@ -1090,7 +1104,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     def find_ovs_port(self, dev_name):
         """ Find OVS port number from port name """
         (output, _) = self._run_command("ovs-vsctl get Interface %s ofport" %
-                                       dev_name, acceptable_return_codes=[0, 1])
+                                        dev_name,
+                                        acceptable_return_codes=[0, 1])
         try:
             port = int(output[0])
             if port == -1:
@@ -1106,8 +1121,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
         if not return_flow:
             self._run_command("ovs-ofctl add-flow %s --protocol OpenFlow14 "
-                             "'%s'" % (self.bridge, ovs_flow)
-                             )
+                              "'%s'" % (self.bridge, ovs_flow))
         else:
             return ovs_flow
 
@@ -1116,16 +1130,14 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         self.log.debug('Flows file %s content: %s', file, flows_file.read())
         flows_file.close()
         self._run_command("ovs-ofctl --bundle add-flows %s --protocol "
-                         "OpenFlow14 %s" % (self.bridge, file)
-                         )
+                          "OpenFlow14 %s" % (self.bridge, file))
 
     def _ovs_flow_del(self, flow, table, return_flow=False):
         ovs_flow = "table=%d,%s" % (table, flow)
 
         if not return_flow:
             self._run_command("ovs-ofctl del-flows %s --protocol OpenFlow14 "
-                             "'%s'" % (self.bridge, ovs_flow)
-                             )
+                              "'%s'" % (self.bridge, ovs_flow))
         else:
             return ovs_flow
 
@@ -1156,13 +1168,13 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     def get_lg_ovs_flows(self, path_prefix):
         # TODO: filter to only get flows from our tables
         (output, _) = self._run_command("ovs-ofctl dump-flows %s %s" %
-                                       (self.bridge, OVS_DUMP_FLOW_FILTER),
-                                       acceptable_return_codes=[0, 1])
+                                        (self.bridge, OVS_DUMP_FLOW_FILTER),
+                                        acceptable_return_codes=[0, 1])
         return output
 
     def get_lg_ovs_ports(self, path_prefix):
         (output, _) = self._run_command(
             "ovs-ofctl show %s |grep addr" % self.bridge,
             acceptable_return_codes=[0, 1])
-        # FIXME: does it properly show the GRE tunnel interface
+        # FIXME: does it properly show the GRE tunnel interface ?
         return output

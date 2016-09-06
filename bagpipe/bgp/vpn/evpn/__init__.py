@@ -36,7 +36,6 @@ from bagpipe.bgp.common import looking_glass as lg
 from exabgp.protocol.ip import IP
 
 from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
 
 from exabgp.bgp.message.update.nlri.evpn.nlri import EVPN as EVPNNLRI
@@ -141,10 +140,7 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
         # Advertise route to receive multi-destination traffic
         self.log.info("Generating BGP route for broadcast/multicast traffic")
 
-        rd = RouteDistinguisher.fromElements(self.bgp_manager.get_local_address(),
-                                             self.instance_id)
-
-        nlri = EVPNMulticast(rd,
+        nlri = EVPNMulticast(self.instance_rd,
                              EthernetTag(),
                              IP.create(self.bgp_manager.get_local_address()),
                              None,
@@ -156,7 +152,7 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
 
         # add PMSI Tunnel Attribute route
         attributes.add(PMSIIngressReplication(
-            self.dataplane_driver.get_local_address(), self.instance_label))
+            self.dp_driver.get_local_address(), self.instance_label))
 
         self.multicast_route_entry = RouteEntry(nlri, self.export_rts,
                                                 attributes)
@@ -172,7 +168,7 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
         nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(mac_address), 6*8,
                        Labels([self.instance_label]),
                        IP.create(ip_prefix), None,
-                       IP.create(self.dataplane_driver.get_local_address()))
+                       IP.create(self.dp_driver.get_local_address()))
 
         return RouteEntry(nlri)
 
@@ -241,7 +237,8 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
                 self.dataplane.add_dataplane_for_bum_endpoint(
                     remote_endpoint, label, new_route.nlri, encaps)
         else:
-            self.log.warning("unsupported entry_class: %s", entry_class.__name__)
+            self.log.warning("unsupported entry_class: %s",
+                             entry_class.__name__)
 
     @utils.synchronized
     @log_decorator.log
@@ -280,7 +277,8 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
                 self.dataplane.remove_dataplane_for_bum_endpoint(
                     remote_endpoint, label, old_route.nlri)
         else:
-            self.log.warning("unsupported entry_class: %s", entry_class.__name__)
+            self.log.warning("unsupported entry_class: %s",
+                             entry_class.__name__)
 
     # Looking Glass ####
 

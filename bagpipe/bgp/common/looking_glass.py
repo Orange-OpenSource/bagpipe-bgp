@@ -44,8 +44,6 @@ def _get_lg_local_info_recurse(obj, cls, path_prefix):
     if cls == LookingGlassMixin:
         return {}
 
-    log.debug("_get_lg_local_info_recurse: %s", cls)
-
     result = cls.get_log_local_info(obj, path_prefix)
 
     assert isinstance(result, dict)
@@ -63,8 +61,6 @@ def _get_lg_map_recurse(obj, cls):
     if cls == LookingGlassMixin:
         return {}
 
-    log.debug("_get_lg_map_recurse: %s", cls)
-
     result = cls.get_lg_map(obj)
 
     for base in cls.__bases__:
@@ -76,21 +72,18 @@ def _get_lg_map_recurse(obj, cls):
     return result
 
 
-def _lookup_path_in_dict(my_dict, path):
-
-    log.debug("_lookup_path_in_dict: %s vs. %s", my_dict, path)
-
+def _lookup_path(my_dict, path):
+    ''' lookup path in dict'''
     assert isinstance(path, list)
 
     if len(path) == 0:
-        log.debug("path len is zero, returning my_dict %s", my_dict)
         return my_dict
 
     # len(path)>0
     if not isinstance(my_dict, dict):
         raise KeyError(path[0])
     else:
-        return _lookup_path_in_dict(my_dict[path[0]], path[1:])
+        return _lookup_path(my_dict[path[0]], path[1:])
 
 
 def get_lg_prefixed_path(path_prefix, path_items):
@@ -177,8 +170,9 @@ class LookingGlassMixin(object):
         if path is None:
             path = []
 
-        (first_segment, path_reminder, new_path_prefix) = _split_lg_path(path_prefix,
-                                                                 path)
+        (first_segment,
+         path_reminder,
+         new_path_prefix) = _split_lg_path(path_prefix, path)
 
         lg_map = self._get_lg_map()
 
@@ -223,21 +217,20 @@ class LookingGlassMixin(object):
                     raise NoSuchLookingGlassObject(new_path_prefix,
                                                    first_segment)
                 return mapping_target.get_looking_glass_info(new_path_prefix,
-                                                         path_reminder)
+                                                             path_reminder)
 
             elif mapping_type == SUBITEM:
                 log.debug("   Sub-item callback: %s", first_segment)
                 try:
-                    return _lookup_path_in_dict(mapping_target(),
-                                                path_reminder)
+                    return _lookup_path(mapping_target(), path_reminder)
                 except KeyError as e:
                     raise NoSuchLookingGlassObject(new_path_prefix, str(e))
 
             elif mapping_type == SUBTREE:
                 log.debug("   Subtree callback: %s(...)", first_segment)
                 try:
-                    return _lookup_path_in_dict(mapping_target(new_path_prefix),
-                                                path_reminder)
+                    return _lookup_path(mapping_target(new_path_prefix),
+                                        path_reminder)
                 except KeyError as e:
                     raise NoSuchLookingGlassObject(new_path_prefix, str(e))
 
@@ -253,7 +246,8 @@ class LookingGlassMixin(object):
                     result = []
                     for x in list_callback():
                         x["href"] = get_lg_prefixed_path(path_prefix,
-                                                      [first_segment, x["id"]])
+                                                         [first_segment,
+                                                          x["id"]])
                         result.append(x)
                     return result
                 else:
@@ -276,7 +270,7 @@ class LookingGlassMixin(object):
                             raise NoSuchLookingGlassObject(new_path_prefix,
                                                            second_segment)
                         return target.get_looking_glass_info(newer_path_prefix,
-                                                          path_reminder)
+                                                             path_reminder)
                     except KeyError:
                         raise NoSuchLookingGlassObject(new_path_prefix,
                                                        second_segment)
@@ -291,8 +285,8 @@ class LookingGlassMixin(object):
                             path_item)
             if mapping_type in (FORWARD, DELEGATE, SUBTREE, COLLECTION):
                 info[path_item] = {"href": get_lg_prefixed_path(path_prefix,
-                                                            [path_item])
-                                  }
+                                                                [path_item])
+                                   }
             elif mapping_type == SUBITEM:
                 log.debug("   Subitem => callback %s(...)", mapping_target)
                 # TODO: catch errors
@@ -306,7 +300,7 @@ class LookingGlassMixin(object):
             return info
         else:
             try:
-                return _lookup_path_in_dict(info, path)
+                return _lookup_path(info, path)
             except KeyError as e:
                 raise NoSuchLookingGlassObject(new_path_prefix, str(e))
 

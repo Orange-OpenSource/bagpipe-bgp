@@ -15,7 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+
 import socket
+from socket import inet_pton
 
 from abc import ABCMeta, abstractmethod
 
@@ -149,7 +151,8 @@ class TrafficClassifier(object):
                 # Operator >=
                 gt_eq_op = (flow.NumericOperator.GT | flow.NumericOperator.EQ)
                 # Operator &<=
-                lt_eq_op = (flow.NumericOperator.AND | flow.NumericOperator.LT |
+                lt_eq_op = (flow.NumericOperator.AND |
+                            flow.NumericOperator.LT |
                             flow.NumericOperator.EQ)
                 port_rules.append(flow_object(gt_eq_op, port_min))
                 port_rules.append(flow_object(lt_eq_op, port_max))
@@ -183,36 +186,34 @@ class TrafficClassifier(object):
         if self.source_pfx:
             ip, mask = self.source_pfx.split('/')
             if IPNetwork(self.source_pfx).version == 4:
-                rules.append(flow.Flow4Source(socket.inet_pton(socket.AF_INET,
-                                                               ip),
+                rules.append(flow.Flow4Source(inet_pton(socket.AF_INET, ip),
                                               int(mask)))
             elif IPNetwork(self.source_pfx).version == 6:
                 # TODO: IPv6 offset ??
-                rules.append(flow.Flow6Source(socket.inet_pton(socket.AF_INET6,
-                                                               ip),
+                rules.append(flow.Flow6Source(inet_pton(socket.AF_INET6, ip),
                                               int(mask), 0))
 
         if self.destination_pfx:
             ip, mask = self.destination_pfx.split('/')
             if IPNetwork(self.destination_pfx).version == 4:
                 rules.append(
-                    flow.Flow4Destination(socket.inet_pton(socket.AF_INET, ip),
+                    flow.Flow4Destination(inet_pton(socket.AF_INET, ip),
                                           int(mask))
                 )
             elif IPNetwork(self.destination_pfx).version == 6:
                 # TODO: IPv6 offset ??
                 rules.append(
-                    flow.Flow6Destination(socket.inet_pton(socket.AF_INET6, ip),
+                    flow.Flow6Destination(inet_pton(socket.AF_INET6, ip),
                                           int(mask), 0)
                 )
 
         if self.source_port:
             rules += self._construct_port_rules(self.source_port,
-                                              flow.FlowSourcePort)
+                                                flow.FlowSourcePort)
 
         if self.destination_port:
             rules += self._construct_port_rules(self.destination_port,
-                                              flow.FlowDestinationPort)
+                                                flow.FlowDestinationPort)
 
         if self.protocol:
             rules.append(flow.FlowIPProtocol(flow.NumericOperator.EQ,
@@ -244,7 +245,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                  external_instance_id, instance_id, import_rts, export_rts,
                  gateway_ip, mask, readvertise, attract_traffic, **kwargs):
 
-        self.vpn_manager = vpn_manager
+        self.manager = vpn_manager
 
         self.instance_type = self.__class__.__name__
         self.instance_id = instance_id
@@ -257,7 +258,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         else:
             compare_routes = compare_no_ecmp
 
-        TrackerWorker.__init__(self, self.vpn_manager.bgp_manager, "%s-%d" %
+        TrackerWorker.__init__(self, self.manager.bgp_manager, "%s-%d" %
                                (self.instance_type, self.instance_id),
                                compare_routes)
 
@@ -277,13 +278,13 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         assert isinstance(self.afi, AFI)
         assert isinstance(self.safi, SAFI)
 
-        self.dataplane_driver = dataplane_driver
+        self.dp_driver = dataplane_driver
 
-        self.instance_label = self.vpn_manager.label_allocator.get_new_label(
+        self.instance_label = self.manager.label_allocator.get_new_label(
             "Incoming traffic for %s %d" % (self.instance_type,
                                             self.instance_id))
 
-        self.instance_rd = self.vpn_manager.rd_allocator.get_new_rd(
+        self.instance_rd = self.manager.rd_allocator.get_new_rd(
             "Default route distinguisher for %s %d" % (self.instance_type,
                                                        self.instance_id))
 
@@ -302,7 +303,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         # FlowSpec 5-tuple classification)
         self.redirected_instances = set()
 
-        self.dataplane = self.dataplane_driver.initialize_dataplane_instance(
+        self.dataplane = self.dp_driver.initialize_dataplane_instance(
             self.instance_id, self.external_instance_id,
             self.gateway_ip, self.mask, self.instance_label, **kwargs)
 
@@ -338,8 +339,9 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             except KeyError:
                 raise APIException("'attract_traffic' specified with no "
                                    "'classifier'")
-            self.log.debug("Attract traffic enabled with RT: %s and classifier:"
-                           " %s", self.attract_rts, self.attract_classifier)
+            self.log.debug("Attract traffic enabled with RT: %s and "
+                           "classifier: %s", self.attract_rts,
+                           self.attract_classifier)
         else:
             self.log.debug("attract traffic not enabled")
             self.attract_traffic = False
@@ -357,7 +359,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         self.dataplane.cleanup()
 
-        self.vpn_manager.label_allocator.release(self.instance_label)
+        self.manager.label_allocator.release(self.instance_label)
 
         # this makes sure that the thread will be stopped, and any remaining
         # routes/subscriptions are released:
@@ -407,7 +409,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         self.import_rts = new_import_rts
 
         # Re-advertise all routes with new export RTs
-        self.log.debug("Exports RTs: %s -> %s", self.export_rts, new_export_rts)
+        self.log.debug("Exports RTs: %s -> %s", self.export_rts,
+                       new_export_rts)
         if frozenset(new_export_rts) != frozenset(self.export_rts):
             self.log.debug("Will re-export routes with new RTs")
             self.export_rts = new_export_rts
@@ -420,7 +423,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                               route_entry.nlri, new_export_rts)
 
                 updated_route_entry = RouteEntry(route_entry.nlri, None,
-                                               copy(route_entry.attributes))
+                                                 copy(route_entry.attributes))
                 # reset the route_targets
                 # will RTs originally present in route_entry.attributes
                 updated_route_entry.set_route_targets(self.export_rts)
@@ -442,9 +445,9 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
     def _gen_encap_extended_communities(self):
         ecommunities = ec.ExtendedCommunities()
-        for encap in self.dataplane_driver.supported_encaps():
+        for encap in self.dp_driver.supported_encaps():
             if not isinstance(encap, ec.Encapsulation):
-                raise Exception("dataplane_driver.supported_encaps() should "
+                raise Exception("dp_driver.supported_encaps() should "
                                 "return a list of Encapsulation objects (%s)",
                                 type(encap))
 
@@ -461,11 +464,11 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         pass
 
     def synthesize_vif_bgp_route(self, mac_address, ip_prefix, plen, label,
-                              lb_consistent_hash_order,
-                              route_distinguisher=None):
+                                 lb_consistent_hash_order,
+                                 route_distinguisher=None):
         rd = route_distinguisher if route_distinguisher else self.instance_rd
         route_entry = self.generate_vif_bgp_route(mac_address, ip_prefix, plen,
-                                              label, rd)
+                                                  label, rd)
         assert isinstance(route_entry, RouteEntry)
 
         route_entry.attributes.add(self._gen_encap_extended_communities())
@@ -480,7 +483,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         return route_entry
 
     def synthesize_redirect_bgp_route(self, rules):
-        self.log.info("synthesize_redirect_bgp_route called for rules %s", rules)
+        self.log.info("synthesize_redirect_bgp_route called for rules %s",
+                      rules)
         nlri = FlowRouteFactory(self.afi, self.instance_rd)
         for rule in rules:
             nlri.add(rule)
@@ -509,6 +513,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     def vif_plugged(self, mac_address, ip_address_prefix, localport,
                     advertise_subnet=False,
                     lb_consistent_hash_order=0):
+        linuxif = localport['linuxif']
         # Check if this port has already been plugged
         # - Verify port informations consistency
         if mac_address in self.mac_2_localport_data:
@@ -520,7 +525,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                 raise APIException("Port information is not consistent. MAC "
                                    "address cannot be bound to two different"
                                    "ports. Previous plug for port %s "
-                                   "(%s != %s)" % (localport['linuxif'],
+                                   "(%s != %s)" % (linuxif,
                                                    pdata.get("port_info"),
                                                    localport))
 
@@ -535,8 +540,9 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             # - Verify (MAC address, IP address) tuple consistency
             if ip_address_prefix in self.ip_address_2_mac and plen == 32:
                 if mac_address not in self.ip_address_2_mac[ip_address_prefix]:
-                    raise APIException("Inconsistent endpoint info: %s already "
-                                       "bound to a MAC address different from %s" %
+                    raise APIException("Inconsistent endpoint info: %s "
+                                       "already bound to a MAC address "
+                                       "different from %s" %
                                        (ip_address_prefix, mac_address))
                 else:
                     return
@@ -545,18 +551,19 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
             pdata = self.mac_2_localport_data.get(mac_address, dict())
             if not pdata:
-                pdata['label'] = self.vpn_manager.label_allocator.get_new_label(
-                    "Incoming traffic for %s %d, interface %s, endpoint %s/%s" %
-                    (self.instance_type, self.instance_id, localport['linuxif'],
-                     mac_address, ip_address_prefix)
+                pdata['label'] = self.manager.label_allocator.get_new_label(
+                    "Incoming traffic for %s %d, interface %s"
+                    ", endpoint %s/%s" %
+                    (self.instance_type, self.instance_id,
+                     linuxif, mac_address, ip_address_prefix)
                 )
                 pdata["port_info"] = localport
                 pdata["lb_consistent_hash_order"] = lb_consistent_hash_order
 
-            endpoint_rd = self.vpn_manager.rd_allocator.get_new_rd(
+            endpoint_rd = self.manager.rd_allocator.get_new_rd(
                 "Route distinguisher for %s %d, interface %s, "
                 "endpoint %s/%s" % (self.instance_type, self.instance_id,
-                                    localport['linuxif'], mac_address,
+                                    linuxif, mac_address,
                                     ip_address_prefix)
             )
 
@@ -564,23 +571,21 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
             # Call driver to setup the dataplane for incoming traffic
             self.dataplane.vif_plugged(mac_address, ip_prefix,
-                                      localport, pdata['label'])
+                                       localport, pdata['label'])
 
             self.log.info("Synthesizing and advertising BGP route for VIF %s "
-                          "endpoint (%s, %s/%d)", localport['linuxif'],
+                          "endpoint (%s, %s/%d)", linuxif,
                           mac_address, ip_prefix, plen)
-            route_entry = self.synthesize_vif_bgp_route(mac_address,
-                                                    ip_prefix, plen,
-                                                    pdata['label'],
-                                                    lb_consistent_hash_order,
-                                                    rd)
+            route_entry = self.synthesize_vif_bgp_route(
+                mac_address, ip_prefix, plen,
+                pdata['label'], lb_consistent_hash_order, rd)
 
             self._advertise_route(route_entry)
 
-            if localport['linuxif'] not in self.localport_2_endpoints:
-                self.localport_2_endpoints[localport['linuxif']] = list()
+            if linuxif not in self.localport_2_endpoints:
+                self.localport_2_endpoints[linuxif] = list()
 
-            self.localport_2_endpoints[localport['linuxif']].append(
+            self.localport_2_endpoints[linuxif].append(
                 {'mac': mac_address, 'ip': ip_address_prefix}
             )
             self.endpoint_2_rd[(mac_address, ip_address_prefix)] = endpoint_rd
@@ -593,14 +598,12 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         except Exception as e:
             self.log.error("Error in vif_plugged: %s", e)
-            if localport['linuxif'] in self.localport_2_endpoints:
+            if linuxif in self.localport_2_endpoints:
                 endpoint = {'mac': mac_address, 'ip': ip_address_prefix}
-                if endpoint in self.localport_2_endpoints[localport['linuxif']]:
-                    self.localport_2_endpoints[localport['linuxif']].remove(
-                        endpoint
-                    )
-                if not self.localport_2_endpoints[localport['linuxif']]:
-                    del self.localport_2_endpoints[localport['linuxif']]
+                if endpoint in self.localport_2_endpoints[linuxif]:
+                    self.localport_2_endpoints[linuxif].remove(endpoint)
+                if not self.localport_2_endpoints[linuxif]:
+                    del self.localport_2_endpoints[linuxif]
             if mac_address in self.mac_2_localport_data:
                 del self.mac_2_localport_data[mac_address]
             if ip_address_prefix in self.ip_address_2_mac:
@@ -617,16 +620,14 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     @utils.synchronized
     @log_decorator.log_info
     def vif_unplugged(self, mac_address, ip_address_prefix,
-                     advertise_subnet=False,
-                     lb_consistent_hash_order=0):
+                      advertise_subnet=False, lb_consistent_hash_order=0):
         # Verify port and endpoint (MAC address, IP address) tuple consistency
         pdata = self.mac_2_localport_data.get(mac_address)
         if (not pdata or
                 (ip_address_prefix in self.ip_address_2_mac and
-                 mac_address not in self.ip_address_2_mac[ip_address_prefix])
-                 ):
-            self.log.error("vif_unplugged called for endpoint (%s, %s), but no "
-                           "consistent informations or was not plugged yet",
+                 mac_address not in self.ip_address_2_mac[ip_address_prefix])):
+            self.log.error("vif_unplugged called for endpoint (%s, %s), but "
+                           "no consistent informations or was not plugged yet",
                            mac_address, ip_address_prefix)
             raise APIException("No consistent endpoint (%s, %s) informations "
                                "or was not plugged yet, cannot unplug" %
@@ -636,18 +637,19 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         label = pdata.get('label')
         endpoint_rd = self.endpoint_2_rd[(mac_address, ip_address_prefix)]
         localport = pdata.get('port_info')
+        linuxif = localport['linuxif']
         if not label or not localport:
             self.log.error("vif_unplugged called for endpoint (%s, %s), but "
                            "port data (%s, %s) is incomplete",
                            mac_address, ip_address_prefix, label, localport)
             raise Exception("Inconsistent informations for port, bug ?")
 
-        if localport['linuxif'] in self.localport_2_endpoints:
+        if linuxif in self.localport_2_endpoints:
             # Parse address/mask
             (ip_prefix, plen) = self._parse_ipaddress_prefix(ip_address_prefix)
 
             last_endpoint = len(
-                self.localport_2_endpoints[localport['linuxif']]) <= 1
+                self.localport_2_endpoints[linuxif]) <= 1
 
             if not advertise_subnet and plen != 32:
                 self.log.debug("Using /32 instead of /%d", plen)
@@ -656,13 +658,13 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             rd = self.instance_rd if plen == 32 else endpoint_rd
 
             self.log.info("Synthesizing and withdrawing BGP route for VIF %s "
-                          "endpoint (%s, %s/%d)", localport['linuxif'],
+                          "endpoint (%s, %s/%d)", linuxif,
                           mac_address, ip_prefix, plen)
-            route_entry = self.synthesize_vif_bgp_route(mac_address,
-                                                    ip_prefix, plen,
-                                                    label,
-                                                    lb_consistent_hash_order,
-                                                    rd)
+
+            route_entry = self.synthesize_vif_bgp_route(
+                mac_address, ip_prefix, plen,
+                label, lb_consistent_hash_order, rd)
+
             self._withdraw_route(route_entry)
 
             # Unplug endpoint from data plane
@@ -673,22 +675,22 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             if last_endpoint:
                 self.log.info("Last endpoint, freeing label %s", label)
                 # Free label to the allocator
-                self.vpn_manager.label_allocator.release(label)
+                self.manager.label_allocator.release(label)
 
-                del self.localport_2_endpoints[localport['linuxif']]
+                del self.localport_2_endpoints[linuxif]
             else:
-                self.localport_2_endpoints[localport['linuxif']].remove(
+                self.localport_2_endpoints[linuxif].remove(
                     {'mac': mac_address, 'ip': ip_address_prefix}
                 )
 
             del self.endpoint_2_rd[(mac_address, ip_address_prefix)]
             # Free route distinguisher to the allocator
-            self.vpn_manager.rd_allocator.release(endpoint_rd)
+            self.manager.rd_allocator.release(endpoint_rd)
 
             if not last_endpoint:
                 if not any([endpoint['mac'] == mac_address
                             for endpoint
-                            in self.localport_2_endpoints[localport['linuxif']]]
+                            in self.localport_2_endpoints[linuxif]]
                            ):
                     del self.mac_2_localport_data[mac_address]
             else:
@@ -733,7 +735,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                        "route target %s based on rules %s", redirect_rt, rules)
         # Create redirection instance if first FlowSpec route for this
         # redirect route target
-        redirect_instance = self.vpn_manager.redirect_traffic_to_vpn(
+        redirect_instance = self.manager.redirect_traffic_to_vpn(
             self.external_instance_id, self.type, redirect_rt
         )
         redirect_port = redirect_instance.dataplane.get_redirect_port()
@@ -772,7 +774,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                     classifier)
 
             if not self.redirect_rt_2_classifiers[redirect_rt]:
-                self.vpn_manager.stop_redirect_to_vpn(
+                self.manager.stop_redirect_to_vpn(
                     self.external_instance_id, self.type, redirect_rt
                 )
                 del self.redirect_rt_2_classifiers[redirect_rt]
@@ -791,7 +793,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         '''
         adv_encaps = None
         try:
-            adv_encaps = route.extended_communities(ec.Encapsulation)
+            adv_encaps = route.ecoms(ec.Encapsulation)
             self.log.debug("Advertized Encaps: %s", adv_encaps)
         except KeyError:
             self.log.debug("no encap advertized, let's use default")
@@ -800,14 +802,14 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             adv_encaps = [ec.Encapsulation(ec.Encapsulation.Type.DEFAULT)]
 
         good_encaps = set(adv_encaps) & set(
-            self.dataplane_driver.supported_encaps())
+            self.dp_driver.supported_encaps())
 
         if not good_encaps:
             self.log.warning("No encap supported by dataplane driver for route"
                              " %s, advertized: %s, dataplane supports: {%s}",
                              route, adv_encaps,
                              ", ".join([repr(encap) for encap in
-                                        self.dataplane_driver.supported_encaps()]
+                                        self.dp_driver.supported_encaps()]
                                        ))
 
         return good_encaps
@@ -818,8 +820,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         whether or not the route removed is the last one and depending on
         the desired behavior for the dataplane driver
         '''
-        return not last and not (self.dataplane_driver.makebefore4break_support
-                                 or self.dataplane_driver.ecmp_support)
+        return not last and not (self.dp_driver.makebefore4break_support
+                                 or self.dp_driver.ecmp_support)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
@@ -837,15 +839,15 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
     def get_lg_map(self):
         return {
-            "external_instance_id":   (lg.VALUE, self.external_instance_id),
-            "dataplane":     (lg.DELEGATE, self.dataplane),
-            "route_targets": (lg.SUBITEM, self.get_rts),
-            "gateway_ip":    (lg.VALUE, self.gateway_ip),
-            "subnet_mask":   (lg.VALUE, self.mask),
+            "instance_type":         (lg.VALUE, self.instance_type),
+            "external_instance_id":  (lg.VALUE, self.external_instance_id),
+            "dataplane":             (lg.DELEGATE, self.dataplane),
+            "route_targets":         (lg.SUBITEM, self.get_rts),
+            "gateway_ip":            (lg.VALUE, self.gateway_ip),
+            "subnet_mask":           (lg.VALUE, self.mask),
             "instance_dataplane_id": (lg.VALUE, self.instance_label),
-            "ports":         (lg.SUBTREE, self.get_lg_local_port_data),
-            "readvertise":   (lg.SUBITEM, self.get_lg_readvertise)
-            #TODO: "type": self.instance_type
+            "ports":                 (lg.SUBTREE, self.get_lg_local_port_data),
+            "readvertise":           (lg.SUBITEM, self.get_lg_readvertise)
         }
 
     def get_lg_local_port_data(self, path_prefix):

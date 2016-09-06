@@ -92,6 +92,7 @@ def invert_dict_of_sets(d):
 
 camel2underscore_regex = re.compile('(?!^)([A-Z]+)')
 
+
 def dict_camelcase_to_underscore(dictionary):
     ''' copy dict, with translation of keys from FooBar to foo_bar'''
     return {camel2underscore_regex.sub(r'_\1', key).lower(): value

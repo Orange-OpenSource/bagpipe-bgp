@@ -22,63 +22,61 @@ class TestVPNManager(TestCase):
         bgp_manager = Mock()
         bgp_manager.get_local_address.return_value = "4.5.6.7"
 
-        self.vpn_manager = VPNManager(bgp_manager, dataplane_drivers)
+        self.manager = VPNManager(bgp_manager, dataplane_drivers)
 
     def tearDown(self):
         super(TestVPNManager, self).tearDown()
-        self.vpn_manager.stop()
+        self.manager.stop()
 
     def _get_redirect_instance_id(self, instance_type, redirect_rt):
         return "redirect-to-%s-%s" % (instance_type,
                                       redirect_rt.replace(":", "_"))
 
     def test_redirect_traffic_single_instance(self):
-        redirect_instance = self.vpn_manager.redirect_traffic_to_vpn(
+        redirect_instance = self.manager.redirect_traffic_to_vpn(
             REDIRECTED_INSTANCE_ID1, IPVPN, _rt_to_string(RT5)
         )
 
         # Check some VPN manager and redirect instance lists consistency
         self.assertIn(self._get_redirect_instance_id(IPVPN,
-                                                  _rt_to_string(RT5)),
-                      self.vpn_manager.vpn_instances)
+                                                     _rt_to_string(RT5)),
+                      self.manager.vpn_instances)
         self.assertIn(REDIRECTED_INSTANCE_ID1,
                       redirect_instance.redirected_instances)
 
     def test_redirect_traffic_multiple_instance(self):
-        redirect_instance = self.vpn_manager.redirect_traffic_to_vpn(
+        redirect_instance_1 = self.manager.redirect_traffic_to_vpn(
             REDIRECTED_INSTANCE_ID1, IPVPN, _rt_to_string(RT5)
         )
-        redirect_instance_bis = self.vpn_manager.redirect_traffic_to_vpn(
+        redirect_instance_2 = self.manager.redirect_traffic_to_vpn(
             REDIRECTED_INSTANCE_ID2, IPVPN, _rt_to_string(RT5)
         )
 
         # Check that same redirect instance is returned
-        self.assertEqual(redirect_instance_bis, redirect_instance)
+        self.assertEqual(redirect_instance_2, redirect_instance_1)
         # Check some VPN manager and redirect instance lists consistency
         self.assertIn(self._get_redirect_instance_id(IPVPN,
-                                                  _rt_to_string(RT5)),
-                      self.vpn_manager.vpn_instances)
+                                                     _rt_to_string(RT5)),
+                      self.manager.vpn_instances)
         self.assertIn(REDIRECTED_INSTANCE_ID1,
-                      redirect_instance.redirected_instances)
+                      redirect_instance_1.redirected_instances)
         self.assertIn(REDIRECTED_INSTANCE_ID2,
-                      redirect_instance.redirected_instances)
+                      redirect_instance_1.redirected_instances)
 
     def test_stop_redirect_traffic_multiple_instance(self):
-        redirect_instance = self.vpn_manager.redirect_traffic_to_vpn(
+        redirect_instance = self.manager.redirect_traffic_to_vpn(
             REDIRECTED_INSTANCE_ID1, IPVPN, _rt_to_string(RT5)
         )
-        self.vpn_manager.redirect_traffic_to_vpn(
+        self.manager.redirect_traffic_to_vpn(
             REDIRECTED_INSTANCE_ID2, IPVPN, _rt_to_string(RT5)
         )
 
         # Check some VPN manager and redirect instance lists consistency
-        self.vpn_manager.stop_redirect_to_vpn(REDIRECTED_INSTANCE_ID2,
-                                                 IPVPN,
-                                                 _rt_to_string(RT5))
+        self.manager.stop_redirect_to_vpn(REDIRECTED_INSTANCE_ID2,
+                                          IPVPN, _rt_to_string(RT5))
         self.assertNotIn(REDIRECTED_INSTANCE_ID2,
                          redirect_instance.redirected_instances)
 
-        self.vpn_manager.stop_redirect_to_vpn(REDIRECTED_INSTANCE_ID1,
-                                                 IPVPN,
-                                                 _rt_to_string(RT5))
-        self.assertTrue(not self.vpn_manager.vpn_instances)
+        self.manager.stop_redirect_to_vpn(REDIRECTED_INSTANCE_ID1,
+                                          IPVPN, _rt_to_string(RT5))
+        self.assertTrue(not self.manager.vpn_instances)

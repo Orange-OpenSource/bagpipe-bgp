@@ -181,7 +181,6 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def stop(self):
-        #FIXME: what about Worker.stop ?
         self.enqueue(STOP_EVENT)
 
     def run(self):
@@ -311,8 +310,8 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         if wa:
             for entry in wa.entries:
                 intersect = set(matches_for(entry.afi,
-                                           entry.safi,
-                                           entry.route_targets)
+                                            entry.safi,
+                                            entry.route_targets)
                                 ).intersection(worker._rtm_matches)
                 if len(intersect) > 0:
                     log.debug("Will not synthesize withdraw event for %s, "
@@ -395,12 +394,13 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         entry = route_event.route_entry
 
         log.debug("Try to find an entry from same worker with same nlri")
-        replaced_entry = self._source_nlri_2_entry.get((entry.source, entry.nlri))
+        replaced_entry = self._source_nlri_2_entry.get((entry.source,
+                                                        entry.nlri))
 
         log.debug("   Result: %s", replaced_entry)
 
         # replaced_entry should be non-empty for a withdraw
-        if replaced_entry is None and (route_event.type == RouteEvent.WITHDRAW):
+        if replaced_entry is None and route_event.type == RouteEvent.WITHDRAW:
             log.warning("WITHDRAW but found no route that we could remove: %s",
                         route_event.route_entry)
             return
@@ -432,7 +432,8 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
                                        replaced_entry,
                                        route_event.source)
 
-            self._propagate_route_event(removal_event, workers_already_notified)
+            self._propagate_route_event(removal_event,
+                                        workers_already_notified)
 
             # Update match2entries for the replaced_route
             for match in matches_for(replaced_entry.afi,
@@ -454,8 +455,8 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
             # Update match2entries and source2entries for the newly
             # advertized route
             for match in matches_for(entry.afi,
-                                    entry.safi,
-                                    entry.route_targets):
+                                     entry.safi,
+                                     entry.route_targets):
                 self._match_2_workers_entries[match].entries.add(entry)
 
             entry.source._rtm_route_entries.add(entry)
@@ -545,7 +546,8 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
 
     def get_lg_map(self):
         return {"workers": (lg.COLLECTION, (self.get_lg_worker_list,
-                                            self.get_lg_worker_from_path_item)),
+                                            self.get_lg_worker_from_path_item)
+                            ),
                 "routes": (lg.SUBTREE, self.get_lg_routes)}
 
     def get_lg_routes(self, path_prefix):

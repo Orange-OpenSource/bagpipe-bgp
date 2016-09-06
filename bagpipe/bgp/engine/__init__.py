@@ -89,7 +89,7 @@ class RouteEntry(lg.LookingGlassMixin):
                 Attribute.CODE.EXTENDED_COMMUNITY].communities
             # use type(..) because isinstance(rtrecord, RouteTarget) is True
             self._route_targets = [ecom for ecom in ecoms
-                                  if type(ecom) == RouteTarget]
+                                   if type(ecom) == RouteTarget]
             if rts:
                 ecoms += rts
                 self._route_targets += rts
@@ -102,7 +102,8 @@ class RouteEntry(lg.LookingGlassMixin):
     def route_targets(self):
         return self._route_targets
 
-    def extended_communities(self, filter_=None):
+    def ecoms(self, filter_=None):
+        '''returns the route extended communities (+ optional filtering)'''
         if filter_ is None:
             def filter_real(ecom):
                 return True
@@ -123,8 +124,7 @@ class RouteEntry(lg.LookingGlassMixin):
     @log_decorator.log
     def set_route_targets(self, route_targets):
         # first build a list of ecoms without any RT
-        ecoms = self.extended_communities(lambda ecom:
-                                         not isinstance(ecom, RouteTarget))
+        ecoms = self.ecoms(lambda ecom: not isinstance(ecom, RouteTarget))
 
         # then add the right RTs
         new_ecoms = ExtendedCommunities()
@@ -199,8 +199,8 @@ class RouteEntry(lg.LookingGlassMixin):
         if self.source:
             res["source"] = {"id": self.source.name,
                              "href": lg.get_absolute_path("BGP_WORKERS",
-                                                        path_prefix,
-                                                        [self.source.name])
+                                                          path_prefix,
+                                                          [self.source.name])
                              }
 
         if self.safi in [SAFI.mpls_vpn, SAFI.evpn]:

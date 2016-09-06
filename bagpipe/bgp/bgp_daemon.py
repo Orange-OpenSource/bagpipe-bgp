@@ -65,7 +65,7 @@ def find_dataplane_drivers(dp_configs, bgp_config, is_cleaning_up=False):
                                                                 driver_name),
                                      'bagpipe.%s' % driver_name,
                                      'bagpipe.bgp.%s' % driver_name,
-                                   ):
+                                     ):
             try:
                 if '.' not in tentative_class_name:
                     logging.debug(
@@ -74,7 +74,7 @@ def find_dataplane_drivers(dp_configs, bgp_config, is_cleaning_up=False):
 
                 driver_class = utils.import_class(tentative_class_name)
                 try:
-                    logging.info("Found driver for %s, initiating...", vpn_type)
+                    logging.info("Found driver for %s, init...", vpn_type)
                     # skip the init step if called for cleanup
                     driver = driver_class(dp_config, not is_cleaning_up)
                     drivers[vpn_type] = driver
@@ -131,7 +131,8 @@ class BgpDaemon(lg.LookingGlassMixin):
         logging.info("Starting BGP component...")
 
         logging.debug("Creating dataplane drivers")
-        drivers = find_dataplane_drivers(self.dataplane_config, self.bgp_config)
+        drivers = find_dataplane_drivers(self.dataplane_config,
+                                         self.bgp_config)
 
         for vpn_type in self.dataplane_config.iterkeys():
             if vpn_type not in drivers:
@@ -143,19 +144,19 @@ class BgpDaemon(lg.LookingGlassMixin):
         self.bgp_manager = Manager(self.bgp_config)
 
         logging.debug("Creating VPN manager")
-        self.vpn_manager = VPNManager(self.bgp_manager, drivers)
+        self.manager = VPNManager(self.bgp_manager, drivers)
 
         # BGP component REST API
         logging.debug("Creating REST API")
         rest_api = RESTAPI(self.api_config,
                            self,
-                           self.vpn_manager,
+                           self.manager,
                            self.catchall_lg_log_handler)
         rest_api.run()
 
     def stop(self, signum, _):
         logging.info("Received signal %d, stopping...", signum)
-        self.vpn_manager.stop()
+        self.manager.stop()
         self.bgp_manager.stop()
         # would need to stop main thread ?
         logging.info("All threads now stopped...")
@@ -224,8 +225,8 @@ def daemon_main():
 
     if not os.path.isfile(options.log_file):
         logging.basicConfig()
-        print "no logging configuration file at %s" % options.log_file
-        logging.warning("no logging configuration file at %s", options.log_file)
+        print "no logging config file at %s" % options.log_file
+        logging.warning("no logging config file at %s", options.log_file)
     else:
         logging.config.fileConfig(
             options.log_file, disable_existing_loggers=False)

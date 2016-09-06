@@ -51,7 +51,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
         # RTC is defaults to being enabled
         self.config['enable_rtc'] = get_boolean(self.config.get('enable_rtc',
-                                                               True))
+                                                                True))
 
         if self.config['enable_rtc']:
             first_local_subscriber_callback = self.rtc_advertisement_for_sub
@@ -80,7 +80,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
         self.peers = {}
         if self.config['peers']:
             peers_addresses = [x.strip() for x in
-                              self.config['peers'].strip().split(",")]
+                               self.config['peers'].strip().split(",")]
             for peer_address in peers_addresses:
                 log.debug("Creating a peer worker for %s", peer_address)
                 peer_worker = ExaBGPPeerWorker(self, peer_address, self.config)
@@ -144,8 +144,8 @@ class Manager(EventSource, lg.LookingGlassMixin):
     # Looking Glass Functions ###################
 
     def get_lg_map(self):
-        return {"peers":   (lg.COLLECTION,
-                            (self.get_lg_peer_list, self.get_lg_peer_path_item)),
+        return {"peers":   (lg.COLLECTION, (self.get_lg_peer_list,
+                                            self.get_lg_peer_path_item)),
                 "routes":  (lg.FORWARD, self.rtm),
                 "workers": (lg.FORWARD, self.rtm), }
 
