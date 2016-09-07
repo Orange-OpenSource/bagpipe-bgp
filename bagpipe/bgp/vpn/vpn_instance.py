@@ -236,7 +236,7 @@ class TrafficClassifier(object):
 class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
 
-    type = None
+    type = None  # set by subclasses: 'ipvpn', 'evpn', etc.
     afi = None
     safi = None
 
