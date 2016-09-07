@@ -106,7 +106,7 @@ class VPNManager(lg.LookingGlassMixin):
             raise exc.MalformedIPAddress
 
     @utils.synchronized
-    def get_instance_id(self):
+    def new_instance_id(self):
         iid = self.instance_id
         self.instance_id += 1
         return iid
@@ -238,8 +238,9 @@ class VPNManager(lg.LookingGlassMixin):
     def _create_vpn_instance(self, external_instance_id, instance_type,
                              import_rts, export_rts, gateway_ip, mask,
                              readvertise, attract_traffic, **kwargs):
-        log.info("Create and start new VPN instance %d for external "
-                 "instance identifier %s", self.get_instance_id(),
+        instance_id = self.new_instance_id()
+        log.info("Creating/starting new VPN instance %s-%d for external "
+                 "instance identifier %s", instance_type, instance_id,
                  external_instance_id)
         try:
             vpn_instance_factory = VPNManager.type2class[instance_type]
@@ -258,7 +259,7 @@ class VPNManager(lg.LookingGlassMixin):
 
         vpn_instance = vpn_instance_factory(self, dataplane_driver,
                                             external_instance_id,
-                                            self.get_instance_id(),
+                                            instance_id,
                                             import_rts, export_rts,
                                             gateway_ip, mask,
                                             readvertise, attract_traffic,
