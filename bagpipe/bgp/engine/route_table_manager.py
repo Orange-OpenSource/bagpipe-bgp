@@ -409,8 +409,9 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         if route_event.type == RouteEvent.ADVERTISE:
 
             if replaced_entry == route_event.route_entry:
-                log.warning("The route advertized is the same as the one"
-                            " previously advertized by the source, ignoring")
+                log.warning("Ignoring, the route advertized is the same as the"
+                            " one previously advertized by the source (%s)",
+                            route_event.source)
                 return
 
             # propagate event to interested worker
