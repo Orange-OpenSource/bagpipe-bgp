@@ -156,6 +156,11 @@ class VPNInstanceDataplane(LookingGlassLocalLogger):
                      lastEndpoint=True):
         pass
 
+    def update_fallback(self, fallback):
+        if fallback is not None:
+            self.log.warning("fallback  specified (%s) but not supported by"
+                             " driver, ignoring", fallback)
+
     @abstractmethod
     def setupDataplaneForRemoteEndpoint(self, prefix, remotePE, label, nlri,
                                         encaps):
@@ -189,6 +194,10 @@ class DummyVPNInstanceDataplane(VPNInstanceDataplane):
     @logDecorator.log
     def vifUnplugged(self, macAddress, ipAddressPrefix, localPort, label,
                      lastEndpoint=True):
+        pass
+
+    @logDecorator.log
+    def update_fallback(self, fallback):
         pass
 
     @logDecorator.log

@@ -57,7 +57,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     @logDecorator.log
     def __init__(self, bgpManager, labelAllocator, dataplaneDriver,
                  externalInstanceId, instanceId, importRTs, exportRTs,
-                 gatewayIP, mask, readvertise, **kwargs):
+                 gatewayIP, mask, readvertise, fallback, **kwargs):
 
         self.instanceType = self.__class__.__name__
         self.instanceId = instanceId
@@ -84,6 +84,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         self.externalInstanceId = externalInstanceId
         self.gatewayIP = gatewayIP
         self.mask = mask
+
+        self.fallback = None
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
@@ -127,6 +129,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
         else:
             self.log.debug("readvertise not enabled")
             self.readvertise = False
+
+        self.dataplane.update_fallback(fallback)
 
     @utils.synchronized
     def stop(self):
@@ -203,6 +207,12 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
 
                 self._pushEvent(
                     RouteEvent(RouteEvent.ADVERTISE, updatedRouteEntry))
+
+    def update_fallback(self, fallback):
+        if self.fallback != fallback and fallback is not None:
+            self.log.info("update fallback: %s", fallback)
+            self.fallback = fallback
+            self.dataplane.update_fallback(fallback)
 
     def _parseIPAddressPrefix(self, ipAddressPrefix):
         ipAddress = ""
@@ -458,7 +468,8 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
             "subnet_mask":   (LGMap.VALUE, self.mask),
             "instance_dataplane_id": (LGMap.VALUE, self.instanceLabel),
             "ports":         (LGMap.SUBTREE, self.getLGLocalPortData),
-            "readvertise":   (LGMap.SUBITEM, self.getLGReadvertise)
+            "readvertise":   (LGMap.SUBITEM, self.getLGReadvertise),
+            "fallback":      (LGMap.VALUE, self.fallback)
         }
 
     def getLGLocalPortData(self, pathPrefix):

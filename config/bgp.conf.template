@@ -56,8 +56,13 @@ mpls_interface=*gre*
 # Note: does not need to be specified if different than the BGP local_address
 # dataplane_local_address=1.2.3.4
 
-# required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
+# required for the MPLSOVSDataplaneDriver if used with the E-VPNLinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000
+
+# for MPLSOVSDataplaneDriver, control whether or not the VRF will
+# reply to all ARP requests on the subnet and impersonate the gateway
+# (defaults to False)
+#proxy_arp=True
 
 [DATAPLANE_DRIVER_EVPN]
 # EVPN dataplane driver class

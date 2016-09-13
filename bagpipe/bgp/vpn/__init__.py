@@ -231,7 +231,8 @@ class VPNManager(LookingGlass):
     @logDecorator.logInfo
     def plugVifToVPN(self, externalInstanceId, instanceType, importRTs,
                      exportRTs, macAddress, ipAddress, gatewayIP,
-                     localPort, linuxbr, advertiseSubnet, readvertise):
+                     localPort, linuxbr, advertiseSubnet, readvertise,
+                     fallback):
 
         # Verify and format IP address with prefix if necessary
         try:
@@ -288,7 +289,7 @@ class VPNManager(LookingGlass):
             vpnInstance = vpnInstanceFactory(
                 self.bgpManager, self.labelAllocator, dataplaneDriver,
                 externalInstanceId, instanceId, importRTs, exportRTs,
-                gatewayIP, mask, readvertise, **kwargs)
+                gatewayIP, mask, readvertise, fallback, **kwargs)
 
             # Update VPN instance list
             self.vpnInstances[externalInstanceId] = vpnInstance
@@ -299,6 +300,8 @@ class VPNManager(LookingGlass):
         if not ((set(vpnInstance.importRTs) == set(importRTs)) and
                 (set(vpnInstance.exportRTs) == set(exportRTs))):
             vpnInstance.updateRouteTargets(importRTs, exportRTs)
+
+        vpnInstance.update_fallback(fallback)
 
         if instanceType == "ipvpn" and 'evpn' in localPort:
             # special processing for the case where what we plug into

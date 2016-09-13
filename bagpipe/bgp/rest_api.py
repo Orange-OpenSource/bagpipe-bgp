@@ -179,7 +179,17 @@ class RESTAPI(LookingGlass):
             'from_rt': [list of RTs]  # ...received on these RTs
             'to_rt': [list of RTs] # ...toward these RTs
         }
-
+        'fallback': # (optional) if provided, on a VRF lookup miss,
+                    # the MAC destination address will be
+                    # rewritten to this MAC before being
+                    # sent back where it came from
+                    {
+                    'src_mac': 'aa:bb:cc:dd:ee:ff'  # new source MAC
+                    'dst_mac': 'aa:bb:cc:dd:ee:00'  # new destination MAC
+                    'ovs_port_name': 'patch_foo'
+                    'ovs_port_number': 4               # (unsupported yet)
+                    'ovs_resubmit': '(<port>,<table>)' # (unsupported yet)
+        }
         """
 
         try:
@@ -203,7 +213,8 @@ class RESTAPI(LookingGlass):
                                          attach_params.get('linuxbr'),
                                          attach_params.get('advertise_subnet',
                                                            False),
-                                         attach_params.get('readvertise'))
+                                         attach_params.get('readvertise'),
+                                         attach_params.get('fallback'))
         except APIException as e:
             log.warning('attach_localport: API parameter error: %s', e)
             abort(400, "API parameter error: %s" % e)
