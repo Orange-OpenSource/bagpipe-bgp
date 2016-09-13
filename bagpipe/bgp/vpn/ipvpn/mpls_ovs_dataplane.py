@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import re
 
 from distutils.version import StrictVersion
@@ -72,6 +71,13 @@ OVS_DUMP_FLOW_FILTER = "| grep -v NXST_FLOW | perl -pe '"               \
     "s/n_packets=([0-9]+),/packets=$1 /; "               \
     "'"
 
+FAKE_ROUTER_MAC = "00:00:5e:20:43:64"
+
+
+def get_ovsbr2arpns_if(namespace_id):
+    i = namespace_id.replace(ARPNETNS_PREFIX, "")
+    return (OVSBR2ARPNS_INTERFACE_PREFIX + i)[:LINUX_DEV_LEN]
+
 
 class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
@@ -100,11 +106,49 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         self.bridge = self.driver.bridge
 
+        self.fallback = None
+        self.push_vlan_action = None
+
+        if self.driver.proxy_arp:
+            self._init_arp_netns()
+        else:
+            self.gw_mac_address = FAKE_ROUTER_MAC
+
+        # Create VRF-specific OVS patch ports
+        self.log.debug(
+            "Creating VRF patch ports and mapping traffic to gateway...")
+        self.patch_port_in = 'ipvpn%d-pp-in' % self.instance_id
+        self.patch_port_out = 'ipvpn%d-pp-out' % self.instance_id
+        self._run_command("ovs-vsctl --may-exist add-port %s %s -- "
+                          "set Interface %s type=patch options:peer=%s" %
+                          (self.bridge, self.patch_port_in,
+                           self.patch_port_in, self.patch_port_out),
+                          run_as_root=True)
+        self._run_command("ovs-vsctl --may-exist add-port %s %s -- "
+                          "set Interface %s type=patch options:peer=%s" %
+                          (self.bridge, self.patch_port_out,
+                           self.patch_port_out, self.patch_port_in),
+                          run_as_root=True)
+
+        self.patch_port_in_number = self.driver.find_ovs_port(
+            self.patch_port_in)
+        self.patch_port_out_number = self.driver.find_ovs_port(
+            self.patch_port_out)
+
+        if self.driver.proxy_arp:
+            # Map traffic from patch port to gateway
+            self._ovs_flow_add('in_port=%s,ip,nw_dst=%s' %
+                               (self.patch_port_in_number, self.gateway_ip),
+                               'output:%s' % self.arp_net_nsport,
+                               self.driver.ovs_table_vrfs)
+
+
+    def _init_arp_netns(self):
         self.log.info("VRF %d: Initializing network namespace %s for ARP "
                       "proxing", self.instance_id, self.arp_netns)
         # Get names of veth pair devices between OVS and network namespace
-        ovsbr_to_proxyarp_ns = self.driver.get_ovsbr_2_arpns_if(
-            self.arp_netns)
+
+        ovsbr_to_proxyarp_ns = get_ovsbr2arpns_if(self.arp_netns)
 
         if not self._arp_net_ns_exists():
             self.log.debug("VRF network namespace doesn't exist, creating...")
@@ -160,32 +204,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                              PROXYARP2OVS_IF,
                                              self.arp_netns)
 
-        # Create OVS patch ports
-        self.log.debug(
-            "Creating VRF patch ports and mapping traffic to gateway...")
-        self.patch_port_in = 'ipvpn%d-pp-in' % self.instance_id
-        self.patch_port_out = 'ipvpn%d-pp-out' % self.instance_id
-        self._run_command("ovs-vsctl --may-exist add-port %s %s -- "
-                          "set Interface %s type=patch options:peer=%s" %
-                          (self.bridge, self.patch_port_in,
-                           self.patch_port_in, self.patch_port_out),
-                          run_as_root=True)
-        self._run_command("ovs-vsctl --may-exist add-port %s %s -- "
-                          "set Interface %s type=patch options:peer=%s" %
-                          (self.bridge, self.patch_port_out,
-                           self.patch_port_out, self.patch_port_in),
-                          run_as_root=True)
-
-        self.patch_port_in_number = self.driver.find_ovs_port(
-            self.patch_port_in)
-        self.patch_port_out_number = self.driver.find_ovs_port(
-            self.patch_port_out)
-        # Map traffic from patch port to gateway
-        self._ovs_flow_add('in_port=%s,ip,nw_dst=%s' %
-                           (self.patch_port_in_number, self.gateway_ip),
-                           'output:%s' % self.arp_net_nsport,
-                           self.driver.ovs_table_vrfs)
-
     @log_decorator.log_info
     def cleanup(self):
         if self._ovs_port_info:
@@ -205,16 +223,17 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                           (self.bridge, self.patch_port_out),
                           run_as_root=True)
 
-        self.log.info("Cleaning VRF network namespace %s", self.arp_netns)
-        # Detach network namespace veth pair device from OVS bridge
-        self._run_command(
-            "ovs-vsctl del-port %s %s" %
-            (self.bridge, self.driver.get_ovsbr_2_arpns_if(self.arp_netns)),
-            run_as_root=True)
-        # Delete network namespace
-        self._run_command("ip netns delete %s" % self.arp_netns,
-                          run_as_root=True)
-        # FIXME: need to also cleanup the veth interface
+        if self.driver.proxy_arp:
+            self.log.info("Cleaning VRF network namespace %s", self.arp_netns)
+            # Detach network namespace veth pair device from OVS bridge
+            self._run_command(
+                "ovs-vsctl del-port %s %s" %
+                (self.bridge, get_ovsbr2arpns_if(self.arp_netns)),
+                run_as_root=True)
+            # Delete network namespace
+            self._run_command("ip netns delete %s" % self.arp_netns,
+                              run_as_root=True)
+            # FIXME: need to also cleanup the veth interface
 
     def _arp_net_ns_exists(self):
         """ Check if network namespace exist. """
@@ -398,22 +417,71 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # Create OVS actions
         try:
-            localport_match, push_vlan_action, strip_vlan_action = (
+            localport_match, push_vlan_action = (
                 "in_port=%s,dl_vlan=%d" % (
                     port, int(localport['ovs']['vlan'])),
                 "push_vlan:0x8100,mod_vlan_vid:%d," % int(
-                    localport['ovs']['vlan']),
-                "strip_vlan,"
+                    localport['ovs']['vlan'])
             )
         except KeyError:
-            localport_match, push_vlan_action, strip_vlan_action = (
+            localport_match, push_vlan_action = (
                 "in_port=%s" % port,
-                "",
-                ""
+                None
             )
 
         return (port, port2vm, localport_match, push_vlan_action,
-                strip_vlan_action, port_unplug_action)
+                port_unplug_action)
+
+    @log_decorator.log_info
+    def update_fallback(self, fallback=None):
+        if fallback:
+            self.fallback = fallback
+
+        if not self.fallback:
+            return
+
+        vlan_action = ""
+        if self.push_vlan_action:
+            vlan_action = self.push_vlan_action
+
+        for param in ('src_mac', 'dst_mac', 'ovs_port_number'):
+            if not self.fallback.get(param):
+                self.log.error("fallback specified without '%s'", param)
+                return
+
+        # use priority -1 so that the route only hits when the packet
+        # does not matches any VRF route
+        self._ovs_flow_add('in_port=%s' % self.patch_port_in_number,
+                           'mod_dl_src=%s,mod_dl_dst=%s,%soutput:%d' %
+                           (self.fallback.get('src_mac'),
+                            self.fallback.get('dst_mac'),
+                            vlan_action,
+                            self.fallback.get('ovs_port_number')),
+                           self.driver.ovs_table_vrfs,
+                           RULE_PRIORITY-1)
+
+    def _check_vlan_use(self, push_vlan_action):
+        # checks that if a vlan_action is used, it is the same
+        # for all interfaces plugged into the VRF,
+        # and returns a string definition of (if any)
+        # push and strip_vlan action to apply
+
+        # on first plug we update
+        if self.push_vlan_action is None:
+            self.push_vlan_action = push_vlan_action
+        else:
+            # on a subsequent plug, we check
+            if self.push_vlan_action != push_vlan_action:
+                self.log.error("different VLAN for different interfaces: "
+                               "%s vs %s", self.push_vlan_action,
+                               push_vlan_action)
+                raise Exception("can't specify a different VLAN for different"
+                                " interfaces")
+
+        if self.push_vlan_action is None:
+            return ("", "")
+        else:
+            return (push_vlan_action, "strip_vlan,")
 
     def get_redirect_port(self):
         return self.patch_port_out_number
@@ -422,8 +490,16 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
     def vif_plugged(self, mac_address, ip_address, localport, label):
 
         (ovs_port_from_vm, ovs_port_to_vm, localport_match,
-         push_vlan_action, strip_vlan_action, port_unplug_action) = \
+         push_vlan_action, port_unplug_action) = (
             self._get_ovs_port_specifics(localport)
+        )
+
+        (push_vlan_action_str, strip_vlan_action_str) = (
+            self._check_vlan_use(push_vlan_action))
+
+        # need to update fallback, in case it was called before the
+        # first vifPlugged call could define the push_vlan action
+        self.update_fallback()
 
         # This is a hack used with previous versions of Openstack
         #  proper MTUs should actually be configured in the hybrid vif driver
@@ -432,36 +508,37 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # Map traffic from VM port to patch port
         self._ovs_flow_add('%s,ip' % localport_match,
-                           '%soutput:%s' % (strip_vlan_action,
+                           '%soutput:%s' % (strip_vlan_action_str,
                                             self.patch_port_out_number),
                            self.driver.ovs_table_vrfs)
 
-        # Map ARP traffic from VM port to ARP proxy and response from ARP proxy
-        # to VIF
-        self._ovs_flow_add('%s,arp' % localport_match,
-                           '%soutput:%s' % (strip_vlan_action,
-                                            self.arp_net_nsport),
-                           self.driver.ovs_table_vrfs)
-        # 'ovs_port_from_vm' is used to send ARP replies to the VM because
-        # the interface plugged into the bridge may be an OVS patch port with
-        # an OVS bridge doing MAC learning and we want this learning bridge to
-        # learn the gw MAC via the right interface so that the traffic from the
-        # VM to the gw will arrive on our OVS bridge through 'ovs_from_from_vm'
-        self._ovs_flow_add(
-            'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport, mac_address),
-            '%soutput:%s' % (push_vlan_action, ovs_port_from_vm),
-            self.driver.ovs_table_vrfs)
+        if self.driver.proxy_arp:
+            # Map ARP traffic from VM port to ARP proxy and response from ARP proxy
+            # to VIF
+            self._ovs_flow_add('%s,arp' % localport_match,
+                               '%soutput:%s' % (strip_vlan_action_str,
+                                                self.arp_net_nsport),
+                               self.driver.ovs_table_vrfs)
+            # 'ovs_port_from_vm' is used to send ARP replies to the VM because
+            # the interface plugged into the bridge may be an OVS patch port with
+            # an OVS bridge doing MAC learning and we want this learning bridge to
+            # learn the gw MAC via the right interface so that the traffic from the
+            # VM to the gw will arrive on our OVS bridge through 'ovs_from_from_vm'
+            self._ovs_flow_add(
+                'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport, mac_address),
+                '%soutput:%s' % (push_vlan_action_str, ovs_port_from_vm),
+                self.driver.ovs_table_vrfs)
 
-        # Map traffic from gateway to VM port (from VM port to gateway realized
-        # through patch port)
-        self._ovs_flow_add(
-            'in_port=%s,ip,nw_dst=%s' % (self.arp_net_nsport, ip_address),
-            '%soutput:%s' % (push_vlan_action, ovs_port_to_vm),
-            self.driver.ovs_table_vrfs)
+            # Map traffic from gateway to VM port (from VM port to gateway realized
+            # through patch port)
+            self._ovs_flow_add(
+                'in_port=%s,ip,nw_dst=%s' % (self.arp_net_nsport, ip_address),
+                '%soutput:%s' % (push_vlan_action_str, ovs_port_to_vm),
+                self.driver.ovs_table_vrfs)
 
         # Map incoming MPLS traffic going to the VM port
         incoming_actions = ("%smod_dl_src:%s,mod_dl_dst:%s,output:%s" %
-                            (push_vlan_action, self.gw_mac_address,
+                            (push_vlan_action_str, self.gw_mac_address,
                              mac_address, ovs_port_to_vm))
 
         self._ovs_flow_add(self._match_mpls_in(label),
@@ -521,15 +598,16 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             self._ovs_flow_del(
                 '%s' % localport_match, self.driver.ovs_table_vrfs)
 
-        # Unmap traffic from gateway to VM port
-        self._ovs_flow_del(
-            'in_port=%s,ip,nw_dst=%s' % (self.arp_net_nsport, ip_address),
-            self.driver.ovs_table_vrfs)
+        if self.driver.proxy_arp:
+            # Unmap traffic from gateway to VM port
+            self._ovs_flow_del(
+                'in_port=%s,ip,nw_dst=%s' % (self.arp_net_nsport, ip_address),
+                self.driver.ovs_table_vrfs)
 
-        # Unmap ARP traffic from ARP proxy to VM port
-        self._ovs_flow_del(
-            'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport, mac_address),
-            self.driver.ovs_table_vrfs)
+            # Unmap ARP traffic from ARP proxy to VM port
+            self._ovs_flow_del(
+                'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport, mac_address),
+                self.driver.ovs_table_vrfs)
 
         if last_endpoint:
             if port_unplug_action:
@@ -776,10 +854,11 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                                 flow_match),
                            self.driver.ovs_table_vrfs)
 
-    def _ovs_flow_add(self, flow, actions, table, return_flow=False):
+    def _ovs_flow_add(self, flow, actions, table, return_flow=False,
+                      priority=RULE_PRIORITY):
         return self.driver._ovs_flow_add("cookie=%d,priority=%d,%s" %
                                          (self.instance_id,
-                                          RULE_PRIORITY,
+                                          priority,
                                           flow),
                                          actions, table, return_flow)
 
@@ -943,9 +1022,11 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
         self.vxlan_encap = get_boolean(config.get("vxlan_encap", "False"))
 
-        # check that fping is installed
+        # unless useGRE is enabled, check that fping is installed
         if not self.use_gre:
             self._run_command("fping -v", raise_on_error=True)
+
+        self.proxy_arp = get_boolean(config.get("proxy_arp", "True"))
 
         if (not self.vxlan_encap and
                 StrictVersion(self.ovs_release) < StrictVersion("2.4.0")):
@@ -1037,10 +1118,6 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                           ",OpenFlow14" % self.bridge,
                           run_as_root=True)
 
-    def get_ovsbr_2_arpns_if(self, namespace_id):
-        i = namespace_id.replace(ARPNETNS_PREFIX, "")
-        return (OVSBR2ARPNS_INTERFACE_PREFIX + i)[:LINUX_DEV_LEN]
-
     @log_decorator.log_info
     def reset_state(self):
         # Flush all MPLS and ARP flows, if bridge exists
@@ -1091,7 +1168,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                     acceptable_return_codes=[0, 1, 2],
                     raise_on_error=False)
 
-        # Flush all (except DHCP, router, LBaaS, ...) network namespaces and
+        # Flush network namespaces for ARP responders and
         # corresponding veth pair devices
         cmd = r"ip netns | grep -v '\<q' | grep '%s'"
         (output, _) = self._run_command(cmd % ARPNETNS_PREFIX,
@@ -1108,10 +1185,10 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                 self._run_command(
                     "ovs-vsctl del-port %s %s" % (
                         self.bridge,
-                        self.get_ovsbr_2_arpns_if(namespace_id)),
+                        get_ovsbr2arpns_if(namespace_id)),
                     run_as_root=True,
                     acceptable_return_codes=[0, 1, 2],
-                    raise_on_error=False)
+                    raise_exception_on_Error=False)
             if self.log.debug:
                 self.log.debug("All network namespaces have been flushed")
                 self._run_command("ip netns")

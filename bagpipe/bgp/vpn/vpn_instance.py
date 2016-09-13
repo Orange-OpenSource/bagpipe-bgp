@@ -243,7 +243,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     @log_decorator.log
     def __init__(self, vpn_manager, dataplane_driver,
                  external_instance_id, instance_id, import_rts, export_rts,
-                 gateway_ip, mask, readvertise, attract_traffic, **kwargs):
+                 gateway_ip, mask, readvertise, attract_traffic, fallback=None,
+                 **kwargs):
 
         self.manager = vpn_manager
 
@@ -272,6 +273,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         self.external_instance_id = external_instance_id
         self.gateway_ip = gateway_ip
         self.mask = mask
+
+        self.fallback = None
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
@@ -345,6 +348,9 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         else:
             self.log.debug("attract traffic not enabled")
             self.attract_traffic = False
+
+        self.dataplane.update_fallback(fallback)
+
 
     @utils.synchronized
     def stop(self):
@@ -431,6 +437,12 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                 self.log.debug("   updated route: %s", updated_route_entry)
 
                 self._advertise_route(updated_route_entry)
+
+    def update_fallback(self, fallback):
+        if self.fallback != fallback and fallback is not None:
+            self.log.info("update fallback: %s", fallback)
+            self.fallback = fallback
+            self.dataplane.update_fallback(fallback)
 
     def _parse_ipaddress_prefix(self, ip_address_prefix):
         ip_address = ""
@@ -847,7 +859,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             "subnet_mask":           (lg.VALUE, self.mask),
             "instance_dataplane_id": (lg.VALUE, self.instance_label),
             "ports":                 (lg.SUBTREE, self.get_lg_local_port_data),
-            "readvertise":           (lg.SUBITEM, self.get_lg_readvertise)
+            "readvertise":           (lg.SUBITEM, self.get_lg_readvertise),
+            "fallback":              (lg.VALUE, self.fallback)
         }
 
     def get_lg_local_port_data(self, path_prefix):

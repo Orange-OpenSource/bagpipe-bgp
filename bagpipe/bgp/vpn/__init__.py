@@ -238,7 +238,8 @@ class VPNManager(lg.LookingGlassMixin):
     @log_decorator.log_info
     def _get_vpn_instance(self, external_instance_id, instance_type,
                           import_rts, export_rts, gateway_ip, mask,
-                          readvertise, attract_traffic, **kwargs):
+                          readvertise, attract_traffic, fallback=None,
+                          **kwargs):
         # Get an vpn_instance with this external_instance_id,
         # if one already exists, check matching instance_type
         # else create one with provided parameters and start it
@@ -282,7 +283,7 @@ class VPNManager(lg.LookingGlassMixin):
                                           import_rts, export_rts,
                                           gateway_ip, mask,
                                           readvertise, attract_traffic,
-                                          **kwargs)
+                                          fallback, **kwargs)
 
         self.vpn_instances[external_instance_id] = vpn_instance
 
@@ -300,7 +301,7 @@ class VPNManager(lg.LookingGlassMixin):
                         mac_address, ip_address, gateway_ip,
                         localport, linuxbr,
                         advertise_subnet, readvertise,
-                        attract_traffic, lb_consistent_hash_order):
+                        attract_traffic, lb_consistent_hash_order, fallback):
 
         # Verify and format IP address with prefix if necessary
         try:
@@ -336,12 +337,14 @@ class VPNManager(lg.LookingGlassMixin):
 
         vpn_instance = self._get_vpn_instance(
             external_instance_id, instance_type, import_rts, export_rts,
-            gateway_ip, mask, readvertise, attract_traffic, **kwargs)
+            gateway_ip, mask, readvertise, attract_traffic, fallback, **kwargs)
 
         # Check if new route target import/export must be updated
         if not ((set(vpn_instance.import_rts) == set(import_rts)) and
                 (set(vpn_instance.export_rts) == set(export_rts))):
             vpn_instance.update_route_targets(import_rts, export_rts)
+
+        vpn_instance.update_fallback(fallback)
 
         if instance_type == IPVPN and 'evpn' in localport:
             # special processing for the case where what we plug into

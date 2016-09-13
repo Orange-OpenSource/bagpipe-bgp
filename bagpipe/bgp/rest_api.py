@@ -207,6 +207,18 @@ class RESTAPI(lg.LookingGlassMixin):
         'lb_consistent_hash_order': # optional, will result in the VRF to load
                                       balance traffic between all plugged
                                       ports, based on this relative order
+        }
+        'fallback': # (optional) if provided, on a VRF lookup miss,
+                    # the MAC destination address will be
+                    # rewritten to this MAC before being
+                    # sent back where it came from
+                    {
+                    'src_mac': 'aa:bb:cc:dd:ee:ff'  # new source MAC
+                    'dst_mac': 'aa:bb:cc:dd:ee:00'  # new destination MAC
+                    'ovs_port_name': 'patch_foo'
+                    'ovs_port_number': 4               # (unsupported yet)
+                    'ovs_resubmit': '(<port>,<table>)' # (unsupported yet)
+        }
         """
 
         try:
@@ -219,6 +231,7 @@ class RESTAPI(lg.LookingGlassMixin):
 
         try:
             log.debug('Local port attach received: %s', attach_params)
+
             self.manager.plug_vif_to_vpn(
                 attach_params['vpn_instance_id'],
                 attach_params['vpn_type'],
@@ -232,7 +245,8 @@ class RESTAPI(lg.LookingGlassMixin):
                 attach_params.get('advertise_subnet', False),
                 attach_params.get('readvertise'),
                 attach_params.get('attract_traffic'),
-                attach_params.get('lb_consistent_hash_order', 0)
+                attach_params.get('lb_consistent_hash_order', 0),
+                attach_params.get('fallback'),
             )
         except APIException as e:
             log.warning('attach_localport: API parameter error: %s', e)
