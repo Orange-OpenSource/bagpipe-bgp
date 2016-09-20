@@ -5,6 +5,7 @@ netaddr >= 0.7.7
 twisted >= 13.2
 pyroute2 >= 0.4.1
 stevedore>=1.16.0
+oslo.rootwrap>=2.0.0
 
 #exabgp >= 3.9
 #until exabgp 3.9 or 4 is released:

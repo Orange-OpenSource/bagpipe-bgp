@@ -19,7 +19,7 @@
 import subprocess
 
 
-def run_command(log, command, raise_on_error=True,
+def run_command(log, command, stdin=None, raise_on_error=True,
                 acceptable_return_codes=[0]):
     '''
     Executes 'command' in a subshell.
@@ -38,7 +38,11 @@ def run_command(log, command, raise_on_error=True,
     log.info("Running command: %s   [raise_on_error:%s]",
              command, raise_on_error)
     process = subprocess.Popen(
-        command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    if stdin:
+        process.stdin.write(stdin)
+        process.stdin.close()
     # Poll process for new output until finished
     output = []
     while True:

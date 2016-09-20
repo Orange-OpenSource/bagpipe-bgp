@@ -1,0 +1,17 @@
+# bagpipe-bgp-rootwrap command filters for nodes on which bagpipe-bgp is
+# expected to control MPLS OpenVSwitch dataplane
+#
+# This file should be owned by (and only-writeable by) the root user
+
+# format seems to be
+# cmd-name: filter-name, raw-command, user, args
+
+[Filters]
+
+# openvswitch
+ovs-vsctl: CommandFilter, ovs-vsctl, root
+ovs-ofctl: CommandFilter, ovs-ofctl, root
+
+# ip_lib
+ip: IpFilter, ip, root
+ip_exec: IpNetnsExecFilter, ip, root

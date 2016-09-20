@@ -23,6 +23,7 @@ from distutils.version import StrictVersion
 
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp.common.rootwrap_command import rootwrap_command
 from bagpipe.bgp.common.run_command import run_command
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
@@ -46,6 +47,9 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         assert issubclass(self.dataplane_instance_class, VPNInstanceDataplane)
 
         self.config = config
+
+        self.root_helper = self.config.get("root_helper", "sudo")
+        self.root_helper_daemon = self.config.get("root_helper_daemon", None)
 
         self.local_address = None
         try:
@@ -128,8 +132,15 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
     def supported_encaps(self):
         return self.__class__.encaps
 
-    def _run_command(self, command, *args, **kwargs):
-        return run_command(self.log, command, *args, **kwargs)
+    def _run_command(self, command, run_as_root=False, *args, **kwargs):
+        if run_as_root and self.root_helper_daemon:
+            return rootwrap_command(self.log, self.root_helper_daemon, command,
+                                    *args, **kwargs)
+        else:
+            if run_as_root:
+                command = " ".join([self.root_helper, command])
+
+            return run_command(self.log, command, *args, **kwargs)
 
     def get_lg_map(self):
         encaps = []
@@ -184,8 +195,8 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
                                              lb_consistent_hash_order=0):
         pass
 
-    def _run_command(self, *args, **kwargs):
-        return run_command(self.log, *args, **kwargs)
+    def _run_command(self, command, run_as_root=False, *args, **kwargs):
+        return run_command(self.log, command, *args, **kwargs)
 
     # Looking glass info ####
 

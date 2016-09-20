@@ -113,7 +113,7 @@ EOF
 # Start the BGP component
 function start_bagpipe_bgp {
 	if is_service_enabled b-bgp ; then
-		screen_it b-bgp "sudo bagpipe-bgp start --no-daemon --log-file=$BAGPIPE_LOG_CONF"
+		screen_it b-bgp "bagpipe-bgp start --no-daemon --log-file=$BAGPIPE_LOG_CONF"
 
 		echo "Waiting for bagpipe-bgp to start..."
 		if ! wait_for_service $SERVICE_TIMEOUT http://$BAGPIPE_SERVICE_HOST:$BAGPIPE_SERVICE_PORT; then
