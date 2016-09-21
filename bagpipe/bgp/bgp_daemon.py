@@ -27,9 +27,10 @@ import logging.config
 from ConfigParser import SafeConfigParser, NoSectionError
 from optparse import OptionParser
 
+from stevedore import driver as stevedore_driver
+
 from daemon import runner
 
-from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.engine.bgp_manager import Manager
@@ -42,6 +43,10 @@ from bagpipe.bgp.vpn.ipvpn import IPVPN
 from bagpipe.bgp.vpn.evpn import EVPN
 
 
+# prefix for setuptools entry points for dataplane drivers
+DATAPLANE_DRIVER_ENTRY_POINT_PFX = "bagpipe.dataplane"
+
+
 def find_dataplane_drivers(dp_configs, bgp_config, is_cleaning_up=False):
     drivers = dict()
     for vpn_type in dp_configs.iterkeys():
@@ -52,57 +57,33 @@ def find_dataplane_drivers(dp_configs, bgp_config, is_cleaning_up=False):
                 "no dataplane_driver set for %s (%s)", vpn_type, dp_config)
 
         driver_name = dp_config["dataplane_driver"]
-        logging.debug(
-            "Creating dataplane driver for %s, with %s", vpn_type, driver_name)
+        logging.debug("Creating dataplane driver for %s, with %s",
+                      vpn_type, driver_name)
 
         # FIXME: this is a hack, dataplane drivers should have a better way to
         #  access any item in the BGP dataplane_config
         if 'dataplane_local_address' not in dp_config:
             dp_config['dataplane_local_address'] = bgp_config['local_address']
 
-        for tentative_class_name in (driver_name,
-                                     'bagpipe.bgp.vpn.%s.%s' % (vpn_type,
-                                                                driver_name),
-                                     'bagpipe.%s' % driver_name,
-                                     'bagpipe.bgp.%s' % driver_name,
-                                     ):
-            try:
-                if '.' not in tentative_class_name:
-                    logging.debug(
-                        "Not trying to import '%s'", tentative_class_name)
-                    continue
+        driver_class = stevedore_driver.DriverManager(
+            namespace='%s.%s' % (DATAPLANE_DRIVER_ENTRY_POINT_PFX, vpn_type),
+            name=driver_name,
+            on_load_failure_callback=(lambda manager, entrypoint, exception:
+                                      logging.error("Exception while loading "
+                                                    "%s: %s", entrypoint,
+                                                    exception))
+        ).driver
 
-                driver_class = utils.import_class(tentative_class_name)
-                try:
-                    logging.info("Found driver for %s, init...", vpn_type)
-                    # skip the init step if called for cleanup
-                    driver = driver_class(dp_config, not is_cleaning_up)
-                    drivers[vpn_type] = driver
-                    logging.info(
-                        "Successfully initiated dataplane driver for %s with"
-                        " %s", vpn_type, tentative_class_name)
-                except ImportError as e:
-                    logging.debug(
-                        "Could not initiate dataplane driver for %s with"
-                        " %s: %s", vpn_type, tentative_class_name, e)
-                except Exception as e:
-                    logging.error(
-                        "Found class, but error while instantiating dataplane"
-                        " driver for %s with %s: %s", vpn_type,
-                        tentative_class_name, e)
-                    logging.error(traceback.format_exc())
-                    break
-                break
-            except SyntaxError as e:
-                logging.error(
-                    "Found class, but syntax error while instantiating "
-                    "dataplane driver for %s with %s: %s", vpn_type,
-                    tentative_class_name, e)
-                break
-            except Exception as e:
-                logging.debug(
-                    "Could not initiate dataplane driver for %s with %s (%s)",
-                    vpn_type, tentative_class_name, e)
+        try:
+            driver = driver_class(dp_config, not is_cleaning_up)
+            drivers[vpn_type] = driver
+        except Exception as e:
+            logging.error("Error while instantiating dataplane"
+                          " driver for %s with %s: %s",
+                          vpn_type, driver_class, e)
+            logging.error(traceback.format_exc())
+            break
+
     return drivers
 
 

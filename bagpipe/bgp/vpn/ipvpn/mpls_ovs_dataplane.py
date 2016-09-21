@@ -976,8 +976,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                                                     self.mpls_interface,
                                                     raise_on_error=False)
             if not self.bridge == output[0]:
-                raise Exception("Specified mpls_interface is not plugged to "
-                                "OVS bridge %s" %
+                raise Exception("Specified mpls_interface %s is not plugged to"
+                                " OVS bridge %s" %
                                 self.mpls_interface, self.bridge)
             else:
                 self.ovs_mpls_if_port_number = self.find_ovs_port(

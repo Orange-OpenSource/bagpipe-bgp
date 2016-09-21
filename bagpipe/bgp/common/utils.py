@@ -15,40 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import sys
-import traceback
-import logging
-
 import re
 
 from collections import defaultdict
-
-
-def import_class(import_str):
-    """Returns a class from a string including module and class"""
-    mod_str, _, class_str = import_str.rpartition('.')
-    logging.debug("Trying to import module %s", mod_str)
-    try:
-        __import__(mod_str)
-        logging.debug("Trying to get class %s", class_str)
-        return getattr(sys.modules[mod_str], class_str)
-    except AttributeError:
-        raise ImportError("No '%s' class in %s" % (class_str, mod_str))
-    except ValueError as e:
-        logging.debug("Exception occurred during import: %s", e)
-        raise ImportError('Class %s cannot be found (%s)' %
-                          (class_str,
-                           traceback.format_exception(*sys.exc_info())))
-    except Exception as e:
-        logging.debug(
-            "Exception while trying to import class %s: %s", import_str, e)
-        raise
-
-
-def import_object(import_str, *args, **kwargs):
-    """Import a class and return an instance of it."""
-    return import_class(import_str)(*args, **kwargs)
 
 
 def synchronized(method):

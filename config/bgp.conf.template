@@ -7,19 +7,17 @@ enable_rtc=True
 
 [API]
 # BGP component API IP address and port
-api_host=localhost 
+api_host=localhost
 api_port=8082
 
 
 [DATAPLANE_DRIVER_IPVPN]
+
 # IP VPN dataplane driver class
-# (bagpipe.bgp, bgp., or bagpipe.bgp.ipvpn can be omitted)
-# Example values: 
-#dataplane_driver = bagpipe.bgp.vpn.ipvpn.DummyDataplaneDriver
-#dataplane_driver = bgp.vpn.ipvpn.mpls_linux_dataplane.MPLSLinux32DataplaneDriver
-#dataplane_driver = mpls_linux_dataplane.MPLSLinuxDataplaneDriver
-#dataplane_driver = mpls_ovs_dataplane.MPLSOVSDataplaneDriver
-dataplane_driver = DummyDataplaneDriver
+#  Example values:
+#dataplane_driver = ovs
+#dataplane_driver = linux
+dataplane_driver = dummy
 
 # OVS bridge to use (defaults to br-int)
 #ovs_bridge=ovsbr0
@@ -59,14 +57,13 @@ mpls_interface=*gre*
 # required for the MPLSOVSDataplaneDriver if used with the E-VPN LinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000
 
+
 [DATAPLANE_DRIVER_EVPN]
+
 # EVPN dataplane driver class
-# (bagpipe.bgp, bgp., or bagpipe.bgp.evpn can be omitted)
 # Example values:
-#dataplane_driver = DummyDataplaneDriver
-#dataplane_driver = linux_vxlan.LinuxVXLANDataplaneDriver
-#dataplane_driver = linux_vxlan.LinuxVXLANHybridDataplaneDriver
-dataplane_driver = DummyDataplaneDriver
+#dataplane_driver = linux
+dataplane_driver = dummy
 
 # required to get proper MTU with the LinuxVXLANHybridDataplaneDriver
 ovsbr_interfaces_mtu=4000
