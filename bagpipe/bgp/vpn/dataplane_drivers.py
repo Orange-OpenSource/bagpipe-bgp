@@ -196,7 +196,14 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
         pass
 
     def _run_command(self, command, run_as_root=False, *args, **kwargs):
-        return run_command(self.log, command, *args, **kwargs)
+        if run_as_root and self.driver.root_helper_daemon:
+            return rootwrap_command(self.log, self.driver.root_helper_daemon,
+                                    command, *args, **kwargs)
+        else:
+            if run_as_root:
+                command = " ".join([self.driver.root_helper, command])
+
+            return run_command(self.log, command, *args, **kwargs)
 
     # Looking glass info ####
 
