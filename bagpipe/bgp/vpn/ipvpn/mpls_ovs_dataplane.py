@@ -967,6 +967,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # Check if OVS bridge exist
         (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
                                            self.bridge,
+                                           run_as_root=True,
                                            raise_on_error=False)
 
         if exit_code == 2:
@@ -1196,6 +1197,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         (output, _) = self._run_command(
             "ovs-ofctl show %s |grep addr" % self.bridge,
             run_as_root=True,
-            acceptable_return_codes=[0, 1])
+            acceptable_return_codes=[0, 1],
+            shell=True)
         # FIXME: does it properly show the GRE tunnel interface ?
         return output

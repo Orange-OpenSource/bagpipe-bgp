@@ -15,3 +15,6 @@ ovs-ofctl: CommandFilter, ovs-ofctl, root
 # ip_lib
 ip: IpFilter, ip, root
 ip_exec: IpNetnsExecFilter, ip, root
+
+# shell (for piped commands)
+sh: CommandFilter, sh, root

@@ -134,7 +134,9 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     def _is_vxlan_if_on_bridge(self):
         (output, _) = self._run_command(
             "brctl show %s | grep '%s' | sed -e 's/\s\+//g'" %
-            (self.bridge_name, VXLAN_INTERFACE_PREFIX))
+            (self.bridge_name, VXLAN_INTERFACE_PREFIX),
+            run_as_root=True,
+            shell=True)
 
         return True if (output == self.vxlan_if_name) else False
 
@@ -293,7 +295,8 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
     def _fdb_dump(self):
         if self.log.debug:
             self.log.debug("bridge fdb dump: %s", self._run_command(
-                "bridge fdb show dev %s" % self.vxlan_if_name)[0])
+                "bridge fdb show dev %s" % self.vxlan_if_name,
+                run_as_root=True)[0])
 
     # Looking glass ####
 
@@ -342,8 +345,10 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
         # delete all EVPN bridges
         cmd = "brctl show | tail -n +2 | awk '{print $1}'| grep '%s'"
         for bridge in self._run_command(cmd % BRIDGE_NAME_PREFIX,
+                                        run_as_root=True,
                                         raise_on_error=False,
-                                        acceptable_return_codes=[0, 1])[0]:
+                                        acceptable_return_codes=[0, 1],
+                                        shell=True)[0]:
             self._run_command("ip link set %s down" % bridge,
                               run_as_root=True)
             self._run_command("brctl delbr %s" % bridge,
@@ -352,8 +357,10 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
         # delete all VXLAN interfaces
         cmd = "ip link show | awk '{print $2}' | tr -d ':' | grep '%s'"
         for interface in self._run_command(cmd % VXLAN_INTERFACE_PREFIX,
+                                           run_as_root=True,
                                            raise_on_error=False,
-                                           acceptable_return_codes=[0, 1])[0]:
+                                           acceptable_return_codes=[0, 1],
+                                           shell=True)[0]:
             self._run_command("ip link set %s down" % interface,
                               run_as_root=True)
             self._run_command("ip link delete %s" % interface,

@@ -22,12 +22,18 @@ class RootwrapDaemonHelper(object):
 
 
 def rootwrap_command(log, root_helper_daemon, command, stdin=None,
-                     raise_on_error=True, acceptable_return_codes=[0]):
+                     raise_on_error=True, acceptable_return_codes=[0],
+                     shell=False):
     log.info("Running rootwrapped command: %s   [stdin:%s, raise_on_error:%s]",
              command, stdin, raise_on_error)
     rootwrap_client = RootwrapDaemonHelper.get_client(root_helper_daemon)
 
-    exit_code, output, error = rootwrap_client.execute(command.split(), stdin)
+    if shell:
+        exit_code, output, error = rootwrap_client.execute(
+                                        ["sh", "-c", command], stdin)
+    else:
+        exit_code, output, error = rootwrap_client.execute(command.split(),
+                                                           stdin)
 
     if (exit_code in acceptable_return_codes or -1 in acceptable_return_codes):
         return (output.splitlines(), exit_code)
