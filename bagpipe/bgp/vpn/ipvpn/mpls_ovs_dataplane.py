@@ -131,20 +131,24 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             # Setup IP forwarding
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys"
                               "/net/ipv4/ip_forward\"" % self.arp_netns,
-                              run_as_root=True)
+                              run_as_root=True,
+                              shell=True)
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys/net"
                               "/ipv4/conf/all/forwarding\"" % self.arp_netns,
-                              run_as_root=True)
+                              run_as_root=True,
+                              shell=True)
 
             # Setup ARP proxying
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys/net"
                               "/ipv4/conf/%s/proxy_arp\"" %
                               (self.arp_netns, PROXYARP2OVS_IF),
-                              run_as_root=True)
+                              run_as_root=True,
+                              shell=True)
             self._run_command("ip netns exec %s sh -c \"echo 1 > /proc/sys/net"
                               "/ipv4/conf/%s/proxy_arp_pvlan\"" %
                               (self.arp_netns, PROXYARP2OVS_IF),
-                              run_as_root=True)
+                              run_as_root=True,
+                              shell=True)
         else:
             self.log.debug("VRF network namespace already exists...")
 
@@ -797,7 +801,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             output += self._run_command(
                 "ovs-ofctl dump-flows %s 'table=%d,cookie=%d/-1'%s"
                 % (self.bridge, table, self.instance_id, OVS_DUMP_FLOW_FILTER),
-                run_as_root=True
+                run_as_root=True,
+                shell=True
             )[0]
         return output
 
