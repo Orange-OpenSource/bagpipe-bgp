@@ -63,6 +63,11 @@ run_log_command = functools.partial(run_command, log)
 def create_veth_pair(vpn_interface, ns_interface, ns_name):
     run_log_command("ip netns exec %s ip link delete %s" %
                     (ns_name, ns_interface), raise_on_error=False)
+    # in case the interface was previously attached to OVS,
+    # we need to remove that, or when then interface is re-created
+    # OVS will take it back!
+    run_log_command("ovs-vsctl del-port %s" %
+                    vpn_interface, raise_on_error=False)
     run_log_command("ip link delete %s" %
                     vpn_interface, raise_on_error=False)
     run_log_command(
