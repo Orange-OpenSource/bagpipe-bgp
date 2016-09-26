@@ -17,6 +17,7 @@
 
 from abc import ABCMeta, abstractmethod
 
+import os
 import socket
 
 from distutils.version import StrictVersion
@@ -132,15 +133,25 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
     def supported_encaps(self):
         return self.__class__.encaps
 
-    def _run_command(self, command, run_as_root=False, *args, **kwargs):
+    def _run_command__(self, log, command, run_as_root=False, *args, **kwargs):
+        if run_as_root and os.geteuid() == 0:
+            # do not need to wrap any call
+            run_as_root = False
+
         if run_as_root and self.root_helper_daemon:
-            return rootwrap_command(self.log, self.root_helper_daemon, command,
-                                    *args, **kwargs)
+            return rootwrap_command(log, self.root_helper_daemon,
+                                    command, *args, **kwargs)
         else:
             if run_as_root:
                 command = " ".join([self.root_helper, command])
 
+            # remove shell from kwargs (uses shell by default)
+            kwargs.pop("shell", False)
             return run_command(self.log, command, *args, **kwargs)
+
+    def _run_command(self, command, run_as_root=False, *args, **kwargs):
+        return self._run_command__(self.log, command, run_as_root,
+                                   *args, **kwargs)
 
     def get_lg_map(self):
         encaps = []
@@ -196,14 +207,8 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
         pass
 
     def _run_command(self, command, run_as_root=False, *args, **kwargs):
-        if run_as_root and self.driver.root_helper_daemon:
-            return rootwrap_command(self.log, self.driver.root_helper_daemon,
-                                    command, *args, **kwargs)
-        else:
-            if run_as_root:
-                command = " ".join([self.driver.root_helper, command])
-
-            return run_command(self.log, command, *args, **kwargs)
+        return self.driver._run_command__(self.log, command, run_as_root,
+                                          *args, **kwargs)
 
     # Looking glass info ####
 
