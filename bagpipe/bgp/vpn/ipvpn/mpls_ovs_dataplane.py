@@ -55,7 +55,7 @@ OVSBR2ARPNS_INTERFACE_PREFIX = "toarpns"
 #  whose remote end is plugged in the OVS bridge
 PROXYARP2OVS_IF = "ovs"
 
-ARPNETNS_PREFIX = "arp"
+ARPNETNS_PREFIX = "arp-vrf"
 
 GRE_TUNNEL = "mpls_gre"
 NO_MPLS_PHY_INTERFACE = -1
@@ -78,8 +78,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
     def __init__(self, *args, **kwargs):
         VPNInstanceDataplane.__init__(self, *args)
 
-        self.arp_netns = ("%s-vrf%d" %
-                          (ARPNETNS_PREFIX, self.instance_id))[:LINUX_DEV_LEN]
+        self.arp_netns = ("%s%d" % (ARPNETNS_PREFIX,
+                                    self.instance_id))[:LINUX_DEV_LEN]
 
         # Initialize dict where we store info on OVS ports (port numbers and
         # bound IP address)
@@ -218,8 +218,10 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def _arp_net_ns_exists(self):
         """ Check if network namespace exist. """
-        (output, _) = self._run_command("ip netns show")
-        return (self.arp_netns in output)
+        (_, code) = self._run_command("ip netns pids %s" % self.arp_netns,
+                                      acceptable_return_codes=[0, 1],
+                                      run_as_root=True)
+        return code == 0
 
     def _create_arp_netns_veth_pair(self, ovsbr_to_proxyarp_ns,
                                     proxyarp_ns_to_ovsbr):
