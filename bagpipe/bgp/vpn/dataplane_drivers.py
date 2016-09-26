@@ -49,8 +49,8 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
 
         self.config = config
 
-        self.root_helper = self.config["root_helper"]
-        self.root_helper_daemon = self.config["root_helper_daemon"]
+        self.root_helper = self.config.get("root_helper")
+        self.root_helper_daemon = self.config.get("root_helper_daemon")
 
         self.local_address = None
         try:

@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 
 import os.path
 import sys
@@ -24,7 +25,7 @@ import traceback
 from logging import Logger
 import logging.config
 
-from ConfigParser import SafeConfigParser, NoSectionError
+import ConfigParser
 from optparse import OptionParser
 
 from stevedore import driver as stevedore_driver
@@ -60,17 +61,6 @@ def find_dataplane_drivers(dp_configs, common_config, bgp_config,
         driver_name = dp_config["dataplane_driver"]
         logging.debug("Creating dataplane driver for %s, with %s",
                       vpn_type, driver_name)
-
-        # FIXME: this is a hack, dataplane drivers should have a better way to
-        #  access any item in the BGP dataplane_config
-        dp_config['root_helper'] = common_config.get("root_helper", "sudo")
-        dp_config['root_helper_daemon'] = (
-            common_config.get("root_helper_daemon")
-        )
-        if dp_config['root_helper'] == "sudo":
-            logging.warning("rootwrap not configured, will use sudo")
-        if 'dataplane_local_address' not in dp_config:
-            dp_config['dataplane_local_address'] = bgp_config['local_address']
 
         driver_class = stevedore_driver.DriverManager(
             namespace='%s.%s' % (DATAPLANE_DRIVER_ENTRY_POINT_PFX, vpn_type),
@@ -150,7 +140,6 @@ class BgpDaemon(lg.LookingGlassMixin):
         logging.info("Received signal %d, stopping...", signum)
         self.manager.stop()
         self.bgp_manager.stop()
-        # would need to stop main thread ?
         logging.info("All threads now stopped...")
         exception = SystemExit("Terminated on signal %d" % signum)
         raise exception
@@ -164,21 +153,36 @@ class BgpDaemon(lg.LookingGlassMixin):
 
 
 def _load_config(config_file):
-    parser = SafeConfigParser()
+    parser = ConfigParser.SafeConfigParser()
 
     if (len(parser.read(config_file)) == 0):
         logging.error("Configuration file not found (%s)", config_file)
         exit()
 
-    common_config = parser.items("COMMON")
-    bgp_config = parser.items("BGP")
+    bgp_config = dict(parser.items("BGP"))
+
+    try:
+        common_config = dict(parser.items("COMMON"))
+    except ConfigParser.NoSectionError:
+        common_config = {}
+
+    if 'dataplane_local_address' not in common_config:
+        common_config['dataplane_local_address'] = bgp_config['local_address']
+
+    common_config['root_helper'] = common_config.get("root_helper", "sudo")
+    common_config['root_helper_daemon'] = (
+        common_config.get("root_helper_daemon")
+    )
 
     dataplane_config = dict()
     for vpn_type in [IPVPN, EVPN]:
         try:
-            dataplane_config[vpn_type] = dict(
-                parser.items("DATAPLANE_DRIVER_%s" % vpn_type.upper()))
-        except NoSectionError:
+            # copy common_config as a base for each dataplane config
+            dp_config = copy.deepcopy(common_config)
+            dp_config.update(dict(parser.items("DATAPLANE_DRIVER_%s" %
+                                               vpn_type.upper())))
+            dataplane_config[vpn_type] = dp_config
+        except ConfigParser.NoSectionError:
             if vpn_type == IPVPN:  # backward compat for ipvpn
                 dataplane_config[IPVPN] = dict(
                     parser.items("DATAPLANE_DRIVER"))
@@ -189,13 +193,14 @@ def _load_config(config_file):
                 logging.error(
                     "Config file should have a DATAPLANE_DRIVER_EVPN section")
 
-    api_config = parser.items("API")
+    api_config = dict(parser.items("API"))
     # TODO: add a default API config
 
-    config = {"common_config": dict(common_config),
-              "bgp_config": dict(bgp_config),
+
+    config = {"common_config": common_config,
+              "bgp_config": bgp_config,
               "dataplane_config": dataplane_config,
-              "api_config": dict(api_config)
+              "api_config": api_config
               }
 
     return config

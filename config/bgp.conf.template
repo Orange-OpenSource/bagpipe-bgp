@@ -6,8 +6,20 @@ enable_rtc=True
 
 [COMMON]
 # Root helper and root helper application
+#   root_helper_daemon is designed to use oslo-rootwrap-daemon for commands
+#   that need to be run as root.
+#   If root_helper_daemon is unset, bagpipe-bgp will use 'root_help' to call
+#   these commands, which defaults to 'sudo', and can be configured to use
+#   oslo.rootwrap.
+#root_helper = sudo
 #root_helper = sudo /usr/local/bin/oslo-rootwrap /etc/bagpipe-bgp/rootwrap.conf
-#root_helper_daemon = sudo /usr/local/bin/oslo-rootwrap-daemon /etc/bagpipe-bgp/rootwrap.conf
+root_helper_daemon = sudo /usr/local/bin/oslo-rootwrap-daemon /etc/bagpipe-bgp/rootwrap.conf
+
+# local IP address (that others will use to send us encapsulated packets, and that
+# we will use to send)
+# Note: does not need to be specified if different than the BGP local_address
+# Note: can be overwritten under each dataplane config
+# dataplane_local_address=1.2.3.4
 
 [API]
 # BGP component API IP address and port
