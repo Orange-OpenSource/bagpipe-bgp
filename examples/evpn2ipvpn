@@ -48,7 +48,7 @@ r_b bagpipe-rest-attach --attach --port evpn:net2vm2_evpn --network-type ipvpn -
 
 wait_ready
 
-r_a ip netns exec net1vm1 ping 12.0.0.1 -c 12
+r_a ip netns exec net1vm1 ping 12.0.0.1 -c 3
 
 
 r_a bagpipe-looking-glass vpns instances net1vm1_ipvpn dataplane flows

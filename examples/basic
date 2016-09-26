@@ -19,8 +19,8 @@ for type in ipvpn evpn; do
 	r_b bagpipe-rest-attach --attach --port netns --network-type $type --vpn-instance-id $netnsb --ip $ip_netns_b
 	wait_ready
 	r_a ip netns exec $netnsa ping -c 3 -W 4 $ip_netns_b
-	r_a bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id $netnsa --ip $ip_netns_a
-	r_b bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id $netnsb --ip $ip_netns_b
+#	r_a bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id $netnsa --ip $ip_netns_a
+#	r_b bagpipe-rest-attach --detach --port netns --network-type $type --vpn-instance-id $netnsb --ip $ip_netns_b
 done
 
 echo
