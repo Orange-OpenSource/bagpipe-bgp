@@ -28,6 +28,7 @@ function create_bagpipe_conf {
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN dataplane_driver ${BAGPIPE_DATAPLANE_DRIVER_IPVPN:-DummyDataplaneDriver}
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN mpls_interface $BAGPIPE_MPLS_IFACE
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN ovs_bridge $BAGPIPE_MPLS_BR
+	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN proxy_arp ${BAGPIPE_PROXY_ARP:-False}
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_EVPN dataplane_driver ${BAGPIPE_DATAPLANE_DRIVER_EVPN:-DummyDataplaneDriver}
 
 	# copy log config template
