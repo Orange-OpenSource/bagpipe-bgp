@@ -361,17 +361,17 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     type = IPVPN
     ecmp_support = True
 
-    def __init__(self, config, init=True):
+    def __init__(self, config):
         lg.LookingGlassLocalLogger.__init__(self)
 
+        self.log.info("Initializing MPLSLinuxVRFDataplane")
+        DataplaneDriver.__init__(self, config)
+
+        self.config = config
         self.ip = IPDB()
 
-        DataplaneDriver.__init__(self, config, init)
-
     @log_decorator.log_info
-    def _init_real(self, config):
-        self.config = config
-
+    def initialize(self):
         self._run_command("modprobe mpls_router")
         self._run_command("modprobe mpls_gso")
         self._run_command("modprobe mpls_iptunnel")

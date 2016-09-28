@@ -72,7 +72,10 @@ def find_dataplane_drivers(dp_configs, common_config, bgp_config,
         ).driver
 
         try:
-            driver = driver_class(dp_config, not is_cleaning_up)
+            driver = driver_class(dp_config)
+            # skipped on cleanup
+            if not is_cleaning_up:
+                driver.initialize()
             drivers[vpn_type] = driver
         except Exception as e:
             logging.error("Error while instantiating dataplane"

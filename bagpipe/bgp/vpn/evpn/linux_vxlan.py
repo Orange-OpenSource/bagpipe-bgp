@@ -319,10 +319,13 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     required_kernel = "3.11.0"
     encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 
-    def __init__(self, config, init=True):
+    def __init__(self, config):
         lg.LookingGlassLocalLogger.__init__(self, __name__)
 
         self.log.info("Initializing %s", self.__class__.__name__)
+        DataplaneDriver.__init__(self, config)
+
+        self.config = config
 
         try:
             self.vxlan_dest_port = int(config.get("vxlan_dst_port", 0)) or None
@@ -330,10 +333,7 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
             raise Exception("Could not parse specified vxlan_dst_port: %s" %
                             config["vxlan_dst_port"])
 
-        DataplaneDriver.__init__(self, config, init)
-
-    def _init_real(self, config):
-        self.config = config
+    def initialize(self):
         self.log.info("Really initializing %s", self.__class__.__name__)
 
         self._run_command("modprobe vxlan",

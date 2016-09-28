@@ -932,7 +932,9 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     def __init__(self, config, init=True):
         lg.LookingGlassLocalLogger.__init__(self)
+
         self.log.info("Initializing MPLSOVSVRFDataplane")
+        DataplaneDriver.__init__(self, config)
 
         try:
             (o, _) = self._run_command("ovs-ofctl -V | head -1 |"
@@ -1034,8 +1036,6 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                 "%s requires at least OVS 2.4.0 (you are running %s)",
                 self.__class__.__name__, self.ovs_release)
 
-        DataplaneDriver.__init__(self, config, init)
-
     def supported_encaps(self):
         if self.use_gre:
             yield Encapsulation(Encapsulation.Type.GRE)
@@ -1051,7 +1051,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
             yield Encapsulation(Encapsulation.Type.VXLAN)
 
     @log_decorator.log_info
-    def _init_real(self, config):
+    def initialize(self):
         # Check if OVS bridge exist
         (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
                                            self.bridge,

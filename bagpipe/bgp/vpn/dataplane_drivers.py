@@ -41,7 +41,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
     ecmp_support = False
 
     @log_decorator.log
-    def __init__(self, config, init=True):
+    def __init__(self, config):
         '''config is a dict'''
         lg.LookingGlassLocalLogger.__init__(self)
 
@@ -76,10 +76,6 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
                                  self.required_kernel,
                                  self.kernel_release)
 
-        # skipped if instantiated with init=False, to be used for cleanup
-        if init:
-            self._init_real(config)
-
         # Flag to trigger cleanup all dataplane states on first call to
         # vif_plugged
         self.first_init = True
@@ -89,7 +85,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         pass
 
     @abstractmethod
-    def _init_real(self, config):
+    def initialize(self):
         '''
         This is called after reset_state (which, e.g. cleans up the stuff
         possibly left-out by a previous failed run).
@@ -266,7 +262,7 @@ class DummyDataplaneDriver(DataplaneDriver):
         DataplaneDriver.__init__(self, *args)
 
     @log_decorator.log_info
-    def _init_real(self, config):
+    def initialize(self):
         pass
 
     @log_decorator.log_info
