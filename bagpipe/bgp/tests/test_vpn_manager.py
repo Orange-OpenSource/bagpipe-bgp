@@ -22,7 +22,7 @@ class TestVPNManager(TestCase):
         bgp_manager = Mock()
         bgp_manager.get_local_address.return_value = "4.5.6.7"
 
-        self.manager = vpn.VPNManager(bgp_manager, dataplane_drivers)
+        self.manager = vpn.VPNManager({}, bgp_manager, dataplane_drivers)
 
     def tearDown(self):
         super(TestVPNManager, self).tearDown()

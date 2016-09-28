@@ -78,11 +78,15 @@ class VPNManager(lg.LookingGlassMixin):
                   }
 
     @log_decorator.log
-    def __init__(self, bgp_manager, dataplane_drivers):
+    def __init__(self, common_config, bgp_manager, dataplane_drivers):
         '''
         dataplane_drivers is a dict from vpn type to each dataplane driver,
         e.g. { "ipvpn": driverA, "evpn": driverB }
         '''
+
+        self.common_config = common_config
+        self.root_helper = self.common_config.get("root_helper")
+        self.root_helper_daemon = self.common_config.get("root_helper_daemon")
 
         self.bgp_manager = bgp_manager
 
@@ -110,6 +114,10 @@ class VPNManager(lg.LookingGlassMixin):
             return ip_address + "/32"
         else:
             raise exc.MalformedIPAddress
+
+    def _run_command(self, *args, **kwargs):
+        run_command(log, self.root_helper_daemon, self.root_helper,
+                    *args, run_as_root=True, **kwargs)
 
     @log_decorator.log_info
     def _attach_evpn_2_ipvpn(self, localport, ipvpn_instance):
@@ -188,17 +196,16 @@ class VPNManager(lg.LookingGlassMixin):
             log.info("Creating veth pair %s %s ", evpn_if, ipvpn_if)
 
             # delete the interfaces if they exist already
-            run_command(log, "ip link delete %s" %
-                        evpn_if, acceptable_return_codes=[0, 1])
-            run_command(log, "ip link delete %s" %
-                        ipvpn_if, acceptable_return_codes=[0, 1])
+            self._run_command("ip link delete %s" % evpn_if,
+                              acceptable_return_codes=[0, 1])
+            self._run_command("ip link delete %s" % ipvpn_if,
+                              acceptable_return_codes=[0, 1])
 
-            run_command(log,
-                        "ip link add %s type veth peer name %s mtu 65535" %
-                        (evpn_if, ipvpn_if))
+            self._run_command("ip link add %s type veth peer name %s"
+                              " mtu 65535" % (evpn_if, ipvpn_if))
 
-            run_command(log, "ip link set %s up" % evpn_if)
-            run_command(log, "ip link set %s up" % ipvpn_if)
+            self._run_command("ip link set %s up" % evpn_if)
+            self._run_command("ip link set %s up" % ipvpn_if)
             managed = True
 
         localport['linuxif'] = ipvpn_if
@@ -222,7 +229,7 @@ class VPNManager(lg.LookingGlassMixin):
 
             # cleanup veth pair
             if managed:
-                run_command(log, "ip link delete %s" % evpn_if)
+                self._run_command("ip link delete %s" % evpn_if)
 
             del self._evpn_ipvpn_ifs[ipvpn]
 
@@ -231,8 +238,8 @@ class VPNManager(lg.LookingGlassMixin):
 
         # cleanup veth pair
         if managed:
-            run_command(log, "ovs-vsctl del-port %s" % ipvpn_if)
-            run_command(log, "ip link delete %s" % ipvpn_if)
+            self._run_command("ovs-vsctl del-port %s" % ipvpn_if)
+            self._run_command("ip link delete %s" % ipvpn_if)
 
     @utils.synchronized
     @log_decorator.log_info

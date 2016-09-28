@@ -129,7 +129,9 @@ class BgpDaemon(lg.LookingGlassMixin):
         self.bgp_manager = Manager(self.bgp_config)
 
         logging.debug("Creating VPN manager")
-        self.manager = VPNManager(self.bgp_manager, drivers)
+        self.manager = VPNManager(self.common_config,
+                                  self.bgp_manager,
+                                  drivers)
 
         # BGP component REST API
         logging.debug("Creating REST API")
