@@ -57,7 +57,8 @@ log.addHandler(console_handler)
 
 log.setLevel(logging.WARNING)
 
-run_log_command = functools.partial(run_command, log)
+run_log_command = functools.partial(run_command, log, None, "sudo",
+                                    run_as_root=True)
 
 
 def create_veth_pair(vpn_interface, ns_interface, ns_name):
