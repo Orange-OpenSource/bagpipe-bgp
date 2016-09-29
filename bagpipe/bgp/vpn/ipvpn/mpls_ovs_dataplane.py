@@ -957,13 +957,6 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, LookingGlass):
                 self._runCommand("ovs-vsctl list-ports %s" %
                                  self.bridge, acceptableReturnCodes=[0, 1])
 
-    def fixedPortData(self, portData):
-        # we allow fallback to be updated, so fixed port data
-        # should *not* include it
-        r = copy.deepcopy(portData)
-        r.get('ovs').pop('fallback', None)
-        return r
-
     def _cleanupReal(self):
         self.log.warning("not implemented yet!")
 

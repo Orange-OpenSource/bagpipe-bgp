@@ -57,7 +57,7 @@ class VPNInstance(TrackerWorker, Thread, LookingGlassLocalLogger):
     @logDecorator.log
     def __init__(self, bgpManager, labelAllocator, dataplaneDriver,
                  externalInstanceId, instanceId, importRTs, exportRTs,
-                 gatewayIP, mask, readvertise, fallback, **kwargs):
+                 gatewayIP, mask, readvertise, fallback=None, **kwargs):
 
         self.instanceType = self.__class__.__name__
         self.instanceId = instanceId
