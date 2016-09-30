@@ -55,15 +55,19 @@ log.setLevel(logging.WARNING)
 
 
 def create_veth_pair(vpn_interface, ns_interface, ns_name):
-    runCommand(log, "ip netns exec %s ip link delete %s" %
-               (ns_name, ns_interface), raiseExceptionOnError=False)
+    runCommand(log, "ip netns exec %s ip link delete %s" % (ns_name,
+                                                            ns_interface),
+               raiseExceptionOnError=False,
+               acceptableReturnCodes=[0, 1])
     # in case the interface was previously attached to OVS,
     # we need to remove that, or when then interface is re-created
     # OVS will take it back!
-    runCommand("ovs-vsctl del-port %s" %
-               vpn_interface, raiseOnError=False)
-    runCommand(log, "ip link delete %s" %
-               vpn_interface, raiseExceptionOnError=False)
+    runCommand(log, "ovs-vsctl del-port %s" % vpn_interface,
+               raiseExceptionOnError=False,
+               acceptableReturnCodes=[0, 1])
+    runCommand(log, "ip link delete %s" % vpn_interface,
+               raiseExceptionOnError=False,
+               acceptableReturnCodes=[0, 1])
     runCommand(log, "ip link add %s type veth peer name %s netns %s" %
                (vpn_interface, ns_interface, ns_name),
                raiseExceptionOnError=False)
