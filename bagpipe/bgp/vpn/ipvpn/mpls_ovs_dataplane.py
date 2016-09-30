@@ -25,6 +25,7 @@ from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
 from bagpipe.bgp.vpn.ipvpn import IPVPN
 
+from bagpipe.bgp.common import exceptions as exc
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common.utils import get_boolean
@@ -32,8 +33,6 @@ from bagpipe.bgp.common.net_utils import get_device_mac
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
-
-import bagpipe.bgp.common.exceptions as exc
 
 DEFAULT_OVS_BRIDGE = "br-mpls"
 DEFAULT_OVS_TABLE = 0
@@ -141,7 +140,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                (self.patch_port_in_number, self.gateway_ip),
                                'output:%s' % self.arp_net_nsport,
                                self.driver.ovs_table_vrfs)
-
 
     def _init_arp_netns(self):
         self.log.info("VRF %d: Initializing network namespace %s for ARP "
@@ -513,24 +511,26 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                            self.driver.ovs_table_vrfs)
 
         if self.driver.proxy_arp:
-            # Map ARP traffic from VM port to ARP proxy and response from ARP proxy
-            # to VIF
+            # Map ARP traffic from VM port to ARP proxy and response from ARP
+            # proxy to VIF
             self._ovs_flow_add('%s,arp' % localport_match,
                                '%soutput:%s' % (strip_vlan_action_str,
                                                 self.arp_net_nsport),
                                self.driver.ovs_table_vrfs)
             # 'ovs_port_from_vm' is used to send ARP replies to the VM because
-            # the interface plugged into the bridge may be an OVS patch port with
-            # an OVS bridge doing MAC learning and we want this learning bridge to
-            # learn the gw MAC via the right interface so that the traffic from the
-            # VM to the gw will arrive on our OVS bridge through 'ovs_from_from_vm'
+            # the interface plugged into the bridge may be an OVS patch port
+            # with an OVS bridge doing MAC learning and we want this learning
+            # bridge to learn the gw MAC via the right interface so that the
+            # traffic from the VM to the gw will arrive on our OVS bridge
+            # through 'ovs_from_from_vm'
             self._ovs_flow_add(
-                'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport, mac_address),
+                'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport,
+                                              mac_address),
                 '%soutput:%s' % (push_vlan_action_str, ovs_port_from_vm),
                 self.driver.ovs_table_vrfs)
 
-            # Map traffic from gateway to VM port (from VM port to gateway realized
-            # through patch port)
+            # Map traffic from gateway to VM port (from VM port to gateway
+            # realized through patch port)
             self._ovs_flow_add(
                 'in_port=%s,ip,nw_dst=%s' % (self.arp_net_nsport, ip_address),
                 '%soutput:%s' % (push_vlan_action_str, ovs_port_to_vm),
@@ -606,7 +606,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
             # Unmap ARP traffic from ARP proxy to VM port
             self._ovs_flow_del(
-                'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport, mac_address),
+                'in_port=%s,arp,dl_dst=%s' % (self.arp_net_nsport,
+                                              mac_address),
                 self.driver.ovs_table_vrfs)
 
         if last_endpoint:
@@ -796,7 +797,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             lb_flows.append(self._get_lb_multipath_flow(prefix, nw_dst_match))
 
             if self._lb_endpoints[prefix]:
-                lb_flows.extend(self._get_lb_flows_to_add(prefix, nw_dst_match))
+                lb_flows.extend(self._get_lb_flows_to_add(prefix,
+                                                          nw_dst_match))
             else:
                 del self._lb_endpoints[prefix]
 
@@ -1068,7 +1070,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
             (output, exit_code) = self._run_command("ovs-vsctl port-to-br %s" %
                                                     self.mpls_interface,
                                                     raise_on_error=False)
-            if not self.bridge == output[0]:
+            if output[0] != self.bridge:
                 raise Exception("Specified mpls_interface %s is not plugged to"
                                 " OVS bridge %s" %
                                 self.mpls_interface, self.bridge)

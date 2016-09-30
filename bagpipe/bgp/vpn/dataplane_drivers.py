@@ -17,7 +17,6 @@
 
 from abc import ABCMeta, abstractmethod
 
-import os
 import socket
 
 from distutils.version import StrictVersion

@@ -79,7 +79,7 @@ class FakeRR(basic.LineReceiver):
             pass
 
         for c in self.factory.clients:
-            if not c == self:
+            if c != self:
                 c.transport.loseConnection()
         try:
             self.factory.clients.remove(c)
@@ -92,7 +92,7 @@ class FakeRR(basic.LineReceiver):
     def dataReceived(self, data):
         if self.factory.ready:
             for c in self.factory.clients:
-                if not c == self:
+                if c != self:
                     c.transport.write(data)
         else:
             print "buffering received data (%d bytes)" % len(data)

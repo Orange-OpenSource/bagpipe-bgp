@@ -152,7 +152,7 @@ class VPNManager(lg.LookingGlassMixin):
             (evpn_if, ipvpn_if, evpn, managed) = \
                 self._evpn_ipvpn_ifs[ipvpn_instance]
 
-            if not localport['evpn']['id'] == evpn.external_instance_id:
+            if localport['evpn']['id'] != evpn.external_instance_id:
                 raise Exception('Trying to plug into an IPVPN a new E-VPN '
                                 'while one is already plugged in')
             else:
@@ -270,10 +270,11 @@ class VPNManager(lg.LookingGlassMixin):
 
         if vpn_instance:
             if vpn_instance.type != instance_type:
-                raise Exception("Found an existing vpn_instance with this "
-                                "external id but a different type "
-                                "(asked %s vs. already having %s:%s)"
-                                % (instance_type, vpn_instance.type))
+                raise Exception("Found an existing vpn_instance with "
+                                "external id %s but a different type "
+                                "(asked %s vs. already having %s)"
+                                % (external_instance_id,
+                                   instance_type, vpn_instance.type))
             return vpn_instance
 
         if not kwargs.pop('create_if_none', True):

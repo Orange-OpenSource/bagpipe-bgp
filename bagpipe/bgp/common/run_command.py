@@ -64,7 +64,7 @@ def _rootwrap_command(log, root_helper_daemon, command, stdin=None,
 
     if shell:
         exit_code, output, error = rootwrap_client.execute(
-                                        ["sh", "-c", command], stdin)
+            ["sh", "-c", command], stdin)
     else:
         exit_code, output, error = rootwrap_client.execute(command.split(),
                                                            stdin)

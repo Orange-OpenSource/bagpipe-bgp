@@ -351,7 +351,6 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         self.dataplane.update_fallback(fallback)
 
-
     @utils.synchronized
     def stop(self):
         self._stop()

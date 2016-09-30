@@ -18,8 +18,6 @@
 
 from bagpipe.bgp.common import log_decorator
 
-from bagpipe.bgp.common.run_command import run_command
-
 from bagpipe.bgp.common import looking_glass as lg
 
 from bagpipe.bgp.vpn.evpn import VPNInstanceDataplane

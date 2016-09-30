@@ -201,7 +201,6 @@ def _load_config(config_file):
     api_config = dict(parser.items("API"))
     # TODO: add a default API config
 
-
     config = {"common_config": common_config,
               "bgp_config": bgp_config,
               "dataplane_config": dataplane_config,
