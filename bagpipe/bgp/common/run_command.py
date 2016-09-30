@@ -42,24 +42,13 @@ class RootwrapDaemonHelper(object):
 
 
 def _rootwrap_command(log, root_helper_daemon, command, stdin=None,
-                      raise_on_error=True, acceptable_return_codes=[0],
                       shell=False):
     '''
-    Executes 'command' in a subshell.
-    Returns (command_output,exit_code)
+    Executes 'command' in rootwrap mode.
+    Returns (exit_code, command_output command_error)
         - command_output is the list of lines output on stdout by the command
-    Raises an exception based on the following:
-        - will only raise an Exception if raise_on_error optional
-          parameter is True
-        - the exit code is acceptable
-        - exit code is acceptable by default if it is zero
-        - exit code is acceptable if it is in the (optional)
-          acceptable_return_codes list parameter
-        - putting -1 in the acceptable_return_codes list means that *any* exit
-        code is acceptable
+        - command_error is the list of lines error on stderr by the command
     '''
-    log.info("Running rootwrapped command: %s   [stdin:%s, raise_on_error:%s]",
-             command, stdin, raise_on_error)
     rootwrap_client = RootwrapDaemonHelper.get_client(root_helper_daemon)
 
     if shell:
@@ -69,39 +58,17 @@ def _rootwrap_command(log, root_helper_daemon, command, stdin=None,
         exit_code, output, error = rootwrap_client.execute(command.split(),
                                                            stdin)
 
-    if (exit_code in acceptable_return_codes or -1 in acceptable_return_codes):
-        return (output.splitlines(), exit_code)
-    else:
-        message = \
-            "Exit code %d when running '%s': %s" % (exit_code, command,
-                                                    error)
-
-        if raise_on_error:
-            log.error(message)
-            raise Exception(message)
-        else:
-            log.warning(message)
-            return (output, exit_code)
+    return (exit_code, output.splitlines(), error.splitlines())
 
 
-def _shell_command(log, command, stdin=None, raise_on_error=True,
-                   acceptable_return_codes=[0]):
+def _shell_command(log, command, stdin=None):
     '''
-    Executes 'command' in a subshell.
-    Returns (command_output,exit_code)
+    Executes 'command' in subshell mode.
+    Returns (exit_code, command_output, command_error)
         - command_output is the list of lines output on stdout by the command
-    Raises an exception based on the following:
-        - will only raise an Exception if raise_on_error optional
-          parameter is True
-        - the exit code is acceptable
-        - exit code is acceptable by default if it is zero
-        - exit code is acceptable if it is in the (optional)
-          acceptable_return_codes list parameter
-        - putting -1 in the acceptable_return_codes list means that *any* exit
-        code is acceptable
+        - command_error is the list of lines error on stderr by the command,
+          redirected to stdout
     '''
-    log.info("Running shell command: %s   [raise_on_error:%s]",
-             command, raise_on_error)
     process = subprocess.Popen(
         command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
@@ -119,18 +86,59 @@ def _shell_command(log, command, stdin=None, raise_on_error=True,
             output.append(nextline)
 
     exit_code = process.returncode
+    error = output[-1] if len(output) > 0 else None
+
+    return (exit_code, output, error)
+
+
+def run_command(log, root_helper_daemon, root_helper, command,
+                run_as_root=False, raise_on_error=True,
+                acceptable_return_codes=[0], *args, **kwargs):
+    '''
+    Executes 'command' in subshell or rootwrap mode.
+    Returns (command_output, exit_code)
+        - command_output is the list of lines output on stdout by the command
+    Raises an exception based on the following:
+        - will only raise an Exception if raise_on_error optional
+          parameter is True
+        - the exit code is acceptable
+        - exit code is acceptable by default if it is zero
+        - exit code is acceptable if it is in the (optional)
+          acceptable_return_codes list parameter
+        - putting -1 in the acceptable_return_codes list means that *any* exit
+        code is acceptable
+    '''
+    if run_as_root and os.geteuid() == 0:
+        # do not need to wrap any call
+        run_as_root = False
+
+    if run_as_root and root_helper_daemon:
+        log.info("Running command in rootwrap mode: %s   [raise_on_error:%s]",
+                 command, raise_on_error)
+        exit_code, output, error = _rootwrap_command(log, root_helper_daemon,
+                                                     command, *args, **kwargs)
+    else:
+        log.info("Running command in subshell mode: %s   [raise_on_error:%s]",
+                 command, raise_on_error)
+        if run_as_root:
+            command = " ".join([root_helper, command])
+
+        # remove shell from kwargs (uses shell by default)
+        kwargs.pop("shell", False)
+        exit_code, output, error = _shell_command(log, command,
+                                                  *args, **kwargs)
 
     if (exit_code in acceptable_return_codes or -1 in acceptable_return_codes):
         return (output, exit_code)
     else:
-        if len(output) > 0:
+        if len(error) > 0:
             message = \
                 "Exit code %d when running '%s': %s" % (exit_code, command,
-                                                        output[-1])
+                                                        error)
         else:
             message = \
-                "Exit code %d when running '%s' (no output)" % (exit_code,
-                                                                command)
+                "Exit code %d when running '%s' (no error)" % (exit_code,
+                                                               command)
 
         if raise_on_error:
             log.error(message)
@@ -138,21 +146,3 @@ def _shell_command(log, command, stdin=None, raise_on_error=True,
         else:
             log.warning(message)
             return (output, exit_code)
-
-
-def run_command(log, root_helper_daemon, root_helper, command,
-                run_as_root=False, *args, **kwargs):
-    if run_as_root and os.geteuid() == 0:
-        # do not need to wrap any call
-        run_as_root = False
-
-    if run_as_root and root_helper_daemon:
-        return _rootwrap_command(log, root_helper_daemon,
-                                 command, *args, **kwargs)
-    else:
-        if run_as_root:
-            command = " ".join([root_helper, command])
-
-        # remove shell from kwargs (uses shell by default)
-        kwargs.pop("shell", False)
-        return _shell_command(log, command, *args, **kwargs)
