@@ -21,6 +21,8 @@ import shlex
 import subprocess
 import threading
 
+import logging
+
 from oslo_rootwrap import client
 
 
@@ -52,13 +54,14 @@ def _rootwrap_command(log, root_helper_daemon, command, stdin=None,
     rootwrap_client = RootwrapDaemonHelper.get_client(root_helper_daemon)
 
     if shell:
-        exit_code, output, error = rootwrap_client.execute(
-            ["sh", "-c", command], stdin)
+        exit_code, output, error = rootwrap_client.execute(["sh",
+                                                            "-c", command],
+                                                           stdin)
     else:
         exit_code, output, error = rootwrap_client.execute(command.split(),
                                                            stdin)
 
-    return (exit_code, output.splitlines(), error.splitlines())
+    return (exit_code, output, error)
 
 
 def _shell_command(log, command, stdin=None):
@@ -66,29 +69,24 @@ def _shell_command(log, command, stdin=None):
     Executes 'command' in subshell mode.
     Returns (exit_code, command_output, command_error)
         - command_output is the list of lines output on stdout by the command
-        - command_error is the list of lines error on stderr by the command,
-          redirected to stdout
+        - command_error is the list of lines error on stderr by the command
     '''
-    process = subprocess.Popen(
-        command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT)
-    if stdin:
-        process.stdin.write(stdin)
-        process.stdin.close()
-    # Poll process for new output until finished
-    output = []
-    while True:
-        nextline = process.stdout.readline().strip("\n")
-        if nextline == '' and process.poll() is not None:
-            break
-        if nextline != '':
-            log.debug("run_command output: %s", nextline.rstrip())
-            output.append(nextline)
+    process = subprocess.Popen(command, shell=True,
+                               stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+
+    (output, error) = process.communicate(stdin)
 
     exit_code = process.returncode
-    error = output[-1] if len(output) > 0 else None
-
     return (exit_code, output, error)
+
+
+def _log_output_error(log_fn, output, error):
+    if output:
+        log_fn("  run_command stdout: %s", "\n   ".join(output))
+    if error:
+        log_fn("  run_command stderr: %s", "\n".join(error))
 
 
 def run_command(log, root_helper_daemon, root_helper, command,
@@ -113,13 +111,11 @@ def run_command(log, root_helper_daemon, root_helper, command,
         run_as_root = False
 
     if run_as_root and root_helper_daemon:
-        log.info("Running command in rootwrap mode: %s   [raise_on_error:%s]",
-                 command, raise_on_error)
+        log.debug("Running command in rootwrap mode: %s", command)
         exit_code, output, error = _rootwrap_command(log, root_helper_daemon,
                                                      command, *args, **kwargs)
     else:
-        log.info("Running command in subshell mode: %s   [raise_on_error:%s]",
-                 command, raise_on_error)
+        log.debug("Running command in subshell mode: %s ", command)
         if run_as_root:
             command = " ".join([root_helper, command])
 
@@ -128,20 +124,20 @@ def run_command(log, root_helper_daemon, root_helper, command,
         exit_code, output, error = _shell_command(log, command,
                                                   *args, **kwargs)
 
+    output = output.splitlines()
+    error = error.splitlines()
+
+    if log.isEnabledFor(logging.DEBUG):
+        _log_output_error(log.debug, output, error)
+
     if (exit_code in acceptable_return_codes or -1 in acceptable_return_codes):
         return (output, exit_code)
     else:
-        if len(error) > 0:
-            message = \
-                "Exit code %d when running '%s': %s" % (exit_code, command,
-                                                        error)
-        else:
-            message = \
-                "Exit code %d when running '%s' (no error)" % (exit_code,
-                                                               command)
+        message = "Exit code %d when running '%s'" % (exit_code, command)
 
         if raise_on_error:
             log.error(message)
+            _log_output_error(log.error, output, error)
             raise Exception(message)
         else:
             log.warning(message)

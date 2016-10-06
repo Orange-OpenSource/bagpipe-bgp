@@ -1070,10 +1070,10 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
             (output, exit_code) = self._run_command("ovs-vsctl port-to-br %s" %
                                                     self.mpls_interface,
                                                     raise_on_error=False)
-            if output[0] != self.bridge:
+            if not output or output[0] != self.bridge:
                 raise Exception("Specified mpls_interface %s is not plugged to"
-                                " OVS bridge %s" %
-                                self.mpls_interface, self.bridge)
+                                " OVS bridge %s" % (self.mpls_interface,
+                                                    self.bridge))
             else:
                 self.ovs_mpls_if_port_number = self.find_ovs_port(
                     self.mpls_interface)
@@ -1206,19 +1206,24 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     def find_ovs_port(self, dev_name):
         """ Find OVS port number from port name """
-        (output, _) = self._run_command("ovs-vsctl get Interface %s ofport" %
-                                        dev_name,
-                                        run_as_root=True,
-                                        acceptable_return_codes=[0, 1])
-        try:
-            port = int(output[0])
-            if port == -1:
-                raise Exception("OVS port not found for device %s, "
-                                "(known by ovs-vsctl but not by ovs-ofctl?)"
-                                % dev_name)
-            return port
-        except:
-            raise Exception("OVS port not found for device %s" % dev_name)
+        (output, code) = self._run_command("ovs-vsctl get Interface %s "
+                                           "ofport" % dev_name,
+                                           run_as_root=True,
+                                           acceptable_return_codes=[0, 1])
+        if code == 1:
+            raise Exception("OVS port not found for device %s, "
+                "(known by ovs-vsctl but not by ovs-ofctl?)"
+                % dev_name)
+        else:
+            try:
+                port = int(output[0])
+                if port == -1:
+                    raise Exception("OVS port not found for device %s, (known"
+                                    " by ovs-vsctl but not by ovs-ofctl?)"
+                                    % dev_name)
+                return port
+            except:
+                raise Exception("OVS port not found for device %s" % dev_name)
 
     def _ovs_flow_add(self, flow, actions, table, return_flow=False):
         ovs_flow = "table=%d,%s,actions=%s" % (table, flow, actions)
