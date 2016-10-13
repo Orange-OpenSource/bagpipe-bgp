@@ -46,6 +46,9 @@ dataplane_driver = dummy
 # mpls_interface=*gre*
 mpls_interface=*gre*
 
+# GRE tunnel to use (default to mpls_gre)
+#gre_tunnel=mpls_gre
+
 # Uncomment the following to allow the use of standard MPLS-o-GRE in OVS
 # (rather than MPLS-o-Eth-o-GRE). 
 # This currently requires a modified OVS, which can be found at: 

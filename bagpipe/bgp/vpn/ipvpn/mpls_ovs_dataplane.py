@@ -53,7 +53,6 @@ PROXYARP2OVS_IF = "ovs"
 
 ARPNETNS_PREFIX = "arp-vrf"
 
-GRE_TUNNEL = "mpls_gre"
 NO_MPLS_PHY_INTERFACE = -1
 
 VXLAN_TUNNEL = "vxlan"
@@ -938,6 +937,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         cfg.StrOpt("ovs_bridge", default="br-mpls"),
         cfg.IntOpt("input_table", default=0),
         cfg.IntOpt("ovs_table_id_start", default=1),
+        cfg.StrOpt("gre_tunnel", default="mpls_gre",
+                   help="OVS interface name for MPLS/GRE encap"),
         cfg.StrOpt("gre_tunnel_options",
                    help=("Options passed to OVS for GRE tunnel port creation"
                          " e.g. 'options:l3port=true options:... (future)'")),
@@ -1089,21 +1090,22 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     @log_decorator.log_info
     def initialize(self):
         if self.use_gre:
-            self.log.info("Setting up tunnel for MPLS/GRE (%s)", GRE_TUNNEL)
+            self.log.info("Setting up tunnel for MPLS/GRE (%s)",
+                          self.config.gre_tunnel)
 
             self._run_command("ovs-vsctl del-port %s %s" % (self.bridge,
-                                                            GRE_TUNNEL),
+                                                            self.gre_tunnel),
                               run_as_root=True,
                               acceptable_return_codes=[0, 1])
             self._run_command("ovs-vsctl add-port %s %s -- set Interface %s"
                               " type=gre options:local_ip=%s "
                               "options:remote_ip=flow %s" %
-                              (self.bridge, GRE_TUNNEL, GRE_TUNNEL,
+                              (self.bridge, self.gre_tunnel, self.gre_tunnel,
                                self.get_local_address(),
                                self.config.gre_tunnel_options),
                               run_as_root=True)
 
-            self.gre_tunnel_port_number = self.find_ovs_port(GRE_TUNNEL)
+            self.gre_tunnel_port_number = self.find_ovs_port(self.gre_tunnel)
 
         self._ovs_flow_add("in_port=%d,mpls" % self.mpls_in_port(),
                            "resubmit(,%d)" % self.encap_in_table,
@@ -1276,7 +1278,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         }
 
         if self.use_gre:
-            d["gre"].update({'gre_tunnel_port': GRE_TUNNEL})
+            d["gre"].update({'gre_tunnel_port': self.gre_tunnel})
         if self.vxlan_encap:
             d["gre"].update({'vxlan_tunnel_port': VXLAN_TUNNEL})
         return d
