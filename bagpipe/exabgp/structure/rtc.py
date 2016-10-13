@@ -86,7 +86,7 @@ class RouteTargetConstraint(object):
             packedRT = self.route_target.pack()
             # We reset ext com flag bits from the first byte in the packed RT
             # because in an RTC route these flags never appear.
-            return pack("!BL", len(self)*8, self.origin_as) + RouteTargetConstraint.resetFlags(packedRT[0]) + packedRT[1:]
+            return pack("!BL", (len(self)-1)*8, self.origin_as) + RouteTargetConstraint.resetFlags(packedRT[0]) + packedRT[1:]
         
     @staticmethod
     def unpack(afi,safi,data):
