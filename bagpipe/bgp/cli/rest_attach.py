@@ -297,8 +297,9 @@ def main():
             create_special_netns_port(options)
 
         options.port = options.if2netns
-        options.mac = get_device_mac(run_log_command,
-                                     options.if2vpn, options.netns)
+        if not options.mac:
+            options.mac = get_device_mac(run_log_command,
+                                         options.if2vpn, options.netns)
 
         print "Local port: %s (%s)" % (options.port, options.mac)
         run_log_command("ip link show %s" % options.port)
@@ -329,7 +330,7 @@ def main():
             if options.ovs_vlan:
                 local_port['ovs']['vlan'] = options.ovs_vlan
 
-    if not(options.mac):
+    if not options.mac:
         if options.network_type == IPVPN:
             options.mac = "52:54:00:99:99:22"
         else:
