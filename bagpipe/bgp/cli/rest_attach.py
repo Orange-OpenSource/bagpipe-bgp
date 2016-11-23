@@ -255,8 +255,9 @@ def main():
             createSpecialNetNSPort(options)
 
         options.port = options.if2netns
-        options.mac = get_device_mac(lambda *args: runCommand(log, *args),
-                                     options.if2vpn, options.netns)
+        if not options.mac:
+            options.mac = get_device_mac(lambda *args: runCommand(log, *args),
+                                         options.if2vpn, options.netns)
 
         print "Local port: %s (%s)" % (options.port, options.mac)
         runCommand(log, "ip link show %s" % options.port)
@@ -287,8 +288,13 @@ def main():
             if options.ovs_vlan:
                 local_port['ovs']['vlan'] = options.ovs_vlan
 
+<<<<<<< HEAD
     if not(options.mac):
         if options.network_type == "ipvpn":
+=======
+    if not options.mac:
+        if options.network_type == IPVPN:
+>>>>>>> d6aa53c... Use the use of --mac with --detach --port netns
             options.mac = "52:54:00:99:99:22"
         else:
             parser.error("Need to specify --mac for an EVPN network "
