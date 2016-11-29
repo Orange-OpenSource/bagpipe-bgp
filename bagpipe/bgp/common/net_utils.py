@@ -30,3 +30,13 @@ def get_device_mac(run_command_fn, dev_name, netns_name=None):
     (output, _) = run_command_fn("%scat /sys/class/net/%s/address" %
                                  (command_prefix, dev_name))
     return output[0]
+
+def set_device_mac(run_command_fn, dev_name, mac_address, netns_name=None):
+    """ Set device MAC address """
+    if netns_name:
+        command_prefix = "ip netns exec %s " % netns_name
+    else:
+        command_prefix = ""
+
+    run_command_fn("%s ip link set %s address %s" % (command_prefix,
+                                                     dev_name, mac_address))
