@@ -29,7 +29,7 @@ from bagpipe.bgp.common import exceptions as exc
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common.utils import get_boolean
-from bagpipe.bgp.common.net_utils import get_device_mac
+from bagpipe.bgp.common import net_utils
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
@@ -70,7 +70,7 @@ OVS_DUMP_FLOW_FILTER = "| grep -v NXST_FLOW | perl -pe '"               \
     "s/n_packets=([0-9]+),/packets=$1 /; "               \
     "'"
 
-FAKE_ROUTER_MAC = "00:00:5e:20:43:64"
+GATEWAY_MAC = "00:00:5e:00:43:64"
 
 
 def get_ovsbr2arpns_if(namespace_id):
@@ -97,7 +97,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # Find ethX MPLS interface MAC address
         if not self.driver.use_gre:
-            self.mpls_if_mac_address = get_device_mac(
+            self.mpls_if_mac_address = net_utils.get_device_mac(
                 self._run_command,
                 self.driver.mpls_interface)
         else:
@@ -110,8 +110,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         if self.driver.proxy_arp:
             self._init_arp_netns()
-        else:
-            self.gw_mac_address = FAKE_ROUTER_MAC
 
         # Create VRF-specific OVS patch ports
         self.log.debug(
@@ -158,6 +156,12 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             self._create_arp_netns_veth_pair(ovsbr_to_proxyarp_ns,
                                              PROXYARP2OVS_IF)
 
+            # Force MAC address of netns-to-OVS port
+            net_utils.set_device_mac(self._run_command,
+                                     PROXYARP2OVS_IF,
+                                     GATEWAY_MAC,
+                                     self.arp_netns)
+
             # Retrieve broadcast IP address
             ip = IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
             broadcast_ip = str(ip.broadcast)
@@ -196,11 +200,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # OVS port number for the port toward the proxy ARP netns
         self.arp_net_nsport = self.driver.find_ovs_port(ovsbr_to_proxyarp_ns)
-
-        # Find gateway ("network namespace to OVS" port) MAC address
-        self.gw_mac_address = get_device_mac(self._run_command,
-                                             PROXYARP2OVS_IF,
-                                             self.arp_netns)
 
     @log_decorator.log_info
     def cleanup(self):
@@ -540,7 +539,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # Map incoming MPLS traffic going to the VM port
         incoming_actions = ("%smod_dl_src:%s,mod_dl_dst:%s,output:%s" %
-                            (push_vlan_action_str, self.gw_mac_address,
+                            (push_vlan_action_str, GATEWAY_MAC,
                              mac_address, ovs_port_to_vm))
 
         self._ovs_flow_add(self._match_mpls_in(label),
@@ -730,7 +729,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 ','.join(filter(None, (multipath_action, multipath_output))),
                 self.driver.ovs_table_vrfs,
                 return_flow=True)
-            self.log.info('Multipath flow: %s', lb_multipath_flow)
+            self.log.debug('Multipath flow: %s', lb_multipath_flow)
             if len(self._lb_endpoints[prefix]) > 1:
                 return 'modify_strict', lb_multipath_flow
             else:
