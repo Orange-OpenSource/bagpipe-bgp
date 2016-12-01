@@ -208,19 +208,18 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                              " VRF is not empty, clearing...")
             self._ovs_port_info.clear()
 
-        self.log.info("Cleaning VRF patch ports")
-        # Unmap traffic from patch port to gateway
-        self._ovs_flow_del('in_port=%s,ip,nw_dst=%s' % (
-            self.patch_port_in_number, self.gateway_ip),
-            self.driver.ovs_table_vrfs)
+        # Remove all flows for this instance
+        for table in (self.driver.ovs_table_vrfs,
+                      self.driver.ovs_table_vrfs_lb,
+                      self.driver.ovs_table_incoming):
+            self._ovs_flow_del(None, table)
+
         self._run_command("ovs-vsctl del-port %s %s" %
                           (self.bridge, self.patch_port_in),
                           run_as_root=True)
         self._run_command("ovs-vsctl del-port %s %s" %
                           (self.bridge, self.patch_port_out),
                           run_as_root=True)
-
-        # TODO(tmorin): cleanup fallback rule
 
         if self.driver.proxy_arp:
             self.log.info("Cleaning VRF network namespace %s", self.arp_netns)
@@ -229,10 +228,9 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 "ovs-vsctl del-port %s %s" %
                 (self.bridge, get_ovsbr2arpns_if(self.arp_netns)),
                 run_as_root=True)
-            # Delete network namespace
+            # Delete network namespace (deletes the veth pair as well)
             self._run_command("ip netns delete %s" % self.arp_netns,
                               run_as_root=True)
-            # FIXME: need to also cleanup the veth interface
 
     def _arp_net_ns_exists(self):
         """ Check if network namespace exist. """
@@ -863,8 +861,12 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                       priority=RULE_PRIORITY, strict=False):
         priority_spec = ""
         if strict:
-            priority_spec = "priority=%d," % priority
-        return self.driver._ovs_flow_del("cookie=%d/-1,%s%s" %
+            priority_spec = ",priority=%d" % priority
+        if flow is None:
+            flow = ''
+        else:
+            flow = ',%s' % flow
+        return self.driver._ovs_flow_del("cookie=%d/-1%s%s" %
                                          (self.instance_id,
                                           priority_spec,
                                           flow),
