@@ -357,11 +357,6 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
     @log_decorator.log
     def _stop(self):
-        # cleanup BGP subscriptions
-        for rt in self.import_rts:
-            self._unsubscribe(self.afi, self.safi, rt)
-            self._unsubscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
-
         self.dataplane.cleanup()
 
         self.manager.label_allocator.release(self.instance_label)
