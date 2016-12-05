@@ -106,6 +106,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
             self.log.info("First VPN instance init, resetting dataplane state")
             try:
                 self.reset_state()
+                self.initialize()
             except Exception as e:
                 self.log.error("Exception while resetting state: %s", e)
             self.first_init = False

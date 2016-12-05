@@ -31,6 +31,7 @@ def get_device_mac(run_command_fn, dev_name, netns_name=None):
                                  (command_prefix, dev_name))
     return output[0]
 
+
 def set_device_mac(run_command_fn, dev_name, mac_address, netns_name=None):
     """ Set device MAC address """
     if netns_name:

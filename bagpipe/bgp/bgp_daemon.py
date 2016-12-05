@@ -48,8 +48,7 @@ from bagpipe.bgp.vpn.evpn import EVPN
 DATAPLANE_DRIVER_ENTRY_POINT_PFX = "bagpipe.dataplane"
 
 
-def find_dataplane_drivers(dp_configs, common_config, bgp_config,
-                           is_cleaning_up=False):
+def find_dataplane_drivers(dp_configs, common_config, bgp_config):
     drivers = dict()
     for vpn_type in dp_configs.iterkeys():
         dp_config = dp_configs[vpn_type]
@@ -73,9 +72,6 @@ def find_dataplane_drivers(dp_configs, common_config, bgp_config,
 
         try:
             driver = driver_class(dp_config)
-            # skipped on cleanup
-            if not is_cleaning_up:
-                driver.initialize()
             drivers[vpn_type] = driver
         except Exception as e:
             logging.error("Error while instantiating dataplane"
@@ -307,7 +303,7 @@ def cleanup_main():
 
     drivers = find_dataplane_drivers(
         config["dataplane_config"], config["common_config"],
-        config["bgp_config"], is_cleaning_up=True)
+        config["bgp_config"])
     for (vpn_type, dataplane_driver) in drivers.iteritems():
         logging.info("Cleaning BGP component dataplane for %s...", vpn_type)
         dataplane_driver.reset_state()
