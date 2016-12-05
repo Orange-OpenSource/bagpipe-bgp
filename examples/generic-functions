@@ -46,7 +46,7 @@ scp $(dirname $0)/setup-cross-routing $hostB:
 
 function clean_netns_all {
 	for netns in $*; do
-		r_both ip netns delete $netns
+		r_both "ip netns delete $netns" 2> /dev/null
 	done
 }
 
