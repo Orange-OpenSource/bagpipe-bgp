@@ -744,14 +744,13 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         redirect_instance = self.manager.redirect_traffic_to_vpn(
             self.external_instance_id, self.type, redirect_rt
         )
-        redirect_port = redirect_instance.dataplane.get_redirect_port()
-
         # Create traffic classifier from FlowSpec rules
         classifier = TrafficClassifier()
         classifier.map_redirect_rules_2_traffic_classifier(rules)
 
-        self.dataplane.add_dataplane_for_traffic_classifier(classifier,
-                                                            redirect_port)
+        self.dataplane.add_dataplane_for_traffic_classifier(
+            classifier,
+            redirect_instance.instance_id)
 
         if not hasattr(self, 'redirect_rt_2_classifiers'):
             # One redirect route target -> Multiple traffic classifiers (One
