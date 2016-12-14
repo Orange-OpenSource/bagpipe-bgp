@@ -20,6 +20,8 @@ from abc import ABCMeta, abstractmethod
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import log_decorator
 
+from bagpipe.bgp.constants import EVPN
+
 from bagpipe.bgp.engine import RouteEntry
 
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance
@@ -52,8 +54,6 @@ from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 from exabgp.bgp.message.update.attribute.pmsi import PMSI
 from exabgp.bgp.message.update.attribute.pmsi import PMSIIngressReplication
-
-EVPN = "evpn"
 
 
 class VPNInstanceDataplane(_VPNInstanceDataplane):

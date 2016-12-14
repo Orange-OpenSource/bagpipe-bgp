@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from oslo_config import cfg
 
 from bagpipe.bgp.common import log_decorator
 
@@ -96,8 +97,9 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
             self._remove_vxlan_if()
 
         dst_port_spec = ""
-        if self.driver.vxlan_dest_port:
-            dst_port_spec = "dstport %d" % self.driver.vxlan_dest_port
+        if self.driver.config.vxlan_dst_port:
+            dst_port_spec = ("dstport %d" %
+                             self.driver.config.vxlan_dst_port)
 
         # Create VXLAN interface
         self._run_command(
@@ -317,19 +319,17 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     required_kernel = "3.11.0"
     encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
 
-    def __init__(self, config):
+    driver_opts = [
+        cfg.IntOpt("vxlan_dst_port", default="0",
+                   help=("UDP port toward which send VXLAN traffic (defaults "
+                         "to standard IANA-allocated port)")),
+    ]
+
+    def __init__(self):
         lg.LookingGlassLocalLogger.__init__(self, __name__)
 
         self.log.info("Initializing %s", self.__class__.__name__)
-        DataplaneDriver.__init__(self, config)
-
-        self.config = config
-
-        try:
-            self.vxlan_dest_port = int(config.get("vxlan_dst_port", 0)) or None
-        except ValueError:
-            raise Exception("Could not parse specified vxlan_dst_port: %s" %
-                            config["vxlan_dst_port"])
+        DataplaneDriver.__init__(self)
 
     def initialize(self):
         self.log.info("Really initializing %s", self.__class__.__name__)

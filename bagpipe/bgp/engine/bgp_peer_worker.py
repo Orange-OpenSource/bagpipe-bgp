@@ -118,11 +118,11 @@ class BGPPeerWorker(Worker, Thread, lg.LookingGlassLocalLogger):
     Partially abstract class for a Worker implementing the BGP protocol.
     '''
 
-    def __init__(self, route_table_manager, peer_address):
+    def __init__(self, bgp_manager, peer_address):
         # call super
         Thread.__init__(self)
         self.setDaemon(True)
-        Worker.__init__(self, route_table_manager, "BGP-%s" % peer_address)
+        Worker.__init__(self, bgp_manager, "BGP-%s" % peer_address)
 
         self.peer_address = peer_address
 

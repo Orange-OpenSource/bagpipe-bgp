@@ -27,6 +27,9 @@ from netaddr.ip import IPNetwork
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
+from oslo_config import cfg
+
+from bagpipe.bgp.vpn import dataplane_drivers
 from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
 from bagpipe.bgp.vpn.ipvpn import IPVPN
@@ -360,6 +363,13 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     dataplane_instance_class = MPLSLinuxVRFDataplane
     type = IPVPN
     ecmp_support = True
+
+    driver_opts = [
+        cfg.StrOpt("mpls_interface",
+                   help=("Interface used to send/receive MPLS traffic. "
+                         "Use '*gre*' to choose automatic creation of a tunnel"
+                         " interface for MPLS/GRE encap")),
+    ]
 
     def __init__(self, config):
         lg.LookingGlassLocalLogger.__init__(self)

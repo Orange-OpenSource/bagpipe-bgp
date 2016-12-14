@@ -17,6 +17,10 @@
 
 from testtools import TestCase
 
+from oslo_config import cfg
+
+from bagpipe.bgp.common import config
+
 from bagpipe.bgp.engine.bgp_manager import Manager
 from bagpipe.bgp.engine import Subscription
 
@@ -27,10 +31,11 @@ class TestRouteTableManager(TestCase):
 
     def setUp(self):
         super(TestRouteTableManager, self).setUp()
-        self.bgp_manager = Manager({'my_as': '64512',
-                                    'local_address': '1.2.3.4',
-                                    'peers': []
-                                    })
+
+        cfg.CONF.BGP.local_address = "1.2.3.4"
+        cfg.CONF.BGP.my_as = 64512
+
+        self.bgp_manager = Manager()
 
     def test1(self):
         subscription = Subscription(Subscription.ANY_AFI,

@@ -21,25 +21,20 @@ from distutils.version import StrictVersion
 
 from netaddr.ip import IPNetwork
 
+from oslo_config import cfg
+
 from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
 from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
+from bagpipe.bgp.vpn import dataplane_drivers
 from bagpipe.bgp.vpn.ipvpn import IPVPN
 
 from bagpipe.bgp.common import exceptions as exc
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
-from bagpipe.bgp.common.utils import get_boolean
 from bagpipe.bgp.common import net_utils
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
-
-DEFAULT_OVS_BRIDGE = "br-mpls"
-
-DEFAULT_OVS_TABLE = 0
-DEFAULT_OVS_TABLE_ENCAP_IN = 1
-DEFAULT_OVS_TABLE_VRF = 2
-DEFAULT_OVS_TABLE_VRF_POST_HASH = 3
 
 DEFAULT_RULE_PRIORITY = 40000
 
@@ -923,11 +918,37 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     ecmp_support = True
     required_ovs_version = "2.5.0"
 
-    def __init__(self, config, init=True):
+    driver_opts = [
+        cfg.StrOpt("mpls_interface",
+                   help=("Interface used to send/receive MPLS traffic. "
+                         "Use '*gre*' to choose automatic creation of a tunnel"
+                         " port for MPLS/GRE encap")),
+        # FIXME: default ?? // logic // obsolete
+        cfg.BoolOpt("mpls_over_gre",
+                    help=("Force the use of MPLS/GRE even with "
+                          "mpls_interface specified")),
+        cfg.BoolOpt("proxy_arp", default=True,
+                    help=("A netns will be connected to each VRF, will "
+                          "be setup with the gateway IP address, and will "
+                          "reply to all ARP requests")),
+        cfg.BoolOpt("vxlan_encap", default=False,
+                    help=("Be ready to receive VPN traffic as VXLAN, and to "
+                          "preferrably send traffic as VXLAN when advertised "
+                          "by the remote end")),
+        cfg.StrOpt("ovs_bridge", default="br-mpls"),
+        cfg.IntOpt("input_table", default=0),
+        cfg.IntOpt("ovs_table_id_start", default=1),
+        cfg.StrOpt("gre_tunnel_options",
+                   help=("Options passed to OVS for GRE tunnel port creation"
+                         " e.g. 'options:l3port=true options:... (future)'")),
+        cfg.IntOpt("ovsbr_interfaces_mtu")
+    ]
+
+    def __init__(self, init=True):
         lg.LookingGlassLocalLogger.__init__(self)
 
         self.log.info("Initializing MPLSOVSVRFDataplane")
-        DataplaneDriver.__init__(self, config)
+        DataplaneDriver.__init__(self)
 
         try:
             (o, _) = self._run_command("ovs-ofctl -V | head -1 |"
@@ -946,12 +967,10 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                              self.required_ovs_version,
                              self.ovs_release)
 
-        self.config = config
-
-        self.mpls_interface = config.get("mpls_interface", None)
+        self.mpls_interface = self.config.mpls_interface
 
         try:
-            self.use_gre = get_boolean(config["mpls_over_gre"])
+            self.use_gre = self.config.mpls_over_gre
         except KeyError:
             self.use_gre = not (self.mpls_interface and
                                 self.mpls_interface != "*gre*")
@@ -983,45 +1002,18 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                 self.log.info("Will use bare MPLS on interface %s",
                               self.mpls_interface)
 
-        self.bridge = DEFAULT_OVS_BRIDGE
-        try:
-            self.bridge = config["ovs_bridge"]
-        except KeyError:
-            self.log.warning("No bridge configured, will use default: %s",
-                             DEFAULT_OVS_BRIDGE)
+        self.bridge = self.config.ovs_bridge
+        self.input_table = self.config.input_table
 
-        self.input_table = DEFAULT_OVS_TABLE
-        try:
-            self.input_table = int(config["input_table"])
-        except KeyError:
-            self.log.debug("No input_table configured, "
-                           "will use default table %s", DEFAULT_OVS_TABLE)
+        if self.config.ovs_table_id_start == self.input_table:
+            raise Exception("invalid ovs_table_id_start (%d): can't use tables"
+                            " same as input table (%d)" % (
+                                self.config.ovs_table_id_start,
+                                self.config.input_table))
 
-        self.encap_in_table = DEFAULT_OVS_TABLE_ENCAP_IN
-        try:
-            self.encap_in_table = int(config["encap_in_table"])
-        except KeyError:
-            self.log.debug("No encap_in_table configured, will use default"
-                           " table %s", DEFAULT_OVS_TABLE_ENCAP_IN)
-
-        self.vrf_table = DEFAULT_OVS_TABLE_VRF
-        try:
-            self.vrf_table = int(config["vrf_table"])
-        except KeyError:
-            self.log.debug("No vrf_table configured, will use default"
-                           " table %s", DEFAULT_OVS_TABLE_VRF)
-
-        self.post_hash_vrf_table = DEFAULT_OVS_TABLE_VRF_POST_HASH
-        try:
-            self.post_hash_vrf_table = int(config["post_hash_vrf_table"])
-        except KeyError:
-            self.log.debug("No post_hash_vrf_table configured, will use"
-                           " default table %s",
-                           DEFAULT_OVS_TABLE_VRF_POST_HASH)
-
-        if self.post_hash_vrf_table == self.vrf_table:
-            raise Exception("can't use a post hash table equal to the"
-                            " VRF lookup table")
+        self.encap_in_table = self.config.ovs_table_id_start
+        self.vrf_table = self.config.ovs_table_id_start+1
+        self.post_hash_vrf_table = self.config.ovs_table_id_start+2
 
         self.all_tables = {'incoming': self.input_table,
                            'vrf': self.vrf_table,
@@ -1030,19 +1022,49 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
         # Used to control whether this VRF will support
         # receiving traffic as VXLAN
-        self.vxlan_encap = get_boolean(config.get("vxlan_encap", "False"))
+        self.vxlan_encap = self.config.vxlan_encap
 
         # unless useGRE is enabled, check that fping is installed
         if not self.use_gre:
             self._run_command("fping -v", raise_on_error=True)
 
-        self.proxy_arp = get_boolean(config.get("proxy_arp", "True"))
+        self.proxy_arp = self.config.proxy_arp
 
         if (not self.vxlan_encap and
                 StrictVersion(self.ovs_release) < StrictVersion("2.4.0")):
             self.log.warning(
                 "%s requires at least OVS 2.4.0 (you are running %s)",
                 self.__class__.__name__, self.ovs_release)
+
+        # Check if OVS bridge exist
+        (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
+                                           self.bridge,
+                                           run_as_root=True,
+                                           raise_on_error=False)
+
+        if exit_code == 2:
+            raise exc.OVSBridgeNotFound(self.bridge)
+
+        # Fixup OpenFlow versions
+        self._run_command("ovs-vsctl set bridge %s "
+                          "protocols=OpenFlow10,OpenFlow12,OpenFlow13"
+                          ",OpenFlow14" % self.bridge,
+                          run_as_root=True)
+
+        if not self.use_gre:
+            self.log.info("Will not force the use of GRE/MPLS, trying to bind "
+                          "physical interface %s", self.mpls_interface)
+            # Check if MPLS interface is attached to OVS bridge
+            (output, _) = self._run_command("ovs-vsctl port-to-br %s" %
+                                            self.mpls_interface,
+                                            raise_on_error=False)
+            if not output or output[0] != self.bridge:
+                raise Exception("Specified mpls_interface %s is not plugged to"
+                                " OVS bridge %s" % (self.mpls_interface,
+                                                    self.bridge))
+            else:
+                self.ovs_mpls_if_port_number = self.find_ovs_port(
+                    self.mpls_interface)
 
     def supported_encaps(self):
         if self.use_gre:
@@ -1066,43 +1088,8 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def initialize(self):
-        # Check if OVS bridge exist
-        (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
-                                           self.bridge,
-                                           run_as_root=True,
-                                           raise_on_error=False)
-
-        if exit_code == 2:
-            raise exc.OVSBridgeNotFound(self.bridge)
-
-        # Fixup OpenFlow versions
-        self._run_command("ovs-vsctl set bridge %s "
-                          "protocols=OpenFlow10,OpenFlow12,OpenFlow13"
-                          ",OpenFlow14" % self.bridge,
-                          run_as_root=True)
-
-        if not self.use_gre:
-            self.log.info("Will not force the use of GRE/MPLS, trying to bind "
-                          "physical interface %s", self.mpls_interface)
-            # Check if MPLS interface is attached to OVS bridge
-            (output, exit_code) = self._run_command("ovs-vsctl port-to-br %s" %
-                                                    self.mpls_interface,
-                                                    raise_on_error=False)
-            if not output or output[0] != self.bridge:
-                raise Exception("Specified mpls_interface %s is not plugged to"
-                                " OVS bridge %s" % (self.mpls_interface,
-                                                    self.bridge))
-            else:
-                self.ovs_mpls_if_port_number = self.find_ovs_port(
-                    self.mpls_interface)
-
-        else:
+        if self.use_gre:
             self.log.info("Setting up tunnel for MPLS/GRE (%s)", GRE_TUNNEL)
-            try:
-                additional_tunnel_options = self.config["gre_tunnel_options"]
-                # e.g. "options:l3port=true options:..."
-            except:
-                additional_tunnel_options = ""
 
             self._run_command("ovs-vsctl del-port %s %s" % (self.bridge,
                                                             GRE_TUNNEL),
@@ -1113,7 +1100,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                               "options:remote_ip=flow %s" %
                               (self.bridge, GRE_TUNNEL, GRE_TUNNEL,
                                self.get_local_address(),
-                               additional_tunnel_options),
+                               self.config.gre_tunnel_options),
                               run_as_root=True)
 
             self.gre_tunnel_port_number = self.find_ovs_port(GRE_TUNNEL)

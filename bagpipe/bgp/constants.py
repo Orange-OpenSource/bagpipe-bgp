@@ -14,3 +14,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+IPVPN = "ipvpn"
+EVPN = "evpn"
+
+VPN_TYPES = [IPVPN, EVPN]
+
+
+def config_group(vpn_type):
+    return "DATAPLANE_DRIVER_%s" % vpn_type.upper()

@@ -4,8 +4,8 @@ from mock import Mock
 from bagpipe.bgp.tests import RT5
 from bagpipe.bgp.tests import _rt_to_string
 
-from bagpipe.bgp import vpn
-from bagpipe.bgp.vpn.ipvpn import IPVPN
+from bagpipe.bgp.vpn import manager
+from bagpipe.bgp.constants import IPVPN
 
 REDIRECTED_INSTANCE_ID1 = 'redirected-id1'
 REDIRECTED_INSTANCE_ID2 = 'redirected-id2'
@@ -22,7 +22,7 @@ class TestVPNManager(TestCase):
         bgp_manager = Mock()
         bgp_manager.get_local_address.return_value = "4.5.6.7"
 
-        self.manager = vpn.VPNManager({}, bgp_manager, dataplane_drivers)
+        self.manager = manager.VPNManager(bgp_manager, dataplane_drivers)
 
     def tearDown(self):
         super(TestVPNManager, self).tearDown()
@@ -34,8 +34,9 @@ class TestVPNManager(TestCase):
         )
 
         # Check some VPN manager and redirect instance lists consistency
-        self.assertIn(vpn.redirect_instance_extid(IPVPN, _rt_to_string(RT5)),
-                      self.manager.vpn_instances)
+        self.assertIn(
+            manager.redirect_instance_extid(IPVPN, _rt_to_string(RT5)),
+            self.manager.vpn_instances)
         self.assertIn(REDIRECTED_INSTANCE_ID1,
                       redirect_instance.redirected_instances)
 
@@ -50,8 +51,9 @@ class TestVPNManager(TestCase):
         # Check that same redirect instance is returned
         self.assertEqual(redirect_instance_2, redirect_instance_1)
         # Check some VPN manager and redirect instance lists consistency
-        self.assertIn(vpn.redirect_instance_extid(IPVPN, _rt_to_string(RT5)),
-                      self.manager.vpn_instances)
+        self.assertIn(
+            manager.redirect_instance_extid(IPVPN, _rt_to_string(RT5)),
+            self.manager.vpn_instances)
         self.assertIn(REDIRECTED_INSTANCE_ID1,
                       redirect_instance_1.redirected_instances)
         self.assertIn(REDIRECTED_INSTANCE_ID2,

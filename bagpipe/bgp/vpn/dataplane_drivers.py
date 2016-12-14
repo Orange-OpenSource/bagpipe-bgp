@@ -17,9 +17,11 @@
 
 from abc import ABCMeta, abstractmethod
 
-import socket
-
 from distutils.version import StrictVersion
+
+from oslo_config import cfg
+
+from bagpipe.bgp import constants
 
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
@@ -28,9 +30,34 @@ from bagpipe.bgp.common.run_command import run_command
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
+# NOTE(tmorin): have dataplane_local_address default to
+#               cfg.CONF.BGP.local_address does not work (import order issue)
+# TODO(tmorin): list possible values for dataplane_driver,
+#               see what neutron-db-manange does
+dataplane_common_opts = [
+    cfg.IPOpt("dataplane_local_address", version=4,
+
+              help=("IP address to use as next-hop in our route "
+                    "advertisements, will be used to send us "
+                    "VPN traffic")),
+    cfg.StrOpt("dataplane_driver", default="dummy",
+               help="Dataplane driver.")
+]
+
+
+for vpn_type in constants.VPN_TYPES:
+    cfg.CONF.register_opts(dataplane_common_opts,
+                           constants.config_group(vpn_type))
+
+
+def register_driver_opts(vpn_type, driver_opts):
+    cfg.CONF.register_opts(driver_opts, constants.config_group(vpn_type))
+
 
 class DataplaneDriver(lg.LookingGlassLocalLogger):
     __metaclass__ = ABCMeta
+
+    type = None
 
     dataplane_instance_class = None
     encaps = [Encapsulation(Encapsulation.Type.DEFAULT),
@@ -38,29 +65,25 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
     makebefore4break_support = False
     ecmp_support = False
 
+    driver_opts = []
+
     @log_decorator.log
-    def __init__(self, config):
-        '''config is a dict'''
+    def __init__(self):
         lg.LookingGlassLocalLogger.__init__(self)
+
+        cfg.CONF.register_opts(self.driver_opts,
+                               constants.config_group(self.type))
+
+        self.config = cfg.CONF.get(constants.config_group(self.type))
 
         assert issubclass(self.dataplane_instance_class, VPNInstanceDataplane)
 
-        self.config = config
+        self.local_address = self.config.get("dataplane_local_address")
 
-        self.root_helper = self.config.get("root_helper")
-        self.root_helper_daemon = self.config.get("root_helper_daemon")
+        if self.local_address is None:
+            self.local_address = cfg.CONF.BGP.local_address
 
-        self.local_address = None
-        try:
-            self.local_address = self.config["dataplane_local_address"]
-            socket.inet_pton(socket.AF_INET, self.local_address)
-            self.log.info("Will use %s as local_address", self.local_address)
-        except KeyError:
-            self.log.info("Will use BGP address as dataplane_local_address")
-            self.local_address = None
-        except socket.error:
-            raise Exception("malformed local_address: '%s'" %
-                            self.local_address)
+        self.log.info("Will use %s as local_address", self.local_address)
 
         # Linux kernel version check
         o = self._run_command("uname -r")
@@ -103,15 +126,23 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         '''
 
         if self.first_init:
-            self.log.info("First VPN instance init, resetting dataplane state")
+            self.log.info("First VPN instance init, reinitializing dataplane"
+                          " state")
             try:
                 self.reset_state()
-                self.initialize()
             except Exception as e:
                 self.log.error("Exception while resetting state: %s", e)
+
+            try:
+                self.initialize()
+            except Exception as e:
+                self.log.error("Exception while initializing dataplane"
+                               " state: %s", e)
+                raise
+
             self.first_init = False
         else:
-            self.log.debug("(not resetting dataplane state)")
+            self.log.debug("(not reinitializing dataplane state)")
 
         return self.dataplane_instance_class(self, instance_id,
                                              external_instance_id,
@@ -129,8 +160,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         return self.__class__.encaps
 
     def _run_command(self, command, run_as_root=False, *args, **kwargs):
-        return run_command(self.log, self.root_helper_daemon, self.root_helper,
-                           command, run_as_root, *args, **kwargs)
+        return run_command(self.log, command, run_as_root, *args, **kwargs)
 
     def get_lg_map(self):
         encaps = []
@@ -242,6 +272,7 @@ class DummyDataplaneDriver(DataplaneDriver):
 
     def __init__(self, *args):
         DataplaneDriver.__init__(self, *args)
+        self.log.warning("Dummy dataplane driver, won't do anything useful")
 
     @log_decorator.log_info
     def initialize(self):

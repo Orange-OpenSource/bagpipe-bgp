@@ -24,6 +24,8 @@ import traceback
 
 import logging
 
+from oslo_config import cfg
+
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.bgp_peer_worker import FSM
 from bagpipe.bgp.engine.bgp_peer_worker import KEEP_ALIVE_RECEIVED
@@ -101,11 +103,10 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                         (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
                         (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn))]
 
-    def __init__(self, route_table_manager, peer_address, config):
-        BGPPeerWorker.__init__(self, route_table_manager, peer_address)
+    def __init__(self, bgp_manager, peer_address):
+        BGPPeerWorker.__init__(self, bgp_manager, peer_address)
 
-        self.config = config
-        self.local_address = self.config['local_address']
+        self.local_address = cfg.CONF.BGP.local_address
         self.peer_address = peer_address
 
         self.peer = None
@@ -152,8 +153,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
         neighbor = Neighbor()
         neighbor.router_id = RouterID(self.local_address)
-        neighbor.local_as = ASN(self.config['my_as'])
-        neighbor.peer_as = ASN(self.config['peer_as'])
+        neighbor.local_as = ASN(cfg.CONF.BGP.my_as)
+        # no support for eBGP yet:
+        neighbor.peer_as = ASN(cfg.CONF.BGP.my_as)
         neighbor.local_address = IP.create(self.local_address)
         neighbor.md5_ip = IP.create(self.local_address)
         neighbor.peer_address = IP.create(self.peer_address)
@@ -163,7 +165,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         for afi_safi in self.enabled_families:
             neighbor.add_family(afi_safi)
 
-        if self.config['enable_rtc']:
+        if cfg.CONF.BGP.enable_rtc:
             neighbor.add_family((AFI(AFI.ipv4), SAFI(SAFI.rtc)))
 
         self.log.debug("Instantiate ExaBGP Peer")
@@ -218,7 +220,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
                             [(AFI(AFI.ipv4), SAFI(SAFI.rtc))]):
             if (afi, safi) not in mp_capabilities:
                 if (((afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc))) or
-                        self.config['enable_rtc']):
+                        cfg.CONF.BGP.enable_rtc):
                     self.log.warning("Peer does not advertise (%s,%s) "
                                      "capability", afi, safi)
             else:
@@ -232,7 +234,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
         self.rtc_active = False
 
-        if self.config['enable_rtc']:
+        if cfg.CONF.BGP.enable_rtc:
             if (AFI(AFI.ipv4), SAFI(SAFI.rtc)) in mp_capabilities:
                 self.log.info(
                     "RTC successfully enabled with peer %s", self.peer_address)
@@ -355,9 +357,9 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         return {
             "peeringAddresses": {"peer_address":  self.peer_address,
                                  "local_address": self.local_address},
-            "as_info": {"local": self.config['my_as'],
-                        "peer":  self.config['peer_as']},
+            "as_info": {"local": cfg.CONF.BGP.my_as,
+                        "peer":  cfg.CONF.BGP.my_as},
             "rtc": {"active": self.rtc_active,
-                    "enabled": self.config['enable_rtc']},
+                    "enabled": cfg.CONF.BGP.enable_rtc},
             "active_families": [repr(f) for f in self._active_families],
         }

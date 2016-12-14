@@ -18,6 +18,8 @@
 
 import logging
 
+from oslo_config import cfg
+
 from bagpipe.bgp.engine.route_table_manager import RouteTableManager
 from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
 from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
@@ -26,7 +28,6 @@ from bagpipe.bgp.engine import RouteEntry
 from bagpipe.bgp.engine import EventSource
 
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.common.utils import get_boolean
 from bagpipe.bgp.common import log_decorator
 
 from exabgp.bgp.message.update.nlri.rtc import RTC
@@ -36,24 +37,17 @@ from exabgp.protocol.ip import IP
 
 log = logging.getLogger(__name__)
 
-
 # SAFIs for which RFC4684 is effective
 RTC_SAFIS = (SAFI.mpls_vpn, SAFI.evpn)
 
 
 class Manager(EventSource, lg.LookingGlassMixin):
 
-    def __init__(self, _config):
+    def __init__(self):
 
         log.debug("Instantiating Manager")
 
-        self.config = _config
-
-        # RTC is defaults to being enabled
-        self.config['enable_rtc'] = get_boolean(self.config.get('enable_rtc',
-                                                                True))
-
-        if self.config['enable_rtc']:
+        if cfg.CONF.BGP.enable_rtc:
             first_local_subscriber_callback = self.rtc_advertisement_for_sub
             last_local_subscriber_callback = self.rtc_withdrawal_for_sub
         else:
@@ -65,25 +59,11 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
         self.rtm.start()
 
-        if 'local_address' not in self.config:
-            raise Exception("config needs a local_address")
-
-        if 'my_as' not in self.config:
-            raise Exception("config needs a my_as")
-        self.config['my_as'] = int(self.config['my_as'])
-
-        if 'peer_as' in self.config:
-            raise Exception("config must omit peer_as, because only iBGP "
-                            "is supported yet")
-        self.config['peer_as'] = self.config['my_as']
-
         self.peers = {}
-        if self.config['peers']:
-            peers_addresses = [x.strip() for x in
-                               self.config['peers'].strip().split(",")]
-            for peer_address in peers_addresses:
+        if cfg.CONF.BGP.peers:
+            for peer_address in cfg.CONF.BGP.peers:
                 log.debug("Creating a peer worker for %s", peer_address)
-                peer_worker = ExaBGPPeerWorker(self, peer_address, self.config)
+                peer_worker = ExaBGPPeerWorker(self, peer_address)
                 self.peers[peer_address] = peer_worker
                 peer_worker.start()
 
@@ -105,11 +85,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
         self.rtm.join()
 
     def get_local_address(self):
-        try:
-            return self.config['local_address']
-        except KeyError:
-            log.error("BGPManager config has no local_address defined")
-            return "0.0.0.0"
+        return cfg.CONF.BGP.local_address
 
     @log_decorator.log
     def rtc_advertisement_for_sub(self, sub):
@@ -133,7 +109,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
     def _subscription_2_rtc_route_entry(self, subscription):
 
         nlri = RTC.new(AFI(AFI.ipv4), SAFI(SAFI.rtc),
-                       self.config['my_as'],
+                       cfg.CONF.BGP.my_as,
                        subscription.route_target,
                        IP.create(self.get_local_address()))
 

@@ -23,7 +23,18 @@ import threading
 
 import logging
 
+from oslo_config import cfg
 from oslo_rootwrap import client
+
+
+common_opts = [
+    cfg.StrOpt("root_helper", default="sudo",
+               help="Root helper command."),
+    cfg.StrOpt("root_helper_daemon",
+               help="Root helper daemon application to use when possible."),
+]
+
+cfg.CONF.register_opts(common_opts, "COMMON")
 
 
 class RootwrapDaemonHelper(object):
@@ -35,15 +46,15 @@ class RootwrapDaemonHelper(object):
         raise NotImplementedError()
 
     @classmethod
-    def get_client(cls, root_helper_daemon):
+    def get_client(cls):
         with cls.__lock:
             if cls.__client is None:
                 cls.__client = client.Client(
-                    shlex.split(root_helper_daemon))
+                    shlex.split(cfg.CONF.COMMON.root_helper_daemon))
             return cls.__client
 
 
-def _rootwrap_command(log, root_helper_daemon, command, stdin=None,
+def _rootwrap_command(log, command, stdin=None,
                       shell=False):
     '''
     Executes 'command' in rootwrap mode.
@@ -51,7 +62,7 @@ def _rootwrap_command(log, root_helper_daemon, command, stdin=None,
         - command_output is the list of lines output on stdout by the command
         - command_error is the list of lines error on stderr by the command
     '''
-    rootwrap_client = RootwrapDaemonHelper.get_client(root_helper_daemon)
+    rootwrap_client = RootwrapDaemonHelper.get_client()
 
     if shell:
         exit_code, output, error = rootwrap_client.execute(["sh",
@@ -89,7 +100,7 @@ def _log_output_error(log_fn, output, error):
         log_fn("  run_command stderr: %s", "\n".join(error))
 
 
-def run_command(log, root_helper_daemon, root_helper, command,
+def run_command(log, command,
                 run_as_root=False, raise_on_error=True,
                 acceptable_return_codes=[0], *args, **kwargs):
     '''
@@ -110,14 +121,14 @@ def run_command(log, root_helper_daemon, root_helper, command,
         # do not need to wrap any call
         run_as_root = False
 
-    if run_as_root and root_helper_daemon:
+    if run_as_root and cfg.CONF.COMMON.root_helper_daemon:
         log.debug("Running command in rootwrap mode: %s", command)
-        exit_code, output, error = _rootwrap_command(log, root_helper_daemon,
+        exit_code, output, error = _rootwrap_command(log,
                                                      command, *args, **kwargs)
     else:
         log.debug("Running command in subshell mode: %s ", command)
         if run_as_root:
-            command = " ".join([root_helper, command])
+            command = " ".join([cfg.CONF.COMMON.root_helper, command])
 
         # remove shell from kwargs (uses shell by default)
         kwargs.pop("shell", False)

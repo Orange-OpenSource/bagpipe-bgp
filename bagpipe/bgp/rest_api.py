@@ -26,7 +26,11 @@ import traceback
 import re
 import json
 
+import pbr.version
+
 from bottle import request, response, abort, Bottle
+
+from oslo_config import cfg
 
 from bagpipe.bgp.common import constants as consts
 
@@ -37,8 +41,26 @@ log = logging.getLogger(__name__)
 LOOKING_GLASS_BASE = "looking-glass"
 
 
+common_opts = [
+    cfg.IPOpt("host", default="127.0.0.1",
+              help="IP address on which the API server should listen"),
+    cfg.IntOpt("port", default=8082,
+               help="Port on which the API server should listen")
+]
+
+cfg.CONF.register_opts(common_opts, "API")
+
+
 class APIException(Exception):
     pass
+
+
+def json_serialize(obj):
+    if (isinstance(obj, cfg.ConfigOpts) or
+            isinstance(obj, cfg.ConfigOpts.GroupAttr)):
+        return {json_serialize(k): json_serialize(v)
+                for k, v in obj.iteritems()}
+    return obj
 
 
 class RESTAPI(lg.LookingGlassMixin):
@@ -48,8 +70,7 @@ class RESTAPI(lg.LookingGlassMixin):
     # Random generated sequence number
     BGP_SEQ_NUM = int(uuid.uuid4())
 
-    def __init__(self, config, daemon, vpn_manager, catchall_lg_log_handler):
-        self.config = config
+    def __init__(self, daemon, vpn_manager, catchall_lg_log_handler):
         self.daemon = daemon
 
         self.manager = vpn_manager
@@ -312,7 +333,7 @@ class RESTAPI(lg.LookingGlassMixin):
                                                   url_path_elements[0])
 
             response.content_type = 'application/json'
-            return json.dumps(lg_info)
+            return json.dumps(lg_info, default=json_serialize)
         except lg.NoSuchLookingGlassObject as e:
             log.info('looking_glass: %s', repr(e))
             abort(404, repr(e))
@@ -326,11 +347,14 @@ class RESTAPI(lg.LookingGlassMixin):
     def get_lg_map(self):
         return {
             "summary":  (lg.SUBITEM, self.get_lg_summary),
-            "config":   (lg.DELEGATE, self.daemon),
+            "config":   (lg.SUBTREE, self.get_lg_config),
             "bgp":      (lg.DELEGATE, self.manager.bgp_manager),
             "vpns":     (lg.DELEGATE, self.manager),
-            "logs":     (lg.SUBTREE, self.get_logs),
+            "logs":     (lg.SUBTREE, self.get_logs)
         }
+
+    def get_lg_config(self, path_prefix):
+        return cfg.CONF
 
     def get_lg_summary(self):
         return {
@@ -345,7 +369,9 @@ class RESTAPI(lg.LookingGlassMixin):
             "vpn_instances_count": self.manager.get_vpn_instances_count(),
             "warnings_and_errors": len(self.catch_all_lg_log_handler),
             "start_time": time.strftime("%Y-%m-%d %H:%M:%S",
-                                        time.localtime(self.start_time))
+                                        time.localtime(self.start_time)),
+            "version":  (pbr.version.VersionInfo('bagpipe-bgp')
+                         .release_string())
         }
 
     def get_logs(self, path_prefix):
@@ -363,7 +389,7 @@ class RESTAPI(lg.LookingGlassMixin):
 
     def run(self):
         # TODO: make looking-glass available to remote hosts
-        self.bottle.run(host=self.config.get("api_host", "localhost"),
-                        port=self.config.get("api_port", 8082),
+        self.bottle.run(host=cfg.CONF.API.host,
+                        port=cfg.CONF.API.port,
                         quiet=True,
                         debug=True)

@@ -18,6 +18,8 @@
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import log_decorator
 
+from bagpipe.bgp.constants import IPVPN
+
 from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
 
 from bagpipe.bgp.engine import RouteEntry
@@ -45,11 +47,7 @@ from exabgp.reactor.protocol import AFI
 from exabgp.reactor.protocol import SAFI
 
 
-IPVPN = "ipvpn"
-
-
 class DummyDataplaneDriver(_DummyDataplaneDriver):
-
     type = IPVPN
 
 
