@@ -19,7 +19,7 @@ from testtools import TestCase
 
 from oslo_config import cfg
 
-from bagpipe.bgp.common import config
+from bagpipe.bgp.common import config # flake8: noqa
 
 from bagpipe.bgp.engine.bgp_manager import Manager
 from bagpipe.bgp.engine import Subscription

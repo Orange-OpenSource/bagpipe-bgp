@@ -63,13 +63,15 @@ def register_driver_opts(vpn_type, driver_opts):
 # prefix for setuptools entry points for dataplane drivers
 DATAPLANE_DRIVER_ENTRY_POINT_PFX = "bagpipe.dataplane"
 
+
 def instantiate_dataplane_drivers():
     log.debug("Building dataplane drivers...")
 
     if 'DATAPLANE_DRIVER' in cfg.CONF:
         log.warning("Config file is obsolete, should have a "
-                        "DATAPLANE_DRIVER_IPVPN section instead of"
-                        " DATAPLANE_DRIVER")
+                    "DATAPLANE_DRIVER_IPVPN section instead of"
+                    " DATAPLANE_DRIVER")
+
     drivers = {}
     for vpn_type in constants.VPN_TYPES:
         dp_config = cfg.CONF.get(constants.config_group(vpn_type))
@@ -79,7 +81,8 @@ def instantiate_dataplane_drivers():
                   vpn_type, driver_name)
         try:
             driver_class = stevedore.driver.DriverManager(
-                namespace='%s.%s' % (DATAPLANE_DRIVER_ENTRY_POINT_PFX, vpn_type),
+                namespace='%s.%s' % (DATAPLANE_DRIVER_ENTRY_POINT_PFX,
+                                     vpn_type),
                 name=driver_name,
             ).driver
 
