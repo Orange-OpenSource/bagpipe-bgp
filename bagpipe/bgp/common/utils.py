@@ -19,6 +19,8 @@ import re
 
 from collections import defaultdict
 
+from oslo_concurrency import lockutils
+
 
 def synchronized(method):
 
@@ -27,6 +29,9 @@ def synchronized(method):
             return method(self, *arg, **kws)
 
     return synchronized_method
+
+
+oslo_synchronized = lockutils.synchronized_with_prefix('bagpipe-bgp-')
 
 
 def plural(x):

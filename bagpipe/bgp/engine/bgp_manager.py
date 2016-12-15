@@ -29,6 +29,7 @@ from bagpipe.bgp.engine import EventSource
 
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
+from bagpipe.bgp.common import utils
 
 from exabgp.bgp.message.update.nlri.rtc import RTC
 from exabgp.reactor.protocol import AFI, SAFI
@@ -43,9 +44,11 @@ RTC_SAFIS = (SAFI.mpls_vpn, SAFI.evpn)
 
 class Manager(EventSource, lg.LookingGlassMixin):
 
+    _instance = None
+
     def __init__(self):
 
-        log.debug("Instantiating Manager")
+        log.debug("Instantiating BGPManager")
 
         if cfg.CONF.BGP.enable_rtc:
             first_local_subscriber_callback = self.rtc_advertisement_for_sub
@@ -116,6 +119,27 @@ class Manager(EventSource, lg.LookingGlassMixin):
         route_entry = RouteEntry(nlri)
 
         return route_entry
+
+    @classmethod
+    @utils.oslo_synchronized('BGPManager')
+    def _create_instance(cls):
+        if not cls.has_instance():
+            cls._instance = cls()
+
+    @classmethod
+    def has_instance(cls):
+        return cls._instance is not None
+
+    @classmethod
+    def clear_instance(cls):
+        cls._instance = None
+
+    @classmethod
+    def get_instance(cls):
+        # double checked locking
+        if not cls.has_instance():
+            cls._create_instance()
+        return cls._instance
 
     # Looking Glass Functions ###################
 

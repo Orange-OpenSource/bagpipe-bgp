@@ -34,6 +34,8 @@ from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common.run_command import run_command
 
+from bagpipe.bgp.engine import bgp_manager
+
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.rd_allocator import RDAllocator
 
@@ -68,7 +70,6 @@ class NoSuchVPNInstance(Exception):
 
 
 class VPNManager(lg.LookingGlassMixin):
-
     """
     Creates, and keeps track of, VPN instances (VRFs and EVIs) and passes
     plug/unplug calls to the right VPN instance.
@@ -79,12 +80,12 @@ class VPNManager(lg.LookingGlassMixin):
                   }
 
     @log_decorator.log
-    def __init__(self, bgp_manager, dataplane_drivers):
+    def __init__(self, dataplane_drivers):
         '''
         dataplane_drivers is a dict from vpn type to each dataplane driver,
         e.g. { "ipvpn": driverA, "evpn": driverB }
         '''
-        self.bgp_manager = bgp_manager
+        self.bgp_manager = bgp_manager.Manager.get_instance()
 
         self.dataplane_drivers = dataplane_drivers
 

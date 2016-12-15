@@ -19,10 +19,7 @@ class TestVPNManager(TestCase):
         mock_dp_driver = Mock()
         dataplane_drivers = {'ipvpn': mock_dp_driver, 'evpn': mock_dp_driver}
 
-        bgp_manager = Mock()
-        bgp_manager.get_local_address.return_value = "4.5.6.7"
-
-        self.manager = manager.VPNManager(bgp_manager, dataplane_drivers)
+        self.manager = manager.VPNManager(dataplane_drivers)
 
     def tearDown(self):
         super(TestVPNManager, self).tearDown()
