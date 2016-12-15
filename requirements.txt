@@ -5,6 +5,7 @@ netaddr >= 0.7.7
 twisted >= 13.2
 pyroute2 >= 0.4.1
 stevedore>=1.16.0
+oslo.concurrency>=3.8.0 # Apache-2.0
 oslo.config!=3.18.0,>=3.14.0 # Apache-2.0
 oslo.rootwrap>=2.0.0
 

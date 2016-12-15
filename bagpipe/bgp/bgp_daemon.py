@@ -18,12 +18,9 @@
 import os.path
 import sys
 import signal
-import traceback
 
 from logging import Logger
 import logging.config
-
-from stevedore import driver as stevedore_driver
 
 from oslo_config import cfg
 
@@ -31,54 +28,17 @@ from daemon import runner
 
 from pbr import version as pbr_version
 
+from bagpipe.bgp.common import config  # flake8: noqa
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.common import config
 
 from bagpipe.bgp import constants
 
-from bagpipe.bgp.engine.bgp_manager import Manager
 from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
 
 from bagpipe.bgp.rest_api import RESTAPI
 
 from bagpipe.bgp.vpn import manager
-
-# prefix for setuptools entry points for dataplane drivers
-DATAPLANE_DRIVER_ENTRY_POINT_PFX = "bagpipe.dataplane"
-
-
-def find_dataplane_drivers():
-    if 'DATAPLANE_DRIVER' in cfg.CONF:
-        logging.warning("Config file is obsolete, should have a "
-                        "DATAPLANE_DRIVER_IPVPN section instead of"
-                        " DATAPLANE_DRIVER")
-    drivers = dict()
-    for vpn_type in constants.VPN_TYPES:
-        dp_config = cfg.CONF.get(constants.config_group(vpn_type))
-
-        driver_name = dp_config.dataplane_driver
-        logging.debug("Creating dataplane driver for %s, with %s",
-                      vpn_type, driver_name)
-
-        driver_class = stevedore_driver.DriverManager(
-            namespace='%s.%s' % (DATAPLANE_DRIVER_ENTRY_POINT_PFX, vpn_type),
-            name=driver_name,
-            on_load_failure_callback=(lambda manager, entrypoint, exception:
-                                      logging.error("Exception while loading "
-                                                    "%s: %s", entrypoint,
-                                                    exception))
-        ).driver
-
-        try:
-            drivers[vpn_type] = driver_class()
-        except Exception as e:
-            logging.error("Error while instantiating dataplane"
-                          " driver for %s with %s: %s",
-                          vpn_type, driver_class, e)
-            logging.error(traceback.format_exc())
-            break
-
-    return drivers
+from bagpipe.bgp.vpn import dataplane_drivers as drivers
 
 
 class BgpDaemon(lg.LookingGlassMixin):
@@ -95,19 +55,8 @@ class BgpDaemon(lg.LookingGlassMixin):
     def run(self):
         logging.info("Starting BGP component...")
 
-        logging.debug("Creating dataplane drivers")
-        drivers = find_dataplane_drivers()
-
-        # FIXME: It is really needed/relevant
-        # could be moved to find_dataplane_drivers ?
-        for vpn_type in constants.VPN_TYPES:
-            if vpn_type not in drivers:
-                logging.error("Could not initiate any dataplane driver for %s",
-                              vpn_type)
-                return
-
         logging.debug("Creating VPN manager")
-        self.manager = manager.VPNManager(drivers)
+        self.manager = manager.VPNManager()
 
         # BGP component REST API
         logging.debug("Creating REST API")
@@ -209,7 +158,8 @@ def cleanup_main():
                                   disable_existing_loggers=False)
         logging.root.name = "[BgpDataplaneCleaner]"
 
-    for (vpn_type, dataplane_driver) in find_dataplane_drivers():
+    for vpn_type, dataplane_driver in (
+            drivers.instantiate_dataplane_drivers().iteritems()):
         logging.info("Cleaning dataplane for %s...", vpn_type)
         dataplane_driver.reset_state()
 

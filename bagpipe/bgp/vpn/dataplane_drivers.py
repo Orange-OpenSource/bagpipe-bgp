@@ -15,9 +15,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import traceback
+
 from abc import ABCMeta, abstractmethod
 
 from distutils.version import StrictVersion
+
+import stevedore
 
 from oslo_config import cfg
 
@@ -29,6 +33,9 @@ from bagpipe.bgp.common.run_command import run_command
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
+
+import logging
+log = logging.getLogger(__name__)
 
 # NOTE(tmorin): have dataplane_local_address default to
 #               cfg.CONF.BGP.local_address does not work (import order issue)
@@ -52,6 +59,38 @@ for vpn_type in constants.VPN_TYPES:
 
 def register_driver_opts(vpn_type, driver_opts):
     cfg.CONF.register_opts(driver_opts, constants.config_group(vpn_type))
+
+# prefix for setuptools entry points for dataplane drivers
+DATAPLANE_DRIVER_ENTRY_POINT_PFX = "bagpipe.dataplane"
+
+def instantiate_dataplane_drivers():
+    log.debug("Building dataplane drivers...")
+
+    if 'DATAPLANE_DRIVER' in cfg.CONF:
+        log.warning("Config file is obsolete, should have a "
+                        "DATAPLANE_DRIVER_IPVPN section instead of"
+                        " DATAPLANE_DRIVER")
+    drivers = {}
+    for vpn_type in constants.VPN_TYPES:
+        dp_config = cfg.CONF.get(constants.config_group(vpn_type))
+
+        driver_name = dp_config.dataplane_driver
+        log.debug("Instantiating dataplane driver for %s, with %s",
+                  vpn_type, driver_name)
+        try:
+            driver_class = stevedore.driver.DriverManager(
+                namespace='%s.%s' % (DATAPLANE_DRIVER_ENTRY_POINT_PFX, vpn_type),
+                name=driver_name,
+            ).driver
+
+            drivers[vpn_type] = driver_class()
+        except Exception as e:
+            log.error("Error while instantiating dataplane"
+                      " driver for %s with %s: %s", vpn_type, driver_class, e)
+            log.error(traceback.format_exc())
+            raise
+
+    return drivers
 
 
 class DataplaneDriver(lg.LookingGlassLocalLogger):

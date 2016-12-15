@@ -36,6 +36,7 @@ from bagpipe.bgp.common.run_command import run_command
 
 from bagpipe.bgp.engine import bgp_manager
 
+from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
 from bagpipe.bgp.vpn.label_allocator import LabelAllocator
 from bagpipe.bgp.vpn.rd_allocator import RDAllocator
 
@@ -75,19 +76,21 @@ class VPNManager(lg.LookingGlassMixin):
     plug/unplug calls to the right VPN instance.
     """
 
+    _instance = None
+
     type2class = {IPVPN: VRF,
                   EVPN: EVI
                   }
 
     @log_decorator.log
-    def __init__(self, dataplane_drivers):
+    def __init__(self):
         '''
         dataplane_drivers is a dict from vpn type to each dataplane driver,
         e.g. { "ipvpn": driverA, "evpn": driverB }
         '''
         self.bgp_manager = bgp_manager.Manager.get_instance()
 
-        self.dataplane_drivers = dataplane_drivers
+        self.dataplane_drivers = self.load_drivers()
 
         # VPN instance dict
         self.vpn_instances = {}
@@ -103,6 +106,9 @@ class VPNManager(lg.LookingGlassMixin):
         self._evpn_ipvpn_ifs = {}
 
         self.lock = Lock()
+
+    def load_drivers(self):
+        return dp_drivers.instantiate_dataplane_drivers()
 
     def _format_ip_address_prefix(self, ip_address):
         if re.match(r'([12]?\d?\d\.){3}[12]?\d?\d\/[123]?\d', ip_address):
@@ -443,6 +449,27 @@ class VPNManager(lg.LookingGlassMixin):
                 self._cleanup_evpn2ipvpn(vpn_instance)
         for vpn_instance in self.vpn_instances.itervalues():
             vpn_instance.join()
+
+    @classmethod
+    @utils.oslo_synchronized('VPNManager')
+    def _create_instance(cls):
+        if not cls.has_instance():
+            cls._instance = cls()
+
+    @classmethod
+    def has_instance(cls):
+        return cls._instance is not None
+
+    @classmethod
+    def clear_instance(cls):
+        cls._instance = None
+
+    @classmethod
+    def get_instance(cls):
+        # double checked locking
+        if not cls.has_instance():
+            cls._create_instance()
+        return cls._instance
 
     # Looking Glass hooks ####
 

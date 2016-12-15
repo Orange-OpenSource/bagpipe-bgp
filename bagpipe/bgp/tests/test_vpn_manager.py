@@ -11,15 +11,18 @@ REDIRECTED_INSTANCE_ID1 = 'redirected-id1'
 REDIRECTED_INSTANCE_ID2 = 'redirected-id2'
 
 
+class TestableVPNManager(manager.VPNManager):
+
+    def load_drivers(self):
+        return {'ipvpn': Mock(),
+                'evpn': Mock()}
+
+
 class TestVPNManager(TestCase):
 
     def setUp(self):
         super(TestVPNManager, self).setUp()
-
-        mock_dp_driver = Mock()
-        dataplane_drivers = {'ipvpn': mock_dp_driver, 'evpn': mock_dp_driver}
-
-        self.manager = manager.VPNManager(dataplane_drivers)
+        self.manager = TestableVPNManager.get_instance()
 
     def tearDown(self):
         super(TestVPNManager, self).tearDown()
