@@ -67,9 +67,7 @@ class RESTAPI(lg.LookingGlassMixin):
     # Random generated sequence number
     BGP_SEQ_NUM = int(uuid.uuid4())
 
-    def __init__(self, daemon, catchall_lg_log_handler):
-        self.daemon = daemon
-
+    def __init__(self, catchall_lg_log_handler):
         self.manager = vpn_manager.VPNManager.get_instance()
         self.catch_all_lg_log_handler = catchall_lg_log_handler
 
