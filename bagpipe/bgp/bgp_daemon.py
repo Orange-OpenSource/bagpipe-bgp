@@ -53,15 +53,11 @@ class BgpDaemon(lg.LookingGlassMixin):
         self.catchall_lg_log_handler = catchall_lg_log_handler
 
     def run(self):
-        logging.info("Starting BGP component...")
-
-        logging.debug("Creating VPN manager")
-        self.manager = manager.VPNManager()
+        logging.info("Starting bagpipe-bgp...")
 
         # BGP component REST API
         logging.debug("Creating REST API")
         rest_api = RESTAPI(self,
-                           self.manager,
                            self.catchall_lg_log_handler)
         rest_api.run()
 

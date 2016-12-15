@@ -40,7 +40,7 @@ from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
     compare_ecmp, compare_no_ecmp
 from bagpipe.bgp.engine import RouteEntry
 
-from bagpipe.bgp.rest_api import APIException
+from bagpipe.bgp.common import exceptions as exc
 
 from exabgp.reactor.protocol import AFI, SAFI
 from exabgp.bgp.message.open.asn import ASN
@@ -321,7 +321,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             try:
                 self.readvertise_to_rts = readvertise['to_rt']
             except KeyError:
-                raise APIException("'readvertise' specified with no 'to_rt'")
+                raise exc.APIException("'readvertise' specified with no "
+                                       "'to_rt'")
             self.readvertise_from_rts = readvertise.get('from_rt', [])
             self.log.debug("readvertise enabled, from RT:%s, to %s",
                            self.readvertise_from_rts, self.readvertise_to_rts)
@@ -333,15 +334,16 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         if self.readvertise and attract_traffic:
             if len(self.readvertise_to_rts) != 1:
-                raise APIException("attract_traffic requires exactly one RT"
-                                   " to be provided in readvertise/to_rt")
+                raise exc.APIException("attract_traffic requires exactly one "
+                                       "RT to be provided in "
+                                       "readvertise/to_rt")
             self.attract_traffic = True
             self.attract_rts = attract_traffic['redirect_rts']
             try:
                 self.attract_classifier = attract_traffic['classifier']
             except KeyError:
-                raise APIException("'attract_traffic' specified with no "
-                                   "'classifier'")
+                raise exc.APIException("'attract_traffic' specified with no "
+                                       "'classifier'")
             self.log.debug("Attract traffic enabled with RT: %s and "
                            "classifier: %s", self.attract_rts,
                            self.attract_classifier)
@@ -445,7 +447,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             net = IPNetwork(ip_address_prefix)
             (ip_address, mask) = (str(net.ip), net.prefixlen)
         except netaddr.core.AddrFormatError:
-            raise APIException("Bogus IP prefix: %s" % ip_address_prefix)
+            raise exc.APIException("Bogus IP prefix: %s" % ip_address_prefix)
 
         return (ip_address, mask)
 
@@ -528,12 +530,12 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             pdata = self.mac_2_localport_data[mac_address]
 
             if pdata.get("port_info") != localport:
-                raise APIException("Port information is not consistent. MAC "
-                                   "address cannot be bound to two different"
-                                   "ports. Previous plug for port %s "
-                                   "(%s != %s)" % (linuxif,
-                                                   pdata.get("port_info"),
-                                                   localport))
+                raise exc.APIException("Port information is not consistent. "
+                                       "MAC address cannot be bound to two "
+                                       "different ports. Previous plug for "
+                                       "port %s (%s != %s)" %
+                                       (linuxif, pdata.get("port_info"),
+                                        localport))
 
         try:
             # Parse address/mask
@@ -546,10 +548,10 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             # - Verify (MAC address, IP address) tuple consistency
             if ip_address_prefix in self.ip_address_2_mac and plen == 32:
                 if mac_address not in self.ip_address_2_mac[ip_address_prefix]:
-                    raise APIException("Inconsistent endpoint info: %s "
-                                       "already bound to a MAC address "
-                                       "different from %s" %
-                                       (ip_address_prefix, mac_address))
+                    raise exc.APIException("Inconsistent endpoint info: %s "
+                                           "already bound to a MAC address "
+                                           "different from %s" %
+                                           (ip_address_prefix, mac_address))
                 else:
                     return
 
@@ -635,9 +637,10 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             self.log.error("vif_unplugged called for endpoint (%s, %s), but "
                            "no consistent informations or was not plugged yet",
                            mac_address, ip_address_prefix)
-            raise APIException("No consistent endpoint (%s, %s) informations "
-                               "or was not plugged yet, cannot unplug" %
-                               (mac_address, ip_address_prefix))
+            raise exc.APIException("Inconsistent endpoint (%s, %s) info "
+                                   "or endpoint wasn't plugged yet, "
+                                   "cannot unplug" %
+                                   (mac_address, ip_address_prefix))
 
         # Finding label and local port informations
         label = pdata.get('label')

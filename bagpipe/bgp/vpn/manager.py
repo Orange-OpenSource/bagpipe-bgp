@@ -84,10 +84,8 @@ class VPNManager(lg.LookingGlassMixin):
 
     @log_decorator.log
     def __init__(self):
-        '''
-        dataplane_drivers is a dict from vpn type to each dataplane driver,
-        e.g. { "ipvpn": driverA, "evpn": driverB }
-        '''
+        log.debug("Instantiating VPN Manager...")
+
         self.bgp_manager = bgp_manager.Manager.get_instance()
 
         self.dataplane_drivers = self.load_drivers()

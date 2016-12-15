@@ -32,9 +32,10 @@ from bottle import request, response, abort, Bottle
 
 from oslo_config import cfg
 
+from bagpipe.bgp.common import exceptions as exc
 from bagpipe.bgp.common import constants as consts
-
 from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp.vpn import manager as vpn_manager
 
 log = logging.getLogger(__name__)
 
@@ -49,10 +50,6 @@ common_opts = [
 ]
 
 cfg.CONF.register_opts(common_opts, "API")
-
-
-class APIException(Exception):
-    pass
 
 
 def json_serialize(obj):
@@ -70,10 +67,10 @@ class RESTAPI(lg.LookingGlassMixin):
     # Random generated sequence number
     BGP_SEQ_NUM = int(uuid.uuid4())
 
-    def __init__(self, daemon, vpn_manager, catchall_lg_log_handler):
+    def __init__(self, daemon, catchall_lg_log_handler):
         self.daemon = daemon
 
-        self.manager = vpn_manager
+        self.manager = vpn_manager.VPNManager.get_instance()
         self.catch_all_lg_log_handler = catchall_lg_log_handler
 
         self.bottle = Bottle()
@@ -269,7 +266,7 @@ class RESTAPI(lg.LookingGlassMixin):
                 attach_params.get('lb_consistent_hash_order', 0),
                 attach_params.get('fallback'),
             )
-        except APIException as e:
+        except exc.APIException as e:
             log.warning('attach_localport: API parameter error: %s', e)
             abort(400, "API parameter error: %s" % e)
         except Exception as e:
@@ -297,7 +294,7 @@ class RESTAPI(lg.LookingGlassMixin):
                 detach_params['local_port'],
                 detach_params.get('advertise_subnet', False)
             )
-        except APIException as e:
+        except exc.APIException as e:
             log.warning('detach_localport: API parameter error: %s', e)
             abort(400, "API parameter error: %s" % e)
         except Exception as e:
