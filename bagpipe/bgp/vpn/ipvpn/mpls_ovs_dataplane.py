@@ -99,15 +99,6 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # load balancing
         self._lb_endpoints = dict()
 
-        # Find ethX MPLS interface MAC address
-        # NOTE(tmorin): this can be moved in dataplane driver class
-        if not self.driver.use_gre:
-            self.mpls_if_mac_address = net_utils.get_device_mac(
-                self._run_command,
-                self.driver.mpls_interface)
-        else:
-            self.mpls_if_mac_address = None
-
         self.bridge = self.driver.bridge
 
         self.fallback = None
@@ -641,7 +632,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 # Map traffic to remote IP address as MPLS on ethX to remote
                 # router MAC address
                 return "mod_dl_src:%s,mod_dl_dst:%s,output:%s" % (
-                    self.mpls_if_mac_address, remote_pe_mac_address,
+                    self.driver.mpls_if_mac_address, remote_pe_mac_address,
                     self.driver.ovs_mpls_if_port_number)
 
     def _match_default_route_prefix(self, prefix):
@@ -1106,6 +1097,19 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
                               run_as_root=True)
 
             self.gre_tunnel_port_number = self.find_ovs_port(self.gre_tunnel)
+            self.mpls_if_mac_address = None
+        else:
+            # Find ethX MPLS interface MAC address
+            try:
+                self.mpls_if_mac_address = net_utils.get_device_mac(
+                    self._run_command,
+                    self.driver.mpls_interface)
+            except:
+                # Interface without MAC address (patch port case), use MPLS
+                # bridge MAC address instead
+                self.mpls_if_mac_address = net_utils.get_device_mac(
+                    self._run_command,
+                    self.driver.bridge)
 
         self._ovs_flow_add("in_port=%d,mpls" % self.mpls_in_port(),
                            "resubmit(,%d)" % self.encap_in_table,
