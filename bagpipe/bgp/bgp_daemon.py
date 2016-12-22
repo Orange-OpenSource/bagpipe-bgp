@@ -28,10 +28,10 @@ from daemon import runner
 
 import pbr.version
 
+from bagpipe.bgp.api import api
 from bagpipe.bgp.common import config  # flake8: noqa
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
-from bagpipe.bgp.rest_api import RESTAPI
 
 from bagpipe.bgp.vpn import manager
 from bagpipe.bgp.vpn import dataplane_drivers as drivers
@@ -50,10 +50,8 @@ class BgpDaemon(lg.LookingGlassMixin):
 
     def run(self):
         logging.info("Starting bagpipe-bgp...")
-
-        logging.debug("Creating REST API")
-        rest_api = RESTAPI(self.catchall_lg_log_handler)
-        rest_api.run()
+        pecan_api = api.PecanAPI()
+        pecan_api.run()
 
     def stop(self, signum, _):
         logging.info("Received signal %d, stopping...", signum)

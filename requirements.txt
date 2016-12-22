@@ -1,5 +1,4 @@
 pbr >= 0.11, < 2.0
-bottle >= 0.11.3
 python-daemon >= 1.5.5
 netaddr >= 0.7.7
 twisted >= 13.2
@@ -8,6 +7,7 @@ stevedore>=1.16.0
 oslo.concurrency>=3.8.0 # Apache-2.0
 oslo.config!=3.18.0,>=3.14.0 # Apache-2.0
 oslo.rootwrap>=2.0.0
+pecan
 
 #exabgp >= 3.9
 #until exabgp 3.9 or 4 is released:

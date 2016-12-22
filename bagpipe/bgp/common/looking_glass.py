@@ -16,10 +16,9 @@
 # limitations under the License.
 
 import logging
-
 import re
-
 import urllib
+import six
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +73,7 @@ def _get_lg_map_recurse(obj, cls):
 
 def _lookup_path(my_dict, path):
     ''' lookup path in dict'''
-    assert isinstance(path, list)
+    assert isinstance(path, (list, tuple))
 
     if len(path) == 0:
         return my_dict
@@ -314,7 +313,7 @@ class NoSuchLookingGlassObject(Exception):
 
     def __init__(self, path_prefix, path):
         Exception.__init__(self)
-        assert isinstance(path_prefix, str)
+        assert isinstance(path_prefix, six.string_types)
         self.path_prefix = path_prefix
 
         assert isinstance(path, str)

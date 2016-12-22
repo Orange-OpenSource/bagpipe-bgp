@@ -30,6 +30,7 @@ from bagpipe.bgp import constants
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common.run_command import run_command
+from bagpipe.bgp.common import utils
 
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
@@ -212,7 +213,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
             "name": (lg.VALUE, self.__class__.__name__),
             "local_address": (lg.VALUE, self.local_address),
             "supported_encaps": (lg.VALUE, encaps),
-            "config": (lg.VALUE, self.config),
+            "config": (lg.VALUE, utils.osloconfig_json_serialize(self.config)),
             "kernel_release": (lg.VALUE, self.kernel_release)
         }
 

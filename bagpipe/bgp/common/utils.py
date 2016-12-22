@@ -16,10 +16,10 @@
 # limitations under the License.
 
 import re
-
 from collections import defaultdict
 
 from oslo_concurrency import lockutils
+from oslo_config import cfg
 
 
 def synchronized(method):
@@ -61,3 +61,11 @@ def dict_camelcase_to_underscore(dictionary):
     return {camel2underscore_regex.sub(r'_\1', key).lower(): value
             for (key, value) in dictionary.iteritems()
             }
+
+
+def osloconfig_json_serialize(obj):
+    if (isinstance(obj, cfg.ConfigOpts) or
+            isinstance(obj, cfg.ConfigOpts.GroupAttr)):
+        return {osloconfig_json_serialize(k): osloconfig_json_serialize(v)
+                for k, v in obj.iteritems()}
+    return obj
