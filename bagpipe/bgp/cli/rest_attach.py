@@ -288,13 +288,8 @@ def main():
             if options.ovs_vlan:
                 local_port['ovs']['vlan'] = options.ovs_vlan
 
-<<<<<<< HEAD
-    if not(options.mac):
-        if options.network_type == "ipvpn":
-=======
     if not options.mac:
         if options.network_type == IPVPN:
->>>>>>> d6aa53c... Use the use of --mac with --detach --port netns
             options.mac = "52:54:00:99:99:22"
         else:
             parser.error("Need to specify --mac for an EVPN network "
