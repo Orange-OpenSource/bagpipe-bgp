@@ -1,0 +1,232 @@
+#!/bin/bash
+#
+# 5-tuple classified chain setup with two-directions traffic combined and default routes announced at
+# intermediate hops (Ingress VRF between hops configured to statically announce a 0.0.0.0/0)
+#
+# This script will setup network namespaces SVM1 ("service VM1") and SVM2 so that
+# traffic between net1 (to which VM1 is attached) and net2 (to which VM2 is attached)
+# goes through SMV1 and SVM2 based on a 5-tuple classification:
+#
+#                                           |-------|
+#                                         |-| SVM20 | \   
+#                 destination             | |-------|  |  
+#                   port 80               |            |  
+#                -------------> |------|  | |-------|  |  ------------->
+# VM1-------net1                | SVM1 |--|-| SVM21 |   >                net2-----VM2
+# .1      11.0.0 <------------- |------|  | |-------|  |  <------------- 12.0.0    .1
+#                                         |            |       source
+#                                         | |-------|  |       port 80
+#                                         |-| SVM22 | /    
+#                                           |-------|      
+#
+# Route targets....
+#
+# net1: :1
+# net2: :2
+# 
+# - chain for traffic from net1 to net2:
+# hop12_0: first hop: net1 to SVM1
+# hop12_1: second hop: SVM1 to SVM2
+
+as=64512
+
+hop12_0=$as:120
+hop12_1=$as:121
+
+##
+## - chain for traffic from net2 to net1:
+## hop21_0: first hop: net2 to SVM2
+## hop21_1: second hop: SVM2 to SVM1
+
+hop21_0=$as:210
+hop21_1=$as:211
+
+##
+## - traffic from net1 to net2 redirection to chain based on a classifier:
+## hop_redirect: redirect hop
+
+redirect_hop12_0=$as:300
+redirect_hop21_0=$as:400
+
+
+source $(dirname $0)/generic-functions
+
+clean_start
+
+clean_netns_all net1vm1 svm1 svm2 net2vm2
+
+
+## 
+## VM1:  sur A
+##
+## [netns:net1vm1][tovpn]---[to-vm1][vrf:net1vm1]
+##
+r_a bagpipe-rest-attach --attach --port netns:to-vm1 --network-type ipvpn --vpn-instance-id net1vm1 --ip 11.0.0.1 --rt $as:1 --import-rt $hop12_0
+
+
+
+## SVM1: sur B
+##
+## [vrf:x1][if:to-svm1-x1]---[x1][netns:svm1][h0]---[to-svm1-h0][vrf:h01]
+##
+##
+## x1:100.0.0.0/24
+## h01:30.0.0.0/24
+## h02:40.0.0.0/24
+## x2:200.0.0.0/24
+
+## attach x1 and configure vrf:x1 to attract traffic destined for TCP port 80:
+##
+## [vrf:net1vm1]--->[vrf:redirect_hop12_0]
+
+r_b bagpipe-rest-attach --attach --port netns:to-svm1-x1 --network-type ipvpn --vpn-instance-id x1 --ip 100.0.0.1/24 --netns svm1 --if2vpn x1 \
+	--import $as:1 \
+	--readv-from-rt $as:2 --readv-to-rt $redirect_hop12_0 \
+	--redirect-rt $hop12_0 --destination-port 80
+
+## attach h0:
+ 
+r_b bagpipe-rest-attach --attach --port netns:to-svm1-h0 --mac 52:54:00:99:99:99 --network-type ipvpn --vpn-instance-id h01 --ip 30.0.0.1/24 --netns svm1  --if2vpn h0 \
+	--import-rt $hop12_1 \
+
+r_b bagpipe-rest-attach --attach --port to-svm1-h0 --mac 52:54:00:99:99:99 --network-type ipvpn --vpn-instance-id h01 --ip 0.0.0.0/0 --advertise-subnet --export-rt $hop21_1 --import-rt $hop12_1
+
+r_b ./setup-cross-routing svm1 x1 100.0.0.254 h0 30.0.0.254
+
+
+
+## SVM2x: sur A
+#
+
+## SVM22
+# [vrf:h02][to-svm22-h0]---[h0][netns:svm22][x2]---[if:to-svm22-x2][vrf:x2]
+ 
+## attach h0:
+ 
+r_a bagpipe-rest-attach --attach --port netns:to-svm22-h0 --mac 52:54:22:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 40.0.0.3/24 --netns svm22 --if2vpn h0 \
+	--import-rt $hop21_1
+
+r_a bagpipe-rest-attach --attach --port to-svm22-h0 --mac 52:54:22:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 0.0.0.0/0 --advertise-subnet \
+	--export-rt $hop12_1 --import-rt $hop21_1 \
+	--lb-consistent-hash-order 2
+
+## attach x2:
+r_a bagpipe-rest-attach --attach --port netns:to-svm22-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.3/24 --netns svm22 --if2vpn x2 \
+	--import $as:2 \
+	--readv-from-rt $as:1 --readv-to-rt $redirect_hop21_0 \
+	--redirect-rt $hop21_0 --source-port 80 \
+	--lb-consistent-hash-order 2
+
+r_a ./setup-cross-routing svm22 x2 200.0.0.254 h0 40.0.0.254
+
+## SVM21
+# [vrf:h02][to-svm21-h0]---[h0][netns:svm21][x2]---[if:to-svm21-x2][vrf:x2]
+ 
+## attach h0:
+ 
+r_a bagpipe-rest-attach --attach --port netns:to-svm21-h0 --mac 52:54:21:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 40.0.0.2/24 --netns svm21 --if2vpn h0 \
+	--import-rt $hop21_1
+
+r_a bagpipe-rest-attach --attach --port to-svm21-h0 --mac 52:54:21:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 0.0.0.0/0 --advertise-subnet \
+	--export-rt $hop12_1 --import-rt $hop21_1 \
+	--lb-consistent-hash-order 1
+
+## attach x2:
+r_a bagpipe-rest-attach --attach --port netns:to-svm21-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.2/24 --netns svm21 --if2vpn x2 \
+	--import $as:2 \
+	--readv-from-rt $as:1 --readv-to-rt $redirect_hop21_0 \
+	--redirect-rt $hop21_0 --source-port 80 \
+	--lb-consistent-hash-order 1
+
+r_a ./setup-cross-routing svm21 x2 200.0.0.254 h0 40.0.0.254
+
+## SVM20
+# [vrf:h02][to-svm20-h0]---[h0][netns:svm20][x2]---[if:to-svm20-x2][vrf:x2]
+ 
+## attach h0:
+ 
+r_a bagpipe-rest-attach --attach --port netns:to-svm20-h0 --mac 52:54:20:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 40.0.0.1/24 --netns svm20 --if2vpn h0 \
+	--import-rt $hop21_1
+
+r_a bagpipe-rest-attach --attach --port to-svm20-h0 --mac 52:54:20:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 0.0.0.0/0 --advertise-subnet \
+	--export-rt $hop12_1 --import-rt $hop21_1 \
+	--lb-consistent-hash-order 0
+
+## attach x2:
+r_a bagpipe-rest-attach --attach --port netns:to-svm20-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.1/24 --netns svm20 --if2vpn x2 \
+	--import $as:2 \
+	--readv-from-rt $as:1 --readv-to-rt $redirect_hop21_0 \
+	--redirect-rt $hop21_0 --source-port 80 \
+	--lb-consistent-hash-order 0
+
+r_a ./setup-cross-routing svm20 x2 200.0.0.254 h0 40.0.0.254
+
+
+
+## VM2:  sur B
+## 
+
+r_b bagpipe-rest-attach --attach --port netns:to-vm2 --network-type ipvpn --vpn-instance-id net2vm2 --ip 12.0.0.1 --rt $as:2 --import-rt $hop21_0
+
+#
+# Test
+#
+
+wait_ready
+
+## Attended result: 100% packet loss
+r_a ip netns exec net1vm1 ping 12.0.0.1 -c 5 -W 1
+
+## Attended result: Connection to 12.0.0.1 80 port [tcp/http] succeeded!
+r_b ip netns exec net2vm2 screen -m -d "sh -c \"echo -n '\\n\\n---- SUCCESS !!! ----\\n\\n' | nc -l -p 80 -q 1\""
+r_a ip netns exec net1vm1 nc -nv 12.0.0.1 80
+
+sleep 5
+
+r_b ip netns exec net2vm2 screen -m -d "sh -c \"echo -n '\\n\\n---- SUCCESS !!! ----\\n\\n' | nc -l -p 80 -q 1\""
+r_a ip netns exec net1vm1 nc -nv 12.0.0.1 80
+
+sleep 5
+
+r_b ip netns exec net2vm2 screen -m -d "sh -c \"echo -n '\\n\\n---- SUCCESS !!! ----\\n\\n' | nc -l -p 80 -q 1\""
+r_a ip netns exec net1vm1 nc -nv 12.0.0.1 80
+
+r_a bagpipe-looking-glass vpns instances net1vm1 dataplane flows
+r_a bagpipe-looking-glass vpns instances redirect-to-ipvpn-64512_300 dataplane flows
+r_b bagpipe-looking-glass vpns instances x1 dataplane flows
+r_b bagpipe-looking-glass vpns instances h01 dataplane flows
+r_a bagpipe-looking-glass vpns instances h02 dataplane flows
+r_a bagpipe-looking-glass vpns instances x2 dataplane flows
+r_b bagpipe-looking-glass vpns instances redirect-to-ipvpn-64512_400 dataplane flows
+r_b bagpipe-looking-glass vpns instances net2vm2 dataplane flows
+
+
+r_b bagpipe-rest-attach --detach --port netns:to-svm1-x1 --network-type ipvpn --vpn-instance-id x1 --ip 100.0.0.1/24 --netns svm1 --if2vpn x1
+r_b bagpipe-rest-attach --detach --port to-svm1-h0 --mac 52:54:00:99:99:99 --network-type ipvpn --vpn-instance-id h01 --ip 0.0.0.0/0 --advertise-subnet
+r_b bagpipe-rest-attach --detach --port netns:to-svm1-h0 --mac 52:54:00:99:99:99 --network-type ipvpn --vpn-instance-id h01 --ip 30.0.0.1/24 --netns svm1 --if2vpn h0
+
+r_a bagpipe-rest-attach --detach --port to-svm20-h0 --mac 52:54:20:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 0.0.0.0/0 --advertise-subnet \
+	--lb-consistent-hash-order 0
+r_a bagpipe-rest-attach --detach --port netns:to-svm20-h0 --mac 52:54:20:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 40.0.0.1/24 --netns svm20 --if2vpn h0
+r_a bagpipe-rest-attach --detach --port netns:to-svm20-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.1/24 --netns svm20 --if2vpn x2 \
+	--lb-consistent-hash-order 0
+
+r_a bagpipe-rest-attach --detach --port to-svm22-h0 --mac 52:54:22:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 0.0.0.0/0 --advertise-subnet \
+	--lb-consistent-hash-order 2
+r_a bagpipe-rest-attach --detach --port netns:to-svm22-h0 --mac 52:54:22:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 40.0.0.3/24 --netns svm20 --if2vpn h0
+r_a bagpipe-rest-attach --detach --port netns:to-svm22-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.3/24 --netns svm22 --if2vpn x2 \
+	--lb-consistent-hash-order 2
+
+r_a bagpipe-rest-attach --detach --port to-svm21-h0 --mac 52:54:21:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 0.0.0.0/0 --advertise-subnet \
+	--lb-consistent-hash-order 1
+r_a bagpipe-rest-attach --detach --port netns:to-svm21-h0 --mac 52:54:21:99:99:99 --network-type ipvpn --vpn-instance-id h02 --ip 40.0.0.2/24 --netns svm21 --if2vpn h0
+r_a bagpipe-rest-attach --detach --port netns:to-svm21-x2 --network-type ipvpn --vpn-instance-id x2 --ip 200.0.0.2/24 --netns svm21 --if2vpn x2 \
+	--lb-consistent-hash-order 1
+
+r_a bagpipe-looking-glass vpns instances
+r_b bagpipe-looking-glass vpns instances
+
+r_both bagpipe-looking-glass logs
+
+clean_stop
+
