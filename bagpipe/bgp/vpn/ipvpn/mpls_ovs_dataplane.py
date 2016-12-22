@@ -754,8 +754,13 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         else:
             self._lb_endpoints[prefix] = list()
 
-        self._lb_endpoints[prefix].insert(lb_consistent_hash_order,
-                                          lb_endpoint_info)
+        self._lb_endpoints[prefix].append(lb_endpoint_info)
+
+        if len(self._lb_endpoints[prefix]) > 1:
+            self._lb_endpoints[prefix] = sorted(
+                self._lb_endpoints[prefix],
+                key=lambda endpoint: endpoint['lb_consistent_hash_order']
+            )
 
         lb_flows.append(self._get_lb_multipath_flow_mod(prefix, nw_dst_match))
 
