@@ -70,15 +70,15 @@ def setup_config():
 def daemon_main():
     setup_config()
 
-    if not os.path.isfile(cfg.CONF.CLI.log_file):
+    if not os.path.isfile(cfg.CONF.log_file):
         logging.basicConfig()
-        print "no logging config file at %s" % cfg.CONF.CLI.log_file
-        logging.warning("no logging config file at %s", cfg.CONF.CLI.log_file)
+        print "no logging config file at %s" % cfg.CONF.log_file
+        logging.warning("no logging config file at %s", cfg.CONF.log_file)
     else:
-        logging.config.fileConfig(cfg.CONF.CLI.log_file,
+        logging.config.fileConfig(cfg.CONF.log_file,
                                   disable_existing_loggers=False)
 
-    if cfg.CONF.CLI.action == "start":
+    if cfg.CONF.action == "start":
         logging.root.name = "Main"
         logging.info("Starting...")
     else:  # stop
@@ -90,7 +90,7 @@ def daemon_main():
     daemon = BgpDaemon()
 
     try:
-        if not cfg.CONF.CLI.no_daemon:
+        if not cfg.CONF.no_daemon:
             daemon_runner = runner.DaemonRunner(daemon)
             # This ensures that the logger file handler does not get closed
             # during daemonization
@@ -113,11 +113,11 @@ def daemon_main():
 def cleanup_main():
     setup_config()
 
-    if not os.path.isfile(cfg.CONF.CLI.log_file):
-        print "no logging configuration file at %s" % cfg.CONF.CLI.log_file
+    if not os.path.isfile(cfg.CONF.log_file):
+        print "no logging configuration file at %s" % cfg.CONF.log_file
         logging.basicConfig()
     else:
-        logging.config.fileConfig(cfg.CONF.CLI.log_file,
+        logging.config.fileConfig(cfg.CONF.log_file,
                                   disable_existing_loggers=False)
         logging.root.name = "[BgpDataplaneCleaner]"
 

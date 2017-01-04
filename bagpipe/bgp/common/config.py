@@ -28,7 +28,7 @@ cli_opts = [
                )
 ]
 
-cfg.CONF.register_cli_opts(cli_opts, group='CLI')
+cfg.CONF.register_cli_opts(cli_opts)
 
 bgp_opts = [
     cfg.IPOpt('local_address', required=True,
