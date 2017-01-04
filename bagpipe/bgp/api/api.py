@@ -58,6 +58,10 @@ class PecanAPI(object):
     def run(self):
         self.wsgi.serve_forever()
 
+    def stop(self):
+        # call stop on RootController
+        self.wsgi.get_app().application.root.stop()
+
 
 def main():
     api = PecanAPI()

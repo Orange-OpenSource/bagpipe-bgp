@@ -52,6 +52,10 @@ class VPNManagerController(object):
     def __init__(self):
         self.manager = vpn_manager.VPNManager.get_instance()
 
+    @staticmethod
+    def stop():
+        vpn_manager.VPNManager.get_instance().stop()
+
 
 def check_attach_parameters(params, attach):
     log.debug("checking params: %s", params)
@@ -299,6 +303,9 @@ class RootController(object):
     ping = PingController()
     attach_localport = AttachController()
     detach_localport = DetachController()
+
+    def stop(self):
+        VPNManagerController.stop()
 
 # there is a '-' in the LOOKING_GLASS_BASE name, so we have to use pecan.route
 pecan.route(RootController, LOOKING_GLASS_BASE, LookingGlassController())

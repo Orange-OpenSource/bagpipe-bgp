@@ -439,6 +439,7 @@ class VPNManager(lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def stop(self):
+        self.bgp_manager.stop()
         for vpn_instance in self.vpn_instances.itervalues():
             vpn_instance.stop()
             # Cleanup veth pair

@@ -33,30 +33,26 @@ from bagpipe.bgp.common import config  # flake8: noqa
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
 
-from bagpipe.bgp.vpn import manager
 from bagpipe.bgp.vpn import dataplane_drivers as drivers
 
 
 class BgpDaemon(lg.LookingGlassMixin):
 
-    def __init__(self, catchall_lg_log_handler):
+    def __init__(self):
         self.stdin_path = '/dev/null'
         self.stdout_path = '/dev/null'
         self.stderr_path = '/dev/null'
         self.pidfile_path = '/var/run/bagpipe-bgp/bagpipe-bgp.pid'
         self.pidfile_timeout = 5
 
-        self.catchall_lg_log_handler = catchall_lg_log_handler
-
     def run(self):
         logging.info("Starting bagpipe-bgp...")
-        pecan_api = api.PecanAPI()
-        pecan_api.run()
+        self.pecan_api = api.PecanAPI()
+        self.pecan_api.run()
 
     def stop(self, signum, _):
         logging.info("Received signal %d, stopping...", signum)
-        self.manager.stop()
-        self.bgp_manager.stop()
+        self.pecan_api.stop()
         logging.info("All threads now stopped...")
         exception = SystemExit("Terminated on signal %d" % signum)
         raise exception
@@ -89,22 +85,9 @@ def daemon_main():
         logging.root.name = "Stopper"
         logging.info("Signal daemon to stop")
 
-    catchall_log_handler = lg.LookingGlassLogHandler()
-
-    # we inject this catch all log handler in all configured loggers
-    for (logger_name, logger) in logging.Logger.manager.loggerDict.iteritems():
-        if isinstance(logger, logging.Logger):
-            if not logger.propagate and logger.parent is not None:
-                logging.debug("Adding looking glass log handler to logger: %s",
-                              logger_name)
-                logger.addHandler(catchall_log_handler)
-    logging.root.addHandler(catchall_log_handler)
-
-    # logging_tree.printout()
-
     setup_exabgp_env()
 
-    daemon = BgpDaemon(catchall_log_handler)
+    daemon = BgpDaemon()
 
     try:
         if not cfg.CONF.CLI.no_daemon:
