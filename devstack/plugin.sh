@@ -4,6 +4,23 @@
 _XTRACE_BAGPIPE_BGP=$(set +o | grep xtrace)
 set +o xtrace
 
+# Pre-install gobgp requirements
+function pre_install_gobgp {
+        # Install go language and configure environment variables
+        install_package golang-go
+
+        if [[ ! -d $GO_DIR ]]; then
+                mkdir -p $GO_DIR
+        fi
+}
+
+# Install gobgp
+function install_gobgp {
+        # Install gobgp
+        go get $GOBGP_REPO/gobgpd
+        go get $GOBGP_REPO/gobgp
+}
+
 # Set config files, create data dirs, etc
 function configure_bagpipe {
 	# Put config files in ``/etc/bagpipe-bgp`` for everyone to find
@@ -165,11 +182,21 @@ function cleanup_bagpipe {
 if [[ "$1" == "source" ]]; then
 		# no-op
 		:
+elif [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
+		if is_service_enabled gobgp ; then
+			echo_summary "Installing golang package"
+			pre_install_gobgp
+		fi
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
 		echo_summary "Installing Bagpipe"
 		#FIXME: there must be a better way...
 		grep -iv pbr $BAGPIPE_DIR/requirements.txt >> $DEST/requirements/global-requirements.txt
 		setup_develop $BAGPIPE_DIR
+
+		if is_service_enabled gobgp ; then
+			echo_summary "Installing GoBGP"
+			install_gobgp
+		fi
 elif [[ "$1" == "stack" && "$2" == "post-config" ]]; then
 		echo_summary "Configuring Bagpipe"
 		configure_bagpipe

@@ -17,3 +17,6 @@ BAGPIPE_INTERNAL_PORT=bagpipe
 
 BAGPIPE_BR_RESET_SCRIPT=$BAGPIPE_DIR/bagpipe-bridge-reset.sourceme
 
+GO_DIR=/opt/stack/go
+
+GOBGP_REPO=github.com/osrg/gobgp
