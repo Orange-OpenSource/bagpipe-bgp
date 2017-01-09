@@ -153,7 +153,7 @@ dataplane drivers for IP VPNs:
 * the ``linux`` driver relies on the native MPLS stack of the Linux kernel,
   it currenly requires a kernel 4.4+ and uses the pyroute2 module that allows
   defining all states via Netlink rather than by executing 'ip' commands
-  (details in [mpls\_linux\_dataplane.py](bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L354))
+  (details in `mpls\_linux\_dataplane.py <bagpipe/bgp/vpn/ipvpn/mpls_linux_dataplane.py#L354>`__)
 
 For E-VPN, the ``vxlan`` driver is supported without any particular additional
 configuration being required, and simply requires a Linux kernel >=3.10
