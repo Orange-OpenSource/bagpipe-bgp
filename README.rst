@@ -108,7 +108,7 @@ configuration.
 
 It needs to be customized, at least for the following:
 
-*  ``local\_address``: the local address to use for BGP sessions and traffic
+*  ``local_address``: the local address to use for BGP sessions and traffic
    encapsulation
 *  ``peers``: the list of BGP peers, it depends on the BGP setup that you
    have chosen (see above `BGP Route Reflection <#bgprr>`__)
