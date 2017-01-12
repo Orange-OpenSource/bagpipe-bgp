@@ -16,7 +16,7 @@
 # limitations under the License.
 import time
 
-import logging
+from oslo_log import log as logging
 
 from bagpipe.bgp.engine import RouteEvent, RouteEntry
 
@@ -84,7 +84,7 @@ logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s %(threadName)-30s %(name)-30s "
                     "%(levelname)-8s %(message)s")
 
-log = logging.getLogger()
+LOG = logging.getLogger()
 
 
 class BaseTestBagPipeBGP():
@@ -112,7 +112,7 @@ class BaseTestBagPipeBGP():
 
         self.event_target_worker.enqueue(route_event)
 
-        log.info("*** Emitting event to %s: %s",
+        LOG.info("*** Emitting event to %s: %s",
                  self.event_target_worker, route_event)
 
         self._wait()
@@ -138,7 +138,7 @@ class BaseTestBagPipeBGP():
 
         self.event_target_worker.enqueue(flow_event)
 
-        log.info("*** Emitting FlowSpec event to %s: %s",
+        LOG.info("*** Emitting FlowSpec event to %s: %s",
                  self.event_target_worker, flow_event)
 
         self._wait()
@@ -155,7 +155,7 @@ class BaseTestBagPipeBGP():
 
         self.event_target_worker.enqueue(route_event)
 
-        log.info("*** Emitting event to %s: %s",
+        LOG.info("*** Emitting event to %s: %s",
                  self.event_target_worker, route_event)
 
         self._wait()
@@ -164,5 +164,5 @@ class BaseTestBagPipeBGP():
         time.sleep(WAIT_TIME)
 
     def _append_call(self, obj):
-        log.info("****** %s ******", obj)
+        LOG.info("****** %s ******", obj)
         self._calls.append(obj)

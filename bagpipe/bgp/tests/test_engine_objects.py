@@ -25,7 +25,7 @@ Also validates that ExaBGP classes behave as expected by the code in
 bagpipe.bgp.engine.__init__ .
 
 """
-import logging
+from oslo_log import log as logging
 
 from testtools import TestCase
 
@@ -55,7 +55,7 @@ from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
 
 from exabgp.protocol.ip import IP
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 TEST_RD = RouteDistinguisher.fromElements("42.42.42.42", 5)

@@ -15,9 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+from oslo_log import log as logging
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 def get_device_mac(run_command_fn, dev_name, netns_name=None):

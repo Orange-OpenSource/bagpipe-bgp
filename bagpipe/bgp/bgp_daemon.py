@@ -15,12 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os.path
 import sys
 import signal
 
-import logging
-import logging.config
+from oslo_log import log as logging
 
 from oslo_config import cfg
 
@@ -35,6 +33,12 @@ from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
 
 from bagpipe.bgp.vpn import dataplane_drivers as drivers
 
+import logging as python_logging
+
+LOG = logging.getLogger(__name__)
+
+BACKWARD_COMPAT_LOG_PATH = "/var/log/bagpipe-bgp/bagpipe-bgp.log"
+
 
 class BgpDaemon(lg.LookingGlassMixin):
 
@@ -46,16 +50,15 @@ class BgpDaemon(lg.LookingGlassMixin):
         self.pidfile_timeout = 5
 
     def run(self):
-        logging.info("Starting bagpipe-bgp...")
+        LOG.info("Starting bagpipe-bgp...")
         self.pecan_api = api.PecanAPI()
         self.pecan_api.run()
 
     def stop(self, signum, _):
-        logging.info("Received signal %d, stopping...", signum)
+        LOG.info("Received signal %d, stopping...", signum)
         self.pecan_api.stop()
-        logging.info("All threads now stopped...")
-        exception = SystemExit("Terminated on signal %d" % signum)
-        raise exception
+        LOG.info("All threads now stopped...")
+        raise SystemExit("Terminated on signal %d" % signum)
 
 
 def setup_config():
@@ -67,26 +70,50 @@ def setup_config():
                       .release_string()))
 
 
+def setup_logging():
+    # even in debug mode we don't want to much talk from these
+    extra_log_level_defaults = [
+        'bagpipe.bpg.engine.exa_bgp_peer_worker.exabgp=INFO',
+        'bagpipe.bpg.common.looking_glass=WARNING'
+    ]
+
+    logging.set_defaults(default_log_levels=(logging.get_default_log_levels() +
+                                             extra_log_level_defaults))
+
+    logging.setup(cfg.CONF, "bagpipe-bpg")
+
+
+def fix_log_file():
+    # required to transition from past bagpipe-bgp version which were
+    # using --log-file to specify the location of a file to configure logging
+    if not cfg.CONF.ack_oslo_log:
+        if (not cfg.CONF.log_file or
+                cfg.CONF.log_file == '/etc/bagpipe-bgp/log.conf'):
+            if not cfg.CONF.no_daemon:
+                LOG.warning("now using oslo_log, will use %s as log file, "
+                            "use --ack-oslo-log --log-file <path> to "
+                            "specify another path" % BACKWARD_COMPAT_LOG_PATH)
+                cfg.CONF.log_file = BACKWARD_COMPAT_LOG_PATH
+        else:
+            LOG.warning("now using oslo_log, will ignore --log-file option "
+                        "unless you also set --ack-oslo-log, in which case "
+                        "--log-file will specify a log file location" %
+                        cfg.CONF.log_file)
+            cfg.CONF.log_file = None
+
+
 def daemon_main():
+    logging.register_options(cfg.CONF)
+
     setup_config()
 
-    if not os.path.isfile(cfg.CONF.log_file):
-        logging.basicConfig()
-        print "no logging config file at %s" % cfg.CONF.log_file
-        logging.warning("no logging config file at %s", cfg.CONF.log_file)
-    else:
-        logging.config.fileConfig(cfg.CONF.log_file,
-                                  disable_existing_loggers=False)
+    fix_log_file()
 
-    if cfg.CONF.action == "start":
-        logging.root.name = "Main"
-        logging.info("Starting...")
-    else:  # stop
-        logging.root.name = "Stopper"
-        logging.info("Signal daemon to stop")
+    setup_logging()
 
     setup_exabgp_env()
 
+    sys.argv[1:] = [cfg.CONF.action]
     daemon = BgpDaemon()
 
     try:
@@ -95,7 +122,7 @@ def daemon_main():
             # This ensures that the logger file handler does not get closed
             # during daemonization
             daemon_runner.daemon_context.files_preserve = [
-                logging.getLogger().handlers[0].stream]
+                python_logging.getLogger().handlers[0].stream]
             daemon_runner.daemon_context.signal_map = {
                 signal.SIGTERM: daemon.stop
             }
@@ -103,30 +130,31 @@ def daemon_main():
         else:
             signal.signal(signal.SIGTERM, daemon.stop)
             signal.signal(signal.SIGINT, daemon.stop)
-            daemon.run()
+            if cfg.CONF.action == "stop":
+                LOG.error("Can't use 'stop' with --no-daemon")
+            else:
+                daemon.run()
     except Exception as e:
-        logging.exception("Error while starting BGP daemon: %s", e)
-
-    logging.info("BGP component main thread stopped.")
+        LOG.exception("Error while starting BGP daemon: %s", e)
 
 
 def cleanup_main():
+    logging.register_options(cfg.CONF)
+
     setup_config()
 
-    if not os.path.isfile(cfg.CONF.log_file):
-        print "no logging configuration file at %s" % cfg.CONF.log_file
-        logging.basicConfig()
-    else:
-        logging.config.fileConfig(cfg.CONF.log_file,
-                                  disable_existing_loggers=False)
-        logging.root.name = "[BgpDataplaneCleaner]"
+    fix_log_file()
+
+    setup_logging()
+
+    python_logging.root.name = "[BgpDataplaneCleaner]"
 
     for vpn_type, dataplane_driver in (
             drivers.instantiate_dataplane_drivers().iteritems()):
-        logging.info("Cleaning dataplane for %s...", vpn_type)
+        LOG.info("Cleaning dataplane for %s...", vpn_type)
         dataplane_driver.reset_state()
 
-    logging.info("BGP component dataplanes have been cleaned up.")
+    LOG.info("BGP component dataplanes have been cleaned up.")
 
 if __name__ == '__main__':
     daemon_main()

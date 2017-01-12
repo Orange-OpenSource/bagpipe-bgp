@@ -57,7 +57,7 @@ from bagpipe.bgp.engine.tracker_worker import TrackerWorker
 
 from exabgp.bgp.message.update.attribute.attribute import Attribute
 
-import logging
+from oslo_log import log as logging
 
 log = logging.getLogger()
 

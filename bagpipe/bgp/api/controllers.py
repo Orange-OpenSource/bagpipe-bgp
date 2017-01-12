@@ -15,9 +15,10 @@ from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.vpn import manager as vpn_manager
 
-import logging
-log = logging.getLogger(__name__)
+from oslo_log import log as logging
+import logging as python_logging
 
+LOG = logging.getLogger(__name__)
 
 LOOKING_GLASS_BASE = "looking-glass"
 
@@ -58,7 +59,7 @@ class VPNManagerController(object):
 
 
 def check_attach_parameters(params, attach):
-    log.debug("checking params: %s", params)
+    LOG.debug("checking params: %s", params)
     paramList = ('vpn_instance_id', 'mac_address', 'ip_address',
                  'local_port')
     if attach:
@@ -66,14 +67,14 @@ def check_attach_parameters(params, attach):
 
     for paramName in paramList:
         if paramName not in params:
-            log.warning("Mandatory parameter '%s' is missing", paramName)
+            LOG.warning("Mandatory parameter '%s' is missing", paramName)
             pecan.abort(400,
                         "Mandatory parameter '%s' is missing" % paramName)
 
     # if local_port is not a dict, then assume it designates a linux
     # interface
-    if (isinstance(params['local_port'], str)
-            or isinstance(params['local_port'], unicode)):
+    if (isinstance(params['local_port'], str) or
+            isinstance(params['local_port'], unicode)):
         params['local_port'] = {'linuxif': params['local_port']}
 
     # if import_rt or export_rt are strings, convert them into lists
@@ -113,13 +114,13 @@ class AttachController(VPNManagerController):
         try:
             attach_params = request.json
         except Exception:
-            log.error('attach_localport: No local port details received')
+            LOG.error('attach_localport: No local port details received')
             pecan.abort(400, 'No local port details received')
 
         attach_params = check_attach_parameters(attach_params, True)
 
         try:
-            log.debug('Local port attach received: %s', attach_params)
+            LOG.debug('Local port attach received: %s', attach_params)
 
             self.manager.plug_vif_to_vpn(
                 attach_params['vpn_instance_id'],
@@ -138,12 +139,12 @@ class AttachController(VPNManagerController):
                 attach_params.get('fallback'),
             )
         except exc.APIException as e:
-            log.warning('attach_localport: API parameter error: %s', e)
+            LOG.warning('attach_localport: API parameter error: %s', e)
             pecan.abort(400, "API parameter error: %s" % e)
         except Exception as e:
-            log.error('attach_localport: An error occurred during local port'
+            LOG.error('attach_localport: An error occurred during local port'
                       ' plug to VPN: %s', e)
-            log.info(traceback.format_exc())
+            LOG.info(traceback.format_exc())
             pecan.abort(500, 'An error occurred during local port plug to VPN')
 
 
@@ -163,13 +164,13 @@ class DetachController(VPNManagerController):
         try:
             detach_params = request.json
         except Exception:
-            log.error('detach_localport: No local port details received')
+            LOG.error('detach_localport: No local port details received')
             pecan.abort(400, 'No local port details received')
 
         detach_params = check_attach_parameters(detach_params, attach=False)
 
         try:
-            log.debug('Local port detach received: %s', detach_params)
+            LOG.debug('Local port detach received: %s', detach_params)
             self.manager.unplug_vif_from_vpn(
                 detach_params['vpn_instance_id'],
                 detach_params['mac_address'],
@@ -178,12 +179,12 @@ class DetachController(VPNManagerController):
                 detach_params.get('advertise_subnet', False)
             )
         except exc.APIException as e:
-            log.warning('detach_localport: API parameter error: %s', e)
+            LOG.warning('detach_localport: API parameter error: %s', e)
             pecan.abort(400, "API parameter error: %s" % e)
         except Exception as e:
-            log.error('detach_localport: An error occurred during local port'
+            LOG.error('detach_localport: An error occurred during local port'
                       ' unplug from VPN: %s', e)
-            log.info(traceback.format_exc())
+            LOG.info(traceback.format_exc())
             pecan.abort(500, 'An error occurred during local port unplug from '
                         'VPN')
 
@@ -205,13 +206,13 @@ class LookingGlassController(VPNManagerController,
         self.catchall_lg_log_handler = lg.LookingGlassLogHandler()
 
         for (logger_name, logger) in (
-                logging.Logger.manager.loggerDict.iteritems()):
-            if isinstance(logger, logging.Logger):
+                python_logging.Logger.manager.loggerDict.iteritems()):
+            if isinstance(logger, python_logging.Logger):
                 if not logger.propagate and logger.parent is not None:
-                    logging.debug("Adding looking glass log handler to "
-                                  "logger: %s", logger_name)
+                    LOG.debug("Adding looking glass log handler to "
+                              "logger: %s", logger_name)
                     logger.addHandler(self.catchall_lg_log_handler)
-        logging.root.addHandler(self.catchall_lg_log_handler)
+        python_logging.root.addHandler(self.catchall_lg_log_handler)
 
     @expose(generic=True)
     def index(self):
@@ -234,11 +235,11 @@ class LookingGlassController(VPNManagerController,
                                                   url_path_elements[0])
             return lg_info
         except lg.NoSuchLookingGlassObject as e:
-            log.info('looking_glass: %s', repr(e))
+            LOG.info('looking_glass: %s', repr(e))
             pecan.abort(404, repr(e))
         except Exception as e:
-            log.error('looking_glass: An error occurred: %s', e)
-            log.error(traceback.format_exc())
+            LOG.error('looking_glass: An error occurred: %s', e)
+            LOG.error(traceback.format_exc())
             pecan.abort(500, 'Server error')
 
     @when(index, method='DELETE')
@@ -259,7 +260,11 @@ class LookingGlassController(VPNManagerController,
         }
 
     def get_lg_config(self, path_prefix):
-        return utils.osloconfig_json_serialize(cfg.CONF)
+        return {section: utils.osloconfig_json_serialize(cfg.CONF[section])
+                for section in ('COMMON', 'API', 'BGP',
+                                'DATAPLANE_DRIVER_IPVPN',
+                                'DATAPLANE_DRIVER_EVPN')
+                }
 
     def get_lg_summary(self):
         return {

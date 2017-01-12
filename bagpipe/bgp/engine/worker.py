@@ -16,7 +16,7 @@
 # limitations under the License.
 
 
-import logging
+from oslo_log import log as logging
 
 import traceback
 
@@ -31,7 +31,7 @@ from bagpipe.bgp.engine import WorkerCleanupEvent
 
 from bagpipe.bgp.common import looking_glass as lg
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 STOP_EVENT = "STOP_EVENT"
 
@@ -62,7 +62,7 @@ class Worker(EventSource, lg.LookingGlassMixin):
         # private data for RouteTableManager
         self._rtm_matches = set()
 
-        log.debug("Instantiated %s worker", self.name)
+        LOG.debug("Instantiated %s worker", self.name)
 
     def stop(self):
         """
@@ -72,7 +72,7 @@ class Worker(EventSource, lg.LookingGlassMixin):
         and indicate to the route table manager that this worker is stopped.
         Then call _stopped() to let a subclass implement any further work.
         """
-        log.info("Stop worker %s", self)
+        LOG.info("Stop worker %s", self)
         self._please_stop.set()
         self.enqueue(STOP_EVENT)
         self._cleanup()
@@ -92,20 +92,20 @@ class Worker(EventSource, lg.LookingGlassMixin):
         Main loop where the worker consumes events.
         """
         while not self._please_stop.isSet():
-            # log.debug("%s worker waiting on queue",self.name )
+            # LOG.debug("%s worker waiting on queue",self.name )
             event = self._dequeue()
 
             if event == STOP_EVENT:
-                log.debug("Stop event, breaking queue processor loop")
+                LOG.debug("Stop event, breaking queue processor loop")
                 self._please_stop.set()
                 break
 
-            # log.debug("%s worker calling _on_event for %s", self.name, event)
+            # LOG.debug("%s worker calling _on_event for %s", self.name, event)
             try:
                 self._on_event(event)
             except Exception as e:
-                log.error("Exception raised on subclass._on_event: %s", e)
-                log.error("%s", traceback.format_exc())
+                LOG.error("Exception raised on subclass._on_event: %s", e)
+                LOG.error("%s", traceback.format_exc())
 
     def run(self):
         self._event_queue_processor_loop()
@@ -114,7 +114,7 @@ class Worker(EventSource, lg.LookingGlassMixin):
         """
         This method is implemented by subclasses to react to routing events.
         """
-        log.debug("Worker %s _on_event: %s", self.name, event)
+        LOG.debug("Worker %s _on_event: %s", self.name, event)
         raise NotImplementedError
 
     def _dequeue(self):
@@ -127,12 +127,12 @@ class Worker(EventSource, lg.LookingGlassMixin):
 
     def _subscribe(self, afi, safi, rt=None):
         subobj = Subscription(afi, safi, rt, self)
-        log.info("Subscribe: %s ", subobj)
+        LOG.info("Subscribe: %s ", subobj)
         self.rtm.enqueue(subobj)
 
     def _unsubscribe(self, afi, safi, rt=None):
         subobj = Unsubscription(afi, safi, rt, self)
-        log.info("Unsubscribe: %s ", subobj)
+        LOG.info("Unsubscribe: %s ", subobj)
         self.rtm.enqueue(subobj)
 
     def get_subscriptions(self):

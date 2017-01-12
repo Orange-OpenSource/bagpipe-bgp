@@ -35,8 +35,8 @@ from bagpipe.bgp.common import utils
 from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
     import Encapsulation
 
-import logging
-log = logging.getLogger(__name__)
+from oslo_log import log as logging
+LOG = logging.getLogger(__name__)
 
 # NOTE(tmorin): have dataplane_local_address default to
 #               cfg.CONF.BGP.local_address does not work (import order issue)
@@ -66,10 +66,10 @@ DATAPLANE_DRIVER_ENTRY_POINT_PFX = "bagpipe.dataplane"
 
 
 def instantiate_dataplane_drivers():
-    log.debug("Building dataplane drivers...")
+    LOG.debug("Building dataplane drivers...")
 
     if 'DATAPLANE_DRIVER' in cfg.CONF:
-        log.warning("Config file is obsolete, should have a "
+        LOG.warning("Config file is obsolete, should have a "
                     "DATAPLANE_DRIVER_IPVPN section instead of"
                     " DATAPLANE_DRIVER")
 
@@ -78,7 +78,7 @@ def instantiate_dataplane_drivers():
         dp_config = cfg.CONF.get(constants.config_group(vpn_type))
 
         driver_name = dp_config.dataplane_driver
-        log.debug("Instantiating dataplane driver for %s, with %s",
+        LOG.debug("Instantiating dataplane driver for %s, with %s",
                   vpn_type, driver_name)
         try:
             driver_class = stevedore.driver.DriverManager(
@@ -89,9 +89,9 @@ def instantiate_dataplane_drivers():
 
             drivers[vpn_type] = driver_class()
         except Exception as e:
-            log.error("Error while instantiating dataplane"
+            LOG.error("Error while instantiating dataplane"
                       " driver for %s with %s: %s", vpn_type, driver_class, e)
-            log.error(traceback.format_exc())
+            LOG.error(traceback.format_exc())
             raise
 
     return drivers

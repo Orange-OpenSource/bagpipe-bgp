@@ -21,7 +21,7 @@ import types
 
 import traceback
 
-import logging
+from oslo_log import log as logging
 
 import socket
 

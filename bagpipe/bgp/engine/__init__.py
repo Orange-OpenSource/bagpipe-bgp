@@ -36,7 +36,7 @@ route table manager (singleton)
 
 import types
 
-import logging
+from oslo_log import log as logging
 
 from bagpipe.bgp.common import looking_glass as lg
 
@@ -53,7 +53,7 @@ from exabgp.bgp.message import OUT
 
 from exabgp.reactor.protocol import AFI, SAFI
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class RouteEntry(lg.LookingGlassMixin):
@@ -329,12 +329,12 @@ class EventSource(lg.LookingGlassMixin):
 
     @log_decorator.log_info
     def _advertise_route(self, route_entry):
-        log.debug("Publish advertise route event")
+        LOG.debug("Publish advertise route event")
         self.rtm.enqueue(RouteEvent(RouteEvent.ADVERTISE, route_entry, self))
 
     @log_decorator.log_info
     def _withdraw_route(self, route_entry):
-        log.debug("Publish withdraw route event")
+        LOG.debug("Publish withdraw route event")
         self.rtm.enqueue(RouteEvent(RouteEvent.WITHDRAW, route_entry, self))
 
     def get_lg_map(self):

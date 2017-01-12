@@ -58,7 +58,7 @@
 
 """
 
-import logging
+from oslo_log import log as logging
 
 import mock
 

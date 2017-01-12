@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
+from oslo_log import log as logging
 
 import socket
 from socket import inet_pton
@@ -50,7 +50,7 @@ from exabgp.bgp.message.update.nlri import flow
 from exabgp.protocol import Protocol
 
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class TrafficClassifier(object):
@@ -131,7 +131,7 @@ class TrafficClassifier(object):
 
     @log_decorator.log
     def _construct_port_rules(self, port_range, flow_object):
-        log.info("Construct port rules with %s (type %s) on %s object",
+        LOG.info("Construct port rules with %s (type %s) on %s object",
                  port_range, type(port_range), flow_object)
         port_rules = list()
 
@@ -713,7 +713,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             self.log.error("vif_unplugged called for endpoint {%s, %s}, but"
                            " port data is incomplete", mac_address,
                            ip_address_prefix)
-            raise Exception("BGP component bug, check its logs")
+            raise Exception("bagpipe-bgp bug, check its logs")
 
         self.log.info("localport_2_endpoints: %s", self.localport_2_endpoints)
         self.log.info("mac_2_localport_data: %s",
@@ -790,7 +790,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             self.log.error("stop_redirect_traffic called for redirect route "
                            "target %s and classifier %s, but doesn't exist",
                            redirect_rt, classifier)
-            raise Exception("BGP component bug, check its logs")
+            raise Exception("bagpipe-bgp bug, check its logs")
 
     def _check_encaps(self, route):
         '''

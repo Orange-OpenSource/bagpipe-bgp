@@ -18,11 +18,13 @@
 import select
 import time
 
+import six
+
 from collections import defaultdict
 
 import traceback
 
-import logging
+from oslo_log import log as logging
 
 from oslo_config import cfg
 
@@ -65,21 +67,63 @@ from exabgp.bgp.message import IN
 
 from exabgp.bgp.fsm import FSM as ExaFSM
 
-log = logging.getLogger(__name__)
+from exabgp import logger as exabgp_logger
+
+import logging as python_logging
+
+LOG = logging.getLogger(__name__)
 
 
 def setup_exabgp_env():
-    # initialize ExaBGP config
+    # initialize/tweak ExaBGP config and log internals
+
     from exabgp.configuration.setup import environment
     environment.application = 'bagpipe-bgp'
     env = environment.setup(None)
     # tell exabgp to parse routes:
     env.log.routes = True
-    # FIXME: find a way to redirect exabgp logs into bagpipe's
-    env.log.destination = "stderr"
-    if log.getEffectiveLevel():
+
+    # we "tweak" the internals of exabgp Logger, so that (a) it does not break
+    # oslo_log and (b) it logs through oslo_log
+    # decorating the original restart would be better...
+    exabgp_logger.Logger._restart = exabgp_logger.Logger.restart
+
+    def decorated_restart(f):
+        @six.wraps(f)
+        def restart_never_first(self, first):
+            # we don't want exabgp to really ever do its first restart stuff
+            # that resets the root logger handlers
+            return f(self, False)
+        return restart_never_first
+
+    exabgp_logger.Logger.restart = decorated_restart(
+        exabgp_logger.Logger.restart
+        )
+
+    exabgp_logger.Logger._syslog = logging.getLogger(__name__ +
+                                                     ".exabgp").logger
+
+    # prevent exabgp Logger code from adding or removing handlers from
+    # this logger
+    def noop(handler):
+        pass
+
+    exabgp_logger.Logger._syslog.addHandler = noop
+    exabgp_logger.Logger._syslog.removeHandler = noop
+
+    # no need to format all the information twice:
+    def patched_format(self, timestamp, level, source, message):
+        if self.short:
+            return message
+        return "%-13s %s" % (source, message)
+
+    exabgp_logger.Logger._format = patched_format
+
+    env.log.enable = True
+
+    if LOG.logger.getEffectiveLevel():
         env.log.level = environment.syslog_value(
-            logging.getLevelName(log.getEffectiveLevel())
+            python_logging.getLevelName(LOG.logger.getEffectiveLevel())
             )
     else:
         env.log.level = environment.syslog_value('INFO')

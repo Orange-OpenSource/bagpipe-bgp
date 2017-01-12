@@ -19,7 +19,7 @@
 from threading import Lock
 
 import re
-import logging
+from oslo_log import log as logging
 
 from bagpipe.bgp.constants import IPVPN
 from bagpipe.bgp.constants import EVPN
@@ -44,7 +44,7 @@ from exabgp.bgp.message.update.attribute.community.extended \
     import RouteTargetASN2Number as RouteTarget
 
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 def redirect_instance_extid(instance_type, rt):
@@ -84,7 +84,7 @@ class VPNManager(lg.LookingGlassMixin):
 
     @log_decorator.log
     def __init__(self):
-        log.debug("Instantiating VPN Manager...")
+        LOG.debug("Instantiating VPN Manager...")
 
         self.bgp_manager = bgp_manager.Manager.get_instance()
 
@@ -93,10 +93,10 @@ class VPNManager(lg.LookingGlassMixin):
         # VPN instance dict
         self.vpn_instances = {}
 
-        logging.debug("Creating label allocator")
+        LOG.debug("Creating label allocator")
         self.label_allocator = LabelAllocator()
 
-        logging.debug("Creating route distinguisher allocator")
+        LOG.debug("Creating route distinguisher allocator")
         self.rd_allocator = RDAllocator(self.bgp_manager.get_local_address())
 
         # dict containing info how an ipvpn is plugged
@@ -117,7 +117,7 @@ class VPNManager(lg.LookingGlassMixin):
             raise exc.MalformedIPAddress
 
     def _run_command(self, *args, **kwargs):
-        run_command(log, *args, run_as_root=True, **kwargs)
+        run_command(LOG, *args, run_as_root=True, **kwargs)
 
     @log_decorator.log_info
     def _attach_evpn_2_ipvpn(self, localport, ipvpn_instance):
@@ -157,7 +157,7 @@ class VPNManager(lg.LookingGlassMixin):
                                 'while one is already plugged in')
             else:
                 # do nothing
-                log.warning('Trying to plug an E-VPN into an IPVPN, but it was'
+                LOG.warning('Trying to plug an E-VPN into an IPVPN, but it was'
                             ' already done')
                 localport['linuxif'] = ipvpn_if
                 return
@@ -193,7 +193,7 @@ class VPNManager(lg.LookingGlassMixin):
                 ipvpn_instance.instance_id, evpn.instance_id)
 
             # FIXME: do it only if not existing already...
-            log.info("Creating veth pair %s %s ", evpn_if, ipvpn_if)
+            LOG.info("Creating veth pair %s %s ", evpn_if, ipvpn_if)
 
             # delete the interfaces if they exist already
             self._run_command("ip link delete %s" % evpn_if,
@@ -253,17 +253,17 @@ class VPNManager(lg.LookingGlassMixin):
         #   (unless create_if_none is False --> raise exc.VPNNotFound)
 
         if instance_type not in VPNManager.type2class:
-            log.error("Unsupported instance_type for VPNInstance: %s",
+            LOG.error("Unsupported instance_type for VPNInstance: %s",
                       instance_type)
             raise Exception("Unsupported vpn_instance type: %s" %
                             instance_type)
 
         if instance_type not in self.dataplane_drivers:
-            log.error("No dataplane driver for VPN type %s", instance_type)
+            LOG.error("No dataplane driver for VPN type %s", instance_type)
             raise Exception("No dataplane driver for VPN type %s" %
                             instance_type)
 
-        log.info("Finding %s for external vpn_instance identifier %s",
+        LOG.info("Finding %s for external vpn_instance identifier %s",
                  instance_type, external_instance_id)
 
         vpn_instance = self.vpn_instances.get(external_instance_id)
@@ -379,7 +379,7 @@ class VPNManager(lg.LookingGlassMixin):
         try:
             vpn_instance = self.vpn_instances[external_instance_id]
         except KeyError:
-            log.error("Try to unplug VIF from non existing VPN instance %s",
+            LOG.error("Try to unplug VIF from non existing VPN instance %s",
                       external_instance_id)
             raise exc.VPNNotFound(external_instance_id)
 
@@ -396,7 +396,7 @@ class VPNManager(lg.LookingGlassMixin):
                                  stop=False):
         external_instance_id = redirect_instance_extid(redirected_type,
                                                        redirect_rt)
-        log.info("Need VPN instance %s for traffic redirection to route "
+        LOG.info("Need VPN instance %s for traffic redirection to route "
                  "target %s", external_instance_id, redirect_rt)
 
         # Convert route target string to RouteTarget dictionary
@@ -413,7 +413,7 @@ class VPNManager(lg.LookingGlassMixin):
                                           create_if_none=(not stop))
         except exc.VPNNotFound:
             # (reached only in the 'stop' case)
-            log.error("Try to stop traffic redirection for an RT for which"
+            LOG.error("Try to stop traffic redirection for an RT for which"
                       " no VPN instance exists (%s)", external_instance_id)
             raise
 

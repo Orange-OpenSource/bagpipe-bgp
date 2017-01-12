@@ -36,7 +36,7 @@
 
 """
 
-import logging
+from oslo_log import log as logging
 
 from testtools import TestCase
 from mock import Mock

@@ -16,7 +16,7 @@
 # limitations under the License.
 
 
-import logging
+from oslo_log import log as logging
 
 from oslo_config import cfg
 
@@ -36,7 +36,7 @@ from exabgp.reactor.protocol import AFI, SAFI
 
 from exabgp.protocol.ip import IP
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 # SAFIs for which RFC4684 is effective
 RTC_SAFIS = (SAFI.mpls_vpn, SAFI.evpn)
@@ -48,7 +48,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
     def __init__(self):
 
-        log.debug("Instantiating BGPManager")
+        LOG.debug("Instantiating BGPManager")
 
         if cfg.CONF.BGP.enable_rtc:
             first_local_subscriber_callback = self.rtc_advertisement_for_sub
@@ -65,7 +65,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
         self.peers = {}
         if cfg.CONF.BGP.peers:
             for peer_address in cfg.CONF.BGP.peers:
-                log.debug("Creating a peer worker for %s", peer_address)
+                LOG.debug("Creating a peer worker for %s", peer_address)
                 peer_worker = ExaBGPPeerWorker(self, peer_address)
                 self.peers[peer_address] = peer_worker
                 peer_worker.start()
@@ -96,7 +96,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
             event = RouteEvent(RouteEvent.ADVERTISE,
                                self._subscription_2_rtc_route_entry(sub),
                                self)
-            log.debug("Based on subscription => synthesized RTC %s", event)
+            LOG.debug("Based on subscription => synthesized RTC %s", event)
             self.rtm.enqueue(event)
 
     @log_decorator.log
@@ -105,7 +105,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
             event = RouteEvent(RouteEvent.WITHDRAW,
                                self._subscription_2_rtc_route_entry(sub),
                                self)
-            log.debug("Based on unsubscription => synthesized withdraw"
+            LOG.debug("Based on unsubscription => synthesized withdraw"
                       " for RTC %s", event)
             self.rtm.enqueue(event)
 

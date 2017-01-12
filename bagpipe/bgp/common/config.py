@@ -20,9 +20,12 @@ from oslo_config import cfg
 
 cli_opts = [
     cfg.BoolOpt("no-daemon", default=False),
-    cfg.StrOpt("log-file",
-               help="Set logging configuration file path",
-               default="/etc/bagpipe-bgp/log.conf"),
+    # this is required because, pre-oslo-log bagpipe-bgp was using --log-file
+    # as the path to a configuration file to control logging:
+    cfg.BoolOpt("ack-oslo-log",
+                help=("oslo_log --log-file CLI parameter will "
+                      "be usable only if this is set"),
+                default=False),
     cfg.StrOpt("action", positional=True,
                choices=('start', 'stop')
                )

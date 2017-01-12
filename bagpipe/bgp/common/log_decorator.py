@@ -17,7 +17,7 @@
 
 import functools
 
-import logging
+from oslo_log import log as logging
 
 
 # inspired from neutron.log

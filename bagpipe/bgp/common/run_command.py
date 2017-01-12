@@ -21,7 +21,7 @@ import shlex
 import subprocess
 import threading
 
-import logging
+from oslo_log import log as logging
 
 from oslo_config import cfg
 from oslo_rootwrap import client

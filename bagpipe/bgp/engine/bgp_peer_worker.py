@@ -22,7 +22,7 @@ from threading import Thread, Event, Timer
 import random
 import time
 
-import logging
+from oslo_log import log as logging
 import traceback
 
 from bagpipe.bgp.engine.worker import Worker

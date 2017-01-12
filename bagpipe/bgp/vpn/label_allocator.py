@@ -16,7 +16,7 @@
 # limitations under the License.
 
 
-import logging
+from oslo_log import log as logging
 
 import random
 
@@ -25,7 +25,7 @@ from threading import Lock
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import looking_glass as lg
 
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 MAX_LABEL = 2**20-1
 
@@ -51,7 +51,7 @@ class LabelAllocator(lg.LookingGlassMixin):
 
         if self.current_label == MAX_LABEL+1:
             # Looking forward to the day will hit this one:
-            log.error("All the 2^20 possible labels have been used at least "
+            LOG.error("All the 2^20 possible labels have been used at least "
                       "once, and this piece of code doesn't know how to reuse "
                       "them")
             raise Exception("Out of labels")
@@ -60,16 +60,16 @@ class LabelAllocator(lg.LookingGlassMixin):
         self.current_label += 1
         self.labels[label] = description
 
-        log.debug("Allocated label %d for '%s'", label, description)
+        LOG.debug("Allocated label %d for '%s'", label, description)
         return label
 
     @utils.synchronized
     def release(self, label):
         if label in self.labels:
-            log.debug("released label %d ('%s')", label, self.labels[label])
+            LOG.debug("released label %d ('%s')", label, self.labels[label])
             del self.labels[label]
         else:
-            log.warn("asked to release a non registered label: %d", label)
+            LOG.warn("asked to release a non registered label: %d", label)
 
     def get_log_local_info(self, prefix):
         return self.labels
