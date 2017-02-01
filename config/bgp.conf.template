@@ -50,11 +50,9 @@ mpls_interface=*gre*
 #gre_tunnel=mpls_gre
 
 # Uncomment the following to allow the use of standard MPLS-o-GRE in OVS
-# (rather than MPLS-o-Eth-o-GRE). 
-# This currently requires a modified OVS, which can be found at: 
-#   https://github.com/tmmorin/openvswitch/tree/grempls
+# (rather than MPLS-o-Eth-o-GRE).
 #
-# gre_tunnel_options="options:l3port=true"
+# gre_tunnel_options="options:layer3=true"
 
 # Support VXLAN encapsulation of IP VPN traffic with the 
 # MPLSOVSDataplaneDriver.

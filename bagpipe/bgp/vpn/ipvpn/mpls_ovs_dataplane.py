@@ -1153,15 +1153,16 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
             self._ovs_flow_del('mpls', self.input_table)
             if self.vxlan_encap:
-                self._ovs_flow_del('in_port=%d' %
-                                   self.find_ovs_port(VXLAN_TUNNEL),
-                                   self.input_table)
+                try:
+                    self._ovs_flow_del('in_port=%d' %
+                                       self.find_ovs_port(VXLAN_TUNNEL),
+                                       self.input_table)
+                except:
+                    self.log.info("no VXLAN tunnel port, nothing to clean up")
                 # the above won't clean up flows if the vxlan_tunnel interface
                 # has changed...
-                self._ovs_flow_del('tun_id=2/1',
-                                   self.input_table)
-                self._ovs_flow_del('tun_id=1/1',
-                                   self.input_table)
+                self._ovs_flow_del('tun_id=2/1', self.input_table)
+                self._ovs_flow_del('tun_id=1/1', self.input_table)
 
             # clean input_table rule for plugged ports
             # NOTE(tmorin): would be cleaner using a cookie
