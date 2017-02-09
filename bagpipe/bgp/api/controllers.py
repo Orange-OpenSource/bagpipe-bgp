@@ -204,15 +204,7 @@ class LookingGlassController(VPNManagerController,
                               ["vpns", "dataplane", "drivers"])
 
         self.catchall_lg_log_handler = lg.LookingGlassLogHandler()
-
-        for (logger_name, logger) in (
-                python_logging.Logger.manager.loggerDict.iteritems()):
-            if isinstance(logger, python_logging.Logger):
-                if not logger.propagate and logger.parent is not None:
-                    LOG.debug("Adding looking glass log handler to "
-                              "logger: %s", logger_name)
-                    logger.addHandler(self.catchall_lg_log_handler)
-        python_logging.root.addHandler(self.catchall_lg_log_handler)
+        python_logging.getLogger().addHandler(self.catchall_lg_log_handler)
 
     @expose(generic=True)
     def index(self):
