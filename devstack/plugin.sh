@@ -46,9 +46,6 @@ function create_bagpipe_conf {
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN mpls_interface $BAGPIPE_MPLS_IFACE
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_IPVPN ovs_bridge $BAGPIPE_MPLS_BR
 	iniset $BAGPIPE_CONF DATAPLANE_DRIVER_EVPN dataplane_driver ${BAGPIPE_DATAPLANE_DRIVER_EVPN:-DummyDataplaneDriver}
-
-	# copy log config template
-	cp $BAGPIPE_DIR/config/log.conf.console-template $BAGPIPE_LOG_CONF
 }
 
 # Initialize databases, etc.
@@ -130,7 +127,7 @@ EOF
 # Start the BGP component
 function start_bagpipe_bgp {
 	if is_service_enabled b-bgp ; then
-		screen_it b-bgp "bagpipe-bgp start --no-daemon --log-file=$BAGPIPE_LOG_CONF"
+		screen_it b-bgp "bagpipe-bgp start --no-daemon"
 
 		echo "Waiting for bagpipe-bgp to start..."
 		if ! wait_for_service $SERVICE_TIMEOUT http://$BAGPIPE_SERVICE_HOST:$BAGPIPE_SERVICE_PORT; then
@@ -169,7 +166,7 @@ function stop_bagpipe {
 # clean run would need to clean up
 function cleanup_bagpipe {
 	if is_service_enabled b-bgp ; then
-		sudo bagpipe-bgp-cleanup --log-file=$BAGPIPE_LOG_CONF_CLEANUP
+		sudo bagpipe-bgp-cleanup
 
 		MPLS_IFACE_IP=`ip addr show $BAGPIPE_INTERNAL_PORT | grep 'inet ' | awk '{ print $2 }'`
 		GW_IP=`ip route  | grep default | awk '{ print $3 }'`

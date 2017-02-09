@@ -20,11 +20,6 @@ python setup.py install --install-data=/
 echo -e "\n*** Creating BaGPipe BGP service ***"
 update-rc.d bagpipe-bgp defaults 80
 
-logfile=/etc/bagpipe-bgp/log.conf
-if [ ! -f "$logfile" ]; then
-    cp /etc/bagpipe-bgp/log.conf.template $logfile
-fi
-
 confFile=/etc/bagpipe-bgp/bgp.conf
 oldConf=/etc/bagpipe-bgp/bgp_conf.ini
 if [ ! -f $confFile -a -f $oldConf ]; then

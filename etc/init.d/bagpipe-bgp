@@ -19,7 +19,7 @@ LOG_DIR=/var/log/bagpipe-bgp
 BGP_DAEMON=$(which bagpipe-bgp)
 BGP_DATAPLANE_CLEANUP=$(which bagpipe-bgp-cleanup)
 
-#OPTIONS="--config-file=/etc/bagpipe-bgp/conf_alt.conf --log-file=/etc/bagpipe-bgp/debug_log.conf"
+#OPTIONS="--config-file=/etc/bagpipe-bgp/conf_alt.conf"
 
 mkdir -p "$PID_DIR"
 
