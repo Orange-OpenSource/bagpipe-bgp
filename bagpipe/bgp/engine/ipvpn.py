@@ -15,25 +15,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from exabgp.bgp.message.update.nlri.ipvpn import IPVPN as IPVPNNlri
-from exabgp.bgp.message.update.nlri.nlri import NLRI
-
-from exabgp.reactor.protocol import AFI
-from exabgp.reactor.protocol import SAFI
-
-from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
-
-from exabgp.protocol.ip import IP
+from bagpipe.bgp.engine import exa
 
 
 def prefix_to_packed_ip_mask(prefix):
     ip_string, mask = prefix.split("/")
-    return (IP.pton(ip_string), int(mask))
+    return (exa.IP.pton(ip_string), int(mask))
 
 
-@NLRI.register(AFI.ipv4, SAFI.mpls_vpn, force=True)
-@NLRI.register(AFI.ipv6, SAFI.mpls_vpn, force=True)
-class IPVPN(IPVPNNlri):
+@exa.NLRI.register(exa.AFI.ipv4, exa.SAFI.mpls_vpn, force=True)
+@exa.NLRI.register(exa.AFI.ipv6, exa.SAFI.mpls_vpn, force=True)
+class IPVPN(exa.IPVPN):
     # two NLRIs with same RD and prefix, but different labels need to
     # be equal and have the same hash
 
@@ -47,5 +39,5 @@ class IPVPN(IPVPNNlri):
 def IPVPNRouteFactory(afi, prefix, label, rd, nexthop):
     packed_prefix, mask = prefix_to_packed_ip_mask(prefix)
 
-    return IPVPN.new(afi, SAFI(SAFI.mpls_vpn), packed_prefix, mask,
-                     Labels([label], True), rd, nexthop)
+    return IPVPN.new(afi, exa.SAFI(exa.SAFI.mpls_vpn), packed_prefix, mask,
+                     exa.Labels([label], True), rd, nexthop)

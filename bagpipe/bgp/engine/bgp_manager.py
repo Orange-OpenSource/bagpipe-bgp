@@ -15,34 +15,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+from oslo_config import cfg
 from oslo_log import log as logging
 
-from oslo_config import cfg
-
-from bagpipe.bgp.engine.route_table_manager import RouteTableManager
-from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.exabgp_peer_worker import ExaBGPPeerWorker
-from bagpipe.bgp.engine import RouteEvent
-from bagpipe.bgp.engine import RouteEntry
-from bagpipe.bgp.engine import EventSource
+from bagpipe.bgp.engine import route_table_manager as rtm
+from bagpipe.bgp.engine import bgp_peer_worker
+from bagpipe.bgp.engine import exabgp_peer_worker
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exa
 
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import utils
 
-from exabgp.bgp.message.update.nlri.rtc import RTC
-from exabgp.reactor.protocol import AFI, SAFI
-
-from exabgp.protocol.ip import IP
 
 LOG = logging.getLogger(__name__)
 
 # SAFIs for which RFC4684 is effective
-RTC_SAFIS = (SAFI.mpls_vpn, SAFI.evpn)
+RTC_SAFIS = (exa.SAFI.mpls_vpn, exa.SAFI.evpn)
 
 
-class Manager(EventSource, lg.LookingGlassMixin):
+class Manager(engine.EventSource, lg.LookingGlassMixin):
 
     _instance = None
 
@@ -57,8 +50,8 @@ class Manager(EventSource, lg.LookingGlassMixin):
             first_local_subscriber_callback = None
             last_local_subscriber_callback = None
 
-        self.rtm = RouteTableManager(first_local_subscriber_callback,
-                                     last_local_subscriber_callback)
+        self.rtm = rtm.RouteTableManager(first_local_subscriber_callback,
+                                         last_local_subscriber_callback)
 
         self.rtm.start()
 
@@ -66,14 +59,15 @@ class Manager(EventSource, lg.LookingGlassMixin):
         if cfg.CONF.BGP.peers:
             for peer_address in cfg.CONF.BGP.peers:
                 LOG.debug("Creating a peer worker for %s", peer_address)
-                peer_worker = ExaBGPPeerWorker(self, peer_address)
+                peer_worker = exabgp_peer_worker.ExaBGPPeerWorker(self,
+                                                                  peer_address)
                 self.peers[peer_address] = peer_worker
                 peer_worker.start()
 
         # we need a .name since we'll masquerade as a route_entry source
         self.name = "BGPManager"
 
-        EventSource.__init__(self, self.rtm)
+        engine.EventSource.__init__(self, self.rtm)
 
     def __repr__(self):
         return self.__class__.__name__
@@ -93,30 +87,32 @@ class Manager(EventSource, lg.LookingGlassMixin):
     @log_decorator.log
     def rtc_advertisement_for_sub(self, sub):
         if sub.safi in RTC_SAFIS:
-            event = RouteEvent(RouteEvent.ADVERTISE,
-                               self._subscription_2_rtc_route_entry(sub),
-                               self)
+            event = engine.RouteEvent(
+                engine.RouteEvent.ADVERTISE,
+                self._subscription_2_rtc_route_entry(sub),
+                self)
             LOG.debug("Based on subscription => synthesized RTC %s", event)
             self.rtm.enqueue(event)
 
     @log_decorator.log
     def rtc_withdrawal_for_sub(self, sub):
         if sub.safi in RTC_SAFIS:
-            event = RouteEvent(RouteEvent.WITHDRAW,
-                               self._subscription_2_rtc_route_entry(sub),
-                               self)
+            event = engine.RouteEvent(
+                engine.RouteEvent.WITHDRAW,
+                self._subscription_2_rtc_route_entry(sub),
+                self)
             LOG.debug("Based on unsubscription => synthesized withdraw"
                       " for RTC %s", event)
             self.rtm.enqueue(event)
 
     def _subscription_2_rtc_route_entry(self, subscription):
 
-        nlri = RTC.new(AFI(AFI.ipv4), SAFI(SAFI.rtc),
-                       cfg.CONF.BGP.my_as,
-                       subscription.route_target,
-                       IP.create(self.get_local_address()))
+        nlri = exa.RTC.new(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.rtc),
+                           cfg.CONF.BGP.my_as,
+                           subscription.route_target,
+                           exa.IP.create(self.get_local_address()))
 
-        route_entry = RouteEntry(nlri)
+        route_entry = engine.RouteEntry(nlri)
 
         return route_entry
 
@@ -151,7 +147,7 @@ class Manager(EventSource, lg.LookingGlassMixin):
 
     def get_established_peers_count(self):
         return reduce(lambda count, peer: count +
-                      (isinstance(peer, BGPPeerWorker) and
+                      (isinstance(peer, bgp_peer_worker.BGPPeerWorker) and
                        peer.is_established()),
                       self.peers.itervalues(), 0)
 

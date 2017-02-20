@@ -9,19 +9,16 @@ Copyright (c) 2009-2015 Orange. All rights reserved.
 
 import unittest
 
-from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.engine import ipvpn
 
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-from exabgp.bgp.message import OUT
 
-from exabgp.reactor.protocol import AFI
-
-TEST_RD = RouteDistinguisher.fromElements("42.42.42.42", 5)
+TEST_RD = exa.RouteDistinguisher.fromElements("42.42.42.42", 5)
 
 
 def _create_test_ipvpn_nlri(label, nexthop):
-    return IPVPNRouteFactory(AFI(AFI.ipv4),
-                             "1.1.1.1/32", label, TEST_RD, nexthop)
+    return ipvpn.IPVPNRouteFactory(exa.AFI(exa.AFI.ipv4),
+                                   "1.1.1.1/32", label, TEST_RD, nexthop)
 
 
 class TestNLRIs(unittest.TestCase):
@@ -73,10 +70,10 @@ class TestNLRIs(unittest.TestCase):
         hash to the same value, and be equal
         '''
         nlri1 = _create_test_ipvpn_nlri(42, "45.45.45.45")
-        nlri1.action = OUT.ANNOUNCE
+        nlri1.action = exa.OUT.ANNOUNCE
 
         nlri2 = _create_test_ipvpn_nlri(42, "45.45.45.45")
-        nlri2.action = OUT.WITHDRAW
+        nlri2.action = exa.OUT.WITHDRAW
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)

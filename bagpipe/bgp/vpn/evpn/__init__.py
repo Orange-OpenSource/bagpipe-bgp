@@ -15,59 +15,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABCMeta, abstractmethod
+import abc
 
-from bagpipe.bgp.common import utils
+from bagpipe.bgp import constants
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exa
 from bagpipe.bgp.common import log_decorator
-
-from bagpipe.bgp.constants import EVPN
-
-from bagpipe.bgp.engine import RouteEntry
-
-from bagpipe.bgp.vpn.vpn_instance import VPNInstance
-from bagpipe.bgp.vpn.dataplane_drivers import \
-    DummyDataplaneDriver as _DummyDataplaneDriver
-from bagpipe.bgp.vpn.dataplane_drivers import \
-    VPNInstanceDataplane as _VPNInstanceDataplane
-from bagpipe.bgp.vpn.dataplane_drivers import \
-    DummyVPNInstanceDataplane as _DummyVPNInstanceDataplane
-
+from bagpipe.bgp.common import utils
+from bagpipe.bgp.vpn import vpn_instance
+from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
 from bagpipe.bgp.common import looking_glass as lg
 
 
-from exabgp.protocol.ip import IP
+class VPNInstanceDataplane(dp_drivers.VPNInstanceDataplane):
+    __metaclass__ = abc.ABCMeta
 
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
-
-from exabgp.bgp.message.update.nlri.evpn.nlri import EVPN as EVPNNLRI
-from exabgp.bgp.message.update.nlri.evpn.mac import MAC as EVPNMAC
-from exabgp.bgp.message.update.nlri.evpn.multicast import \
-    Multicast as EVPNMulticast
-from exabgp.bgp.message.update.nlri.qualifier.esi import ESI
-from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
-from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
-
-from exabgp.reactor.protocol import AFI, SAFI
-
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
-from exabgp.bgp.message.update.attribute.pmsi import PMSI
-from exabgp.bgp.message.update.attribute.pmsi import PMSIIngressReplication
-
-
-class VPNInstanceDataplane(_VPNInstanceDataplane):
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
+    @abc.abstractmethod
     def add_dataplane_for_bum_endpoint(self, remote_pe, label, nlri, encaps):
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def remove_dataplane_for_bum_endpoint(self, remote_pe, label, nlri):
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def set_gateway_port(self, linuxif):
         '''
         Used to determine a port to which traffic at the destination of the
@@ -76,7 +47,7 @@ class VPNInstanceDataplane(_VPNInstanceDataplane):
         '''
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def gateway_port_down(self, linuxif):
         '''
         Used to revert the action done when set_gateway_port was called.
@@ -85,8 +56,8 @@ class VPNInstanceDataplane(_VPNInstanceDataplane):
         pass
 
 
-class DummyVPNInstanceDataplane(_DummyVPNInstanceDataplane,
-                                _VPNInstanceDataplane):
+class DummyVPNInstanceDataplane(dp_drivers.DummyVPNInstanceDataplane,
+                                dp_drivers.VPNInstanceDataplane):
     '''
     Dummy, do-nothing dataplane driver
     '''
@@ -108,54 +79,56 @@ class DummyVPNInstanceDataplane(_DummyVPNInstanceDataplane,
         pass
 
 
-class DummyDataplaneDriver(_DummyDataplaneDriver):
+class DummyDataplaneDriver(dp_drivers.DummyDataplaneDriver):
 
-    type = EVPN
+    type = constants.EVPN
 
     dataplane_instance_class = DummyVPNInstanceDataplane
-    encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
+    encaps = [exa.Encapsulation(exa.Encapsulation.Type.VXLAN)]
 
     def __init__(self, *args):
-        _DummyDataplaneDriver.__init__(self, *args)
+        dp_drivers.DummyDataplaneDriver.__init__(self, *args)
 
 
-class EVI(VPNInstance, lg.LookingGlassMixin):
+class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     '''
     Implementation an E-VPN instance (EVI) based on RFC7432 and
     draft-ietf-bess-evpn-overlay.
     '''
 
-    type = EVPN
-    afi = AFI(AFI.l2vpn)
-    safi = SAFI(SAFI.evpn)
+    type = constants.EVPN
+    afi = exa.AFI(exa.AFI.l2vpn)
+    safi = exa.SAFI(exa.SAFI.evpn)
 
     @log_decorator.log
     def __init__(self, *args, **kwargs):
 
-        VPNInstance.__init__(self, *args, **kwargs)
+        vpn_instance.VPNInstance.__init__(self, *args, **kwargs)
 
         self.gw_port = None
 
         # Advertise route to receive multi-destination traffic
         self.log.info("Generating BGP route for broadcast/multicast traffic")
 
-        nlri = EVPNMulticast(self.instance_rd,
-                             EthernetTag(),
-                             IP.create(self.bgp_manager.get_local_address()),
-                             None,
-                             IP.create(self.bgp_manager.get_local_address()))
+        nlri = exa.EVPNMulticast(
+            self.instance_rd,
+            exa.EthernetTag(),
+            exa.IP.create(self.bgp_manager.get_local_address()),
+            None,
+            exa.IP.create(self.bgp_manager.get_local_address()))
 
-        attributes = Attributes()
+        attributes = exa.Attributes()
 
         attributes.add(self._gen_encap_extended_communities())
 
         # add PMSI Tunnel Attribute route
-        attributes.add(PMSIIngressReplication(
-            self.dp_driver.get_local_address(), self.instance_label))
+        attributes.add(
+            exa.PMSIIngressReplication(self.dp_driver.get_local_address(),
+                                       self.instance_label))
 
-        self.multicast_route_entry = RouteEntry(nlri, self.export_rts,
-                                                attributes)
+        self.multicast_route_entry = engine.RouteEntry(nlri, self.export_rts,
+                                                       attributes)
 
         self._advertise_route(self.multicast_route_entry)
 
@@ -165,12 +138,13 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
         assert(plen == 32)
 
         # label parameter ignored, we need to use instance label
-        nlri = EVPNMAC(rd, ESI(), EthernetTag(), MAC(mac_address), 6*8,
-                       Labels([self.instance_label]),
-                       IP.create(ip_prefix), None,
-                       IP.create(self.dp_driver.get_local_address()))
+        nlri = exa.EVPNMAC(
+            rd, exa.ESI(), exa.EthernetTag(), exa.MAC(mac_address), 6*8,
+            exa.Labels([self.instance_label]),
+            exa.IP.create(ip_prefix), None,
+            exa.IP.create(self.dp_driver.get_local_address()))
 
-        return RouteEntry(nlri)
+        return engine.RouteEntry(nlri)
 
     @log_decorator.log
     def set_gateway_port(self, linuxif, ipvpn):
@@ -188,11 +162,11 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
     # TrackerWorker callbacks for BGP route updates ##########################
 
     def _route_2_tracked_entry(self, route):
-        if isinstance(route.nlri, EVPNMAC):
-            return (EVPNMAC, route.nlri.mac)
-        elif isinstance(route.nlri, EVPNMulticast):
-            return (EVPNMulticast, (route.nlri.ip, route.nlri.rd))
-        elif isinstance(route.nlri, EVPNNLRI):
+        if isinstance(route.nlri, exa.EVPNMAC):
+            return (exa.EVPNMAC, route.nlri.mac)
+        elif isinstance(route.nlri, exa.EVPNMulticast):
+            return (exa.EVPNMulticast, (route.nlri.ip, route.nlri.rd))
+        elif isinstance(route.nlri, exa.EVPN):
             self.log.warning("Received EVPN route of unsupported subtype: %s",
                              route.nlri.CODE)
             return None
@@ -209,7 +183,7 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
         if not encaps:
             return
 
-        if entry_class == EVPNMAC:
+        if entry_class == exa.EVPNMAC:
             prefix = info
 
             remote_pe = new_route.nexthop
@@ -219,13 +193,13 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
             self.dataplane.setup_dataplane_for_remote_endpoint(
                 prefix, remote_pe, label, new_route.nlri, encaps)
 
-        elif entry_class == EVPNMulticast:
+        elif entry_class == exa.EVPNMulticast:
             remote_endpoint = info
 
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
-            pmsi_tunnel = new_route.attributes.get(PMSI.ID)
-            if not isinstance(pmsi_tunnel, PMSIIngressReplication):
+            pmsi_tunnel = new_route.attributes.get(exa.PMSI.ID)
+            if not isinstance(pmsi_tunnel, exa.PMSIIngressReplication):
                 self.log.warning("Received PMSITunnel of unsupported type: %s",
                                  type(pmsi_tunnel))
             else:
@@ -245,7 +219,7 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
     def _best_route_removed(self, entry, old_route, last):
         (entry_class, info) = entry
 
-        if entry_class == EVPNMAC:
+        if entry_class == exa.EVPNMAC:
 
             if self._skip_route_removal(last):
                 self.log.debug("Skipping removal of non-last route because "
@@ -260,13 +234,13 @@ class EVI(VPNInstance, lg.LookingGlassMixin):
             self.dataplane.remove_dataplane_for_remote_endpoint(
                 prefix, remote_pe, label, old_route.nlri)
 
-        elif entry_class == EVPNMulticast:
+        elif entry_class == exa.EVPNMulticast:
             remote_endpoint = info
 
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
-            pmsi_tunnel = old_route.attributes.get(PMSI.ID)
-            if not isinstance(pmsi_tunnel, PMSIIngressReplication):
+            pmsi_tunnel = old_route.attributes.get(exa.PMSI.ID)
+            if not isinstance(pmsi_tunnel, exa.PMSIIngressReplication):
                 self.log.warning("PMSITunnel of suppressed route is of"
                                  " unsupported type")
             else:

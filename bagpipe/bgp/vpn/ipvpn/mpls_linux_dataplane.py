@@ -16,37 +16,22 @@
 # limitations under the License.
 
 import errno
+import socket
 
 import json
-
-from socket import AF_INET
-from socket import AF_INET6
-
-from netaddr.ip import IPNetwork
-
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
-
+import netaddr
 from oslo_config import cfg
+import pyroute2
+from pyroute2 import netlink
 
-from bagpipe.bgp.vpn import dataplane_drivers
-from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
-from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
-from bagpipe.bgp.vpn.ipvpn import IPVPN
-
-from bagpipe.bgp.common import looking_glass as lg
-
-from bagpipe.bgp.common import constants as consts
 from bagpipe.bgp.common import log_decorator
+from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp import constants as consts
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
 
-from pyroute2.common import AF_MPLS
 
-from pyroute2 import IPDB
-from pyroute2 import IPRoute
-from pyroute2.netlink.rtnl import ndmsg
-from pyroute2.netlink import exceptions as nl_exceptions
-
-ipr = IPRoute()
+ipr = pyroute2.IPRoute()
 
 VRF_INTERFACE_PREFIX = "bvrf-"
 
@@ -77,10 +62,11 @@ def proxy_arp(ifname, enable):
     sysctl(['net', 'ipv4', 'conf', ifname, 'proxy_arp_pvlan'], int(enable))
 
 
-class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
+class MPLSLinuxVRFDataplane(dp_drivers.VPNInstanceDataplane,
+                            lg.LookingGlassMixin):
 
     def __init__(self, *args, **kwargs):
-        VPNInstanceDataplane.__init__(self, *args)
+        dp_drivers.VPNInstanceDataplane.__init__(self, *args)
 
         # FIXME: maybe not thread safe ?
         self.ip = self.driver.ip
@@ -109,7 +95,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # Create ip rule for VRF route table
         # TODO: do in IPDB, when possible (check: what if
         #       rule exist, but is not known by IPDB?)
-        for family in AF_INET, AF_INET6:
+        for family in socket.AF_INET, socket.AF_INET6:
             ipr.flush_rules(family=family,
                             iifname=self.vrf_if)
             ipr.flush_rules(family=family,
@@ -175,7 +161,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                   dst=ip_address,
                   lladdr=mac_address,
                   ifindex=self.ip.interfaces[interface].index,
-                  state=ndmsg.states['permanent'])
+                  state=netlink.rtnl.ndmsg.states['permanent'])
 
         # Setup ARP proxying
         proxy_arp(interface, True)
@@ -183,14 +169,15 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # Configure gateway address on this port
         # FIXME: that would need to be per vif port
         # Retrieve broadcast IP address
-        broadcast_ip = str(IPNetwork("%s/%s" % (self.gateway_ip, self.mask)
-                                     ).broadcast)
+        broadcast_ip = str(netaddr.IPNetwork("%s/%s" % (self.gateway_ip,
+                                                        self.mask)
+                                             ).broadcast)
 
         try:
             ipr.addr('add', index=self.ip.interfaces[interface].index,
                      address=self.gateway_ip, mask=self.mask,
                      broadcast=broadcast_ip)
-        except nl_exceptions.NetlinkError as x:
+        except netlink.exceptions.NetlinkError as x:
             if x.code == errno.EEXIST:
                 # the route already exists, fine
                 self.log.warning("route %s already exists on %s",
@@ -202,16 +189,16 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
         # Configure mapping for incoming MPLS traffic
         # with this port label
-        req = {'family': AF_MPLS,
+        req = {'family': pyroute2.common.AF_MPLS,
                'oif': self.ip.interfaces[interface].index,
                'dst': label,  # FIXME how to check for BoS?
-               'via': {'family': AF_INET,
+               'via': {'family': socket.AF_INET,
                        'addr': ip_address}
                }
 
         try:
             self.add_route(req)
-        except nl_exceptions.NetlinkError as x:
+        except netlink.exceptions.NetlinkError as x:
             if x.code == errno.EEXIST:
                 # the route already exists, fine
                 self.log.warning("MPLS state for %d already exists", label)
@@ -244,7 +231,7 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
         # Unconfigure gateway address on this port
         # FIXME: that would need to be per vif port
         # Retrieve broadcast IP address
-        ip = IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
+        ip = netaddr.IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
         broadcast_ip = str(ip.broadcast)
 
         ipr.addr('del', index=self.ip.interfaces[interface].index,
@@ -352,7 +339,8 @@ class MPLSLinuxVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                 for r in routes]
 
 
-class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
+class MPLSLinuxDataplaneDriver(dp_drivers.DataplaneDriver,
+                               lg.LookingGlassMixin):
 
     """
     This dataplane driver relies on the MPLS stack in the Linux kernel,
@@ -361,7 +349,7 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     required_kernel = "4.4"
     dataplane_instance_class = MPLSLinuxVRFDataplane
-    type = IPVPN
+    type = consts.IPVPN
     ecmp_support = True
 
     driver_opts = [
@@ -375,10 +363,10 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         lg.LookingGlassLocalLogger.__init__(self)
 
         self.log.info("Initializing MPLSLinuxVRFDataplane")
-        DataplaneDriver.__init__(self, config)
+        dp_drivers.DataplaneDriver.__init__(self, config)
 
         self.config = config
-        self.ip = IPDB()
+        self.ip = pyroute2.IPDB()
 
     @log_decorator.log_info
     def initialize(self):
@@ -422,12 +410,12 @@ class MPLSLinuxDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         ipr.flush_routes(proto=RT_PROT_BAGPIPE)
         # Flush all MPLS routes redirecting traffic to network namespaces
         # (just in case, should be covered by the above)
-        ipr.flush_routes(family=AF_MPLS)
+        ipr.flush_routes(family=pyroute2.common.AF_MPLS)
 
     def supported_encaps(self):
-        yield Encapsulation(Encapsulation.Type.MPLS)
+        yield exa.Encapsulation(exa.Encapsulation.Type.MPLS)
         # we also accept route with no encap specified
-        yield Encapsulation(Encapsulation.Type.DEFAULT)
+        yield exa.Encapsulation(exa.Encapsulation.Type.DEFAULT)
 
     # Looking glass ####
 

@@ -15,25 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging as python_logging
 import sys
 import signal
 
-from oslo_log import log as logging
-
-from oslo_config import cfg
-
 from daemon import runner
-
+from oslo_config import cfg
+from oslo_log import log as logging
 import pbr.version
 
 from bagpipe.bgp.api import api
 from bagpipe.bgp.common import config  # flake8: noqa
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
-
+from bagpipe.bgp.engine import exabgp_peer_worker
 from bagpipe.bgp.vpn import dataplane_drivers as drivers
 
-import logging as python_logging
 
 LOG = logging.getLogger(__name__)
 
@@ -111,7 +107,7 @@ def daemon_main():
 
     setup_logging()
 
-    setup_exabgp_env()
+    exabgp_peer_worker.setup_exabgp_env()
 
     sys.argv[1:] = [cfg.CONF.action]
     daemon = BgpDaemon()

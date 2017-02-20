@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import re
-from collections import defaultdict
 
 from oslo_concurrency import lockutils
 from oslo_config import cfg
@@ -46,7 +46,7 @@ def invert_dict_of_sets(d):
     return inverted dict of sets from original dict containing sets of
     non-unique hashable items
     '''
-    new_d = defaultdict(set)
+    new_d = collections.defaultdict(set)
     for k in d:
         for v in d[k]:
             new_d[v].add(k)

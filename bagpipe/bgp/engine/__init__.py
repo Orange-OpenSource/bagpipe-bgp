@@ -38,20 +38,10 @@ import types
 
 from oslo_log import log as logging
 
-from bagpipe.bgp.common import looking_glass as lg
-
 from bagpipe.bgp.common import log_decorator
+from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp.engine import exa
 
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.attribute import Attribute
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended import \
-    RouteTargetASN2Number as RouteTarget
-
-from exabgp.bgp.message import OUT
-
-from exabgp.reactor.protocol import AFI, SAFI
 
 LOG = logging.getLogger(__name__)
 
@@ -68,34 +58,34 @@ class RouteEntry(lg.LookingGlassMixin):
     def __init__(self, nlri, rts=None, attributes=None,
                  source=None):
         if attributes is None:
-            attributes = Attributes()
-        assert isinstance(attributes, Attributes)
+            attributes = exa.Attributes()
+        assert isinstance(attributes, exa.Attributes)
         if rts is not None:
             assert isinstance(rts, list)
-            assert len(rts) == 0 or isinstance(rts[0], RouteTarget)
+            assert len(rts) == 0 or isinstance(rts[0], exa.RouteTarget)
 
         self.source = source
         self.afi = nlri.afi
         self.safi = nlri.safi
-        assert isinstance(self.afi, AFI)
-        assert isinstance(self.safi, SAFI)
+        assert isinstance(self.afi, exa.AFI)
+        assert isinstance(self.safi, exa.SAFI)
         self.nlri = nlri
         self.attributes = attributes
-        # a list of exabgp.bgp.message.update.attribute.community.
+        # a list of exa.bgp.message.update.attribute.community.
         #   extended.RouteTargetASN2Number
         self._route_targets = []
-        if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
+        if exa.Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
             ecoms = self.attributes[
-                Attribute.CODE.EXTENDED_COMMUNITY].communities
+                exa.Attribute.CODE.EXTENDED_COMMUNITY].communities
             # use type(..) because isinstance(rtrecord, RouteTarget) is True
             self._route_targets = [ecom for ecom in ecoms
-                                   if type(ecom) == RouteTarget]
+                                   if type(ecom) == exa.RouteTarget]
             if rts:
                 ecoms += rts
                 self._route_targets += rts
         else:
             if rts:
-                self.attributes.add(ExtendedCommunities(rts))
+                self.attributes.add(exa.ExtendedCommunities(rts))
                 self._route_targets += rts
 
     @property
@@ -114,9 +104,10 @@ class RouteEntry(lg.LookingGlassMixin):
             # filter is a function(ecom)
             filter_real = filter_
 
-        if Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
+        if exa.Attribute.CODE.EXTENDED_COMMUNITY in self.attributes:
             return filter(filter_real,
-                          self.attributes[Attribute.CODE.EXTENDED_COMMUNITY]
+                          self.attributes[
+                              exa.Attribute.CODE.EXTENDED_COMMUNITY]
                           .communities)
         else:
             return []
@@ -124,10 +115,11 @@ class RouteEntry(lg.LookingGlassMixin):
     @log_decorator.log
     def set_route_targets(self, route_targets):
         # first build a list of ecoms without any RT
-        ecoms = self.ecoms(lambda ecom: not isinstance(ecom, RouteTarget))
+        ecoms = self.ecoms(lambda ecom: not isinstance(ecom,
+                                                       exa.RouteTarget))
 
         # then add the right RTs
-        new_ecoms = ExtendedCommunities()
+        new_ecoms = exa.ExtendedCommunities()
         new_ecoms.communities += ecoms
         new_ecoms.communities += route_targets
 
@@ -143,7 +135,7 @@ class RouteEntry(lg.LookingGlassMixin):
             return self.nlri.nexthop.top()
         except AttributeError:
             try:
-                return self.attributes[Attribute.CODE.NEXT_HOP].top()
+                return self.attributes[exa.Attribute.CODE.NEXT_HOP].top()
             except KeyError:
                 return None
 
@@ -184,12 +176,13 @@ class RouteEntry(lg.LookingGlassMixin):
         for attribute in self.attributes.itervalues():
 
             # skip some attributes that we care less about
-            if (attribute.ID == Attribute.CODE.AS_PATH or
-                    attribute.ID == Attribute.CODE.ORIGIN or
-                    attribute.ID == Attribute.CODE.LOCAL_PREF):
+            if (attribute.ID == exa.Attribute.CODE.AS_PATH or
+                    attribute.ID == exa.Attribute.CODE.ORIGIN or
+                    attribute.ID == exa.Attribute.CODE.LOCAL_PREF):
                 continue
 
-            att_dict[repr(Attribute.CODE(attribute.ID))] = str(attribute)
+            att_dict[
+                repr(exa.Attribute.CODE(attribute.ID))] = str(attribute)
 
         res = {"afi-safi": "%s/%s" % (self.afi, self.safi),
                "attributes": att_dict,
@@ -203,7 +196,7 @@ class RouteEntry(lg.LookingGlassMixin):
                                                           [self.source.name])
                              }
 
-        if self.safi in [SAFI.mpls_vpn, SAFI.evpn]:
+        if self.safi in [exa.SAFI.mpls_vpn, exa.SAFI.evpn]:
             res["route_targets"] = [str(rt) for rt in self.route_targets]
 
         return {
@@ -243,9 +236,9 @@ class RouteEvent(object):
         # and this spares us the pain of specifying the action
         # when creating an nlri
         if event_type == RouteEvent.ADVERTISE:
-            self.route_entry.nlri.action = OUT.ANNOUNCE
+            self.route_entry.nlri.action = exa.OUT.ANNOUNCE
         else:  # WITHDRAW
-            self.route_entry.nlri.action = OUT.WITHDRAW
+            self.route_entry.nlri.action = exa.OUT.WITHDRAW
 
     @log_decorator.log
     def set_replaced_route(self, replaced_route):
@@ -270,9 +263,10 @@ class RouteEvent(object):
 class _SubUnsubCommon(object):
 
     def __init__(self, afi, safi, route_target, worker=None):
-        assert isinstance(afi, AFI)
-        assert isinstance(safi, SAFI)
-        assert route_target is None or isinstance(route_target, RouteTarget)
+        assert isinstance(afi, exa.AFI)
+        assert isinstance(safi, exa.SAFI)
+        assert route_target is None or isinstance(route_target,
+                                                  exa.RouteTarget)
         self.afi = afi
         self.safi = safi
         self.route_target = route_target
@@ -299,8 +293,8 @@ Any of these (afi, safi or route target) can be replaced by a wildcard:
 * Subscription.ANY_RT
     """
 
-    ANY_AFI = AFI(0)
-    ANY_SAFI = SAFI(0)
+    ANY_AFI = exa.AFI(0)
+    ANY_SAFI = exa.SAFI(0)
     ANY_RT = None
 
     def __init__(self, afi, safi, route_target=None, worker=None):

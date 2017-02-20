@@ -17,33 +17,22 @@
 
 import re
 
-from distutils.version import StrictVersion
-
-from netaddr.ip import IPNetwork
-
+from distutils import version
+import netaddr
 from oslo_config import cfg
 
-from bagpipe.bgp.vpn.dataplane_drivers import VPNInstanceDataplane
-from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
-from bagpipe.bgp.vpn import dataplane_drivers
-from bagpipe.bgp.vpn.ipvpn import IPVPN
-
+from bagpipe.bgp import constants as consts
 from bagpipe.bgp.common import exceptions as exc
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import net_utils
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
 
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
 
 DEFAULT_RULE_PRIORITY = 40000
 
 DEFAULT_ARPNS_IF_MTU = 9000
-
-#  grep 'define.*IFNAMSIZ' /usr/src/linux/include/uapi/linux/if.h
-# define    IFNAMSIZ    16
-# (minus 1 for trailing null)
-LINUX_DEV_LEN = 15
 
 OVSBR2ARPNS_INTERFACE_PREFIX = "toarpns"
 
@@ -75,20 +64,21 @@ LB_HOP_REGISTER = 1
 
 def get_ovsbr2arpns_if(namespace_id):
     i = namespace_id.replace(ARPNETNS_PREFIX, "")
-    return (OVSBR2ARPNS_INTERFACE_PREFIX + i)[:LINUX_DEV_LEN]
+    return (OVSBR2ARPNS_INTERFACE_PREFIX + i)[:consts.LINUX_DEV_LEN]
 
 
 def join_s(*args):
     return ','.join(filter(None, args))
 
 
-class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
+class MPLSOVSVRFDataplane(dp_drivers.VPNInstanceDataplane,
+                          lg.LookingGlassMixin):
 
     def __init__(self, *args, **kwargs):
-        VPNInstanceDataplane.__init__(self, *args)
+        dp_drivers.VPNInstanceDataplane.__init__(self, *args)
 
         self.arp_netns = ("%s%d" % (ARPNETNS_PREFIX,
-                                    self.instance_id))[:LINUX_DEV_LEN]
+                                    self.instance_id))[:consts.LINUX_DEV_LEN]
 
         # Initialize dict where we store info on OVS ports (port numbers and
         # bound IP address)
@@ -131,7 +121,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                      self.arp_netns)
 
             # Retrieve broadcast IP address
-            ip = IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
+            ip = netaddr.IPNetwork("%s/%s" % (self.gateway_ip, self.mask))
             broadcast_ip = str(ip.broadcast)
 
             # Set up network namespace interface as gateway
@@ -587,7 +577,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def _match_label_action(self, label, encaps):
         if (self.driver.vxlan_encap and
-                Encapsulation(Encapsulation.Type.VXLAN) in encaps):
+                exa.Encapsulation(exa.Encapsulation.Type.VXLAN) in encaps):
             return "set_field:%d->tunnel_id" % label
         else:
             return "push_mpls:0x8847,load:%s->OXM_OF_MPLS_LABEL[]" % label
@@ -598,7 +588,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
             self.log.debug("Local route, using a resubmit action")
             # For local traffic, we have to use a resubmit action
             if (self.driver.vxlan_encap and
-                    Encapsulation(Encapsulation.Type.VXLAN) in encaps):
+                    exa.Encapsulation(exa.Encapsulation.Type.VXLAN) in encaps):
                 return ("resubmit(%d,%d)" %
                         (self.driver.vxlan_tunnel_port_number,
                          self.driver.encap_in_table))
@@ -607,7 +597,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                             self.driver.encap_in_table)
         else:
             if (self.driver.vxlan_encap and
-                    Encapsulation(Encapsulation.Type.VXLAN) in encaps):
+                    exa.Encapsulation(exa.Encapsulation.Type.VXLAN) in encaps):
                 self.log.debug("Will use a VXLAN encap for this destination")
                 return "set_field:%s->tun_dst,output:%s" % (
                     str(remote_pe), self.driver.vxlan_tunnel_port_number)
@@ -636,7 +626,8 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                     self.driver.ovs_mpls_if_port_number)
 
     def _match_default_route_prefix(self, prefix):
-        return ('nw_dst=%s' % prefix if IPNetwork(prefix).prefixlen != 0
+        return ('nw_dst=%s' % prefix
+                if netaddr.IPNetwork(prefix).prefixlen != 0
                 else None)
 
     def _cookie(self, add=False):
@@ -655,8 +646,9 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
 
     def _get_lb_flows_to_add(self, prefix, nw_dst_match):
         dec_ttl_action = ""
-        if IPNetwork(prefix) not in IPNetwork("%s/%s" % (self.gateway_ip,
-                                                         self.mask)):
+        if netaddr.IPNetwork(prefix) not in netaddr.IPNetwork("%s/%s" %
+                                                              (self.gateway_ip,
+                                                               self.mask)):
             dec_ttl_action = "dec_ttl"
 
         flows_to_add = []
@@ -871,7 +863,7 @@ class MPLSOVSVRFDataplane(VPNInstanceDataplane, lg.LookingGlassMixin):
                                             self._cookie(add=False))
 
 
-class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
+class MPLSOVSDataplaneDriver(dp_drivers.DataplaneDriver, lg.LookingGlassMixin):
 
     """
     Dataplane driver using OpenVSwitch
@@ -909,7 +901,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
     """
 
     dataplane_instance_class = MPLSOVSVRFDataplane
-    type = IPVPN
+    type = consts.IPVPN
     ecmp_support = True
     required_ovs_version = "2.5.0"
 
@@ -945,7 +937,7 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         lg.LookingGlassLocalLogger.__init__(self)
 
         self.log.info("Initializing MPLSOVSVRFDataplane")
-        DataplaneDriver.__init__(self)
+        dp_drivers.DataplaneDriver.__init__(self)
 
         try:
             (o, _) = self._run_command("ovs-ofctl -V | head -1 |"
@@ -955,14 +947,6 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         except:
             self.log.warning("Could not determine OVS release")
             self.ovs_release = None
-
-        if (StrictVersion(self.ovs_release)
-                < StrictVersion(self.required_ovs_version)):
-            self.log.warning("%s requires at least OVS %s"
-                             " (you are running %s)",
-                             self.__class__.__name__,
-                             self.required_ovs_version,
-                             self.ovs_release)
 
         self.mpls_interface = self.config.mpls_interface
 
@@ -1021,17 +1005,21 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
         # receiving traffic as VXLAN
         self.vxlan_encap = self.config.vxlan_encap
 
+        # check OVS version
+        if (not self.vxlan_encap and
+                version.StrictVersion(self.ovs_release) <
+                version.StrictVersion(self.required_ovs_version)):
+            self.log.warning("%s requires at least OVS %s"
+                             " (you are running %s)",
+                             self.__class__.__name__,
+                             self.required_ovs_version,
+                             self.ovs_release)
+
         # unless useGRE is enabled, check that fping is installed
         if not self.use_gre:
             self._run_command("fping -v", raise_on_error=True)
 
         self.proxy_arp = self.config.proxy_arp
-
-        if (not self.vxlan_encap and
-                StrictVersion(self.ovs_release) < StrictVersion("2.4.0")):
-            self.log.warning(
-                "%s requires at least OVS 2.4.0 (you are running %s)",
-                self.__class__.__name__, self.ovs_release)
 
         # Check if OVS bridge exist
         (_, exit_code) = self._run_command("ovs-vsctl br-exists %s" %
@@ -1065,17 +1053,17 @@ class MPLSOVSDataplaneDriver(DataplaneDriver, lg.LookingGlassMixin):
 
     def supported_encaps(self):
         if self.use_gre:
-            yield Encapsulation(Encapsulation.Type.GRE)
-            yield Encapsulation(Encapsulation.Type.DEFAULT)
+            yield exa.Encapsulation(exa.Encapsulation.Type.GRE)
+            yield exa.Encapsulation(exa.Encapsulation.Type.DEFAULT)
             # we will accept routes with no encap
             # specified and force the use of GRE
         else:
-            yield Encapsulation(Encapsulation.Type.MPLS)
+            yield exa.Encapsulation(exa.Encapsulation.Type.MPLS)
             # we also accept route with no encap specified
-            yield Encapsulation(Encapsulation.Type.DEFAULT)
+            yield exa.Encapsulation(exa.Encapsulation.Type.DEFAULT)
 
         if self.vxlan_encap:
-            yield Encapsulation(Encapsulation.Type.VXLAN)
+            yield exa.Encapsulation(exa.Encapsulation.Type.VXLAN)
 
     def mpls_in_port(self):
         if self.use_gre:

@@ -17,35 +17,32 @@
 
 from oslo_config import cfg
 
+from bagpipe.bgp import constants as consts
 from bagpipe.bgp.common import log_decorator
-
 from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
+from bagpipe.bgp.vpn import evpn
 
-from bagpipe.bgp.vpn.evpn import VPNInstanceDataplane
-from bagpipe.bgp.vpn.evpn import EVPN
-from bagpipe.bgp.vpn.dataplane_drivers import DataplaneDriver
-
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
 
 BRIDGE_NAME_PREFIX = "evpn---"
 VXLAN_INTERFACE_PREFIX = "vxlan--"
-LINUX_DEV_LEN = 14
 
 
-class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
+class LinuxVXLANEVIDataplane(evpn.VPNInstanceDataplane):
 
     def __init__(self, *args, **kwargs):
-        VPNInstanceDataplane.__init__(self, *args)
+        evpn.VPNInstanceDataplane.__init__(self, *args)
 
         if 'linuxbr' in kwargs:
             self.bridge_name = kwargs.get('linuxbr')
         else:
             self.bridge_name = (
-                BRIDGE_NAME_PREFIX + self.external_instance_id)[:LINUX_DEV_LEN]
+                BRIDGE_NAME_PREFIX +
+                self.external_instance_id)[:consts.LINUX_DEV_LEN]
 
-        self.vxlan_if_name = (
-            VXLAN_INTERFACE_PREFIX + self.external_instance_id)[:LINUX_DEV_LEN]
+        self.vxlan_if_name = (VXLAN_INTERFACE_PREFIX +
+                              self.external_instance_id)[:consts.LINUX_DEV_LEN]
 
         self.log.info("EVI %d: Initializing bridge %s",
                       self.instance_id, self.bridge_name)
@@ -307,7 +304,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         }
 
 
-class LinuxVXLANDataplaneDriver(DataplaneDriver):
+class LinuxVXLANDataplaneDriver(dp_drivers.DataplaneDriver):
 
     """
     E-VPN Dataplane driver relying on the Linux kernel linuxbridge
@@ -315,9 +312,9 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
     """
 
     dataplane_instance_class = LinuxVXLANEVIDataplane
-    type = EVPN
+    type = consts.EVPN
     required_kernel = "3.11.0"
-    encaps = [Encapsulation(Encapsulation.Type.VXLAN)]
+    encaps = [exa.Encapsulation(exa.Encapsulation.Type.VXLAN)]
 
     driver_opts = [
         cfg.IntOpt("vxlan_dst_port", default="0",
@@ -329,7 +326,7 @@ class LinuxVXLANDataplaneDriver(DataplaneDriver):
         lg.LookingGlassLocalLogger.__init__(self, __name__)
 
         self.log.info("Initializing %s", self.__class__.__name__)
-        DataplaneDriver.__init__(self)
+        dp_drivers.DataplaneDriver.__init__(self)
 
     def initialize(self):
         self.log.info("Really initializing %s", self.__class__.__name__)

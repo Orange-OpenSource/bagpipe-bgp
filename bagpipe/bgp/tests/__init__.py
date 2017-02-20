@@ -14,40 +14,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import logging as python_logging
 import time
 
 from oslo_log import log as logging
 
-from bagpipe.bgp.engine import RouteEvent, RouteEntry
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exabgp_peer_worker
 
-from bagpipe.bgp.engine.exabgp_peer_worker import setup_exabgp_env
 
-setup_exabgp_env()
-
-from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.open.asn import ASN
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended \
-    import TrafficRedirect
-from exabgp.bgp.message.update.attribute.community.extended import \
-    RouteTargetASN2Number as RouteTarget
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.nexthop import NextHop
-from exabgp.bgp.message.update.attribute.localpref import LocalPreference
-
+exabgp_peer_worker.setup_exabgp_env()
 
 WAIT_TIME = 0.05
 
-RT1 = RouteTarget(64512, 10)
-RT2 = RouteTarget(64512, 20)
-RT3 = RouteTarget(64512, 30)
-RT4 = RouteTarget(64512, 40)
-RT5 = RouteTarget(64512, 50)
+RT1 = exa.RouteTarget(64512, 10)
+RT2 = exa.RouteTarget(64512, 20)
+RT3 = exa.RouteTarget(64512, 30)
+RT4 = exa.RouteTarget(64512, 40)
+RT5 = exa.RouteTarget(64512, 50)
 
 
 def _rt_to_string(rt):
-    assert isinstance(rt, RouteTarget)
+    assert isinstance(rt, exa.RouteTarget)
     return "%s:%s" % (rt.asn, rt.number)
 
 
@@ -56,8 +46,8 @@ class TestNLRI(object):
     def __init__(self, desc):
         self.desc = desc
         self.action = None
-        self.afi = AFI(AFI.ipv4)
-        self.safi = SAFI(SAFI.mpls_vpn)
+        self.afi = exa.AFI(exa.AFI.ipv4)
+        self.safi = exa.SAFI(exa.SAFI.mpls_vpn)
 
     def __repr__(self):
         return self.desc
@@ -79,10 +69,10 @@ NH3 = "3.3.3.3"
 NBR = "NBR"
 BRR = "BRR"
 
-logging.basicConfig(level=logging.DEBUG,
-                    filename="bagpipe-bgp-testsuite.log",
-                    format="%(asctime)s %(threadName)-30s %(name)-30s "
-                    "%(levelname)-8s %(message)s")
+python_logging.basicConfig(level=logging.DEBUG,
+                           filename="bagpipe-bgp-testsuite.log",
+                           format="%(asctime)s %(threadName)-30s %(name)-30s "
+                           "%(levelname)-8s %(message)s")
 
 LOG = logging.getLogger()
 
@@ -94,20 +84,22 @@ class BaseTestBagPipeBGP():
 
     def _new_route_event(self, event_type, nlri, rts, source, nh, lp=0,
                          replaced_route_entry=None,
-                         afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn),
+                         afi=exa.AFI(exa.AFI.ipv4),
+                         safi=exa.SAFI(exa.SAFI.mpls_vpn),
                          **kwargs):
-        attributes = Attributes()
-        attributes.add(NextHop(nh))
-        attributes.add(LocalPreference(lp))
+        attributes = exa.Attributes()
+        attributes.add(exa.NextHop(nh))
+        attributes.add(exa.LocalPreference(lp))
 
         if 'rtrecords' in kwargs:
-            ecoms = ExtendedCommunities()
+            ecoms = exa.ExtendedCommunities()
             ecoms.communities += kwargs['rtrecords']
             attributes.add(ecoms)
 
-        route_event = RouteEvent(event_type,
-                                 RouteEntry(nlri, rts, attributes, source),
-                                 source)
+        route_event = engine.RouteEvent(event_type,
+                                        engine.RouteEntry(nlri, rts,
+                                                          attributes, source),
+                                        source)
         route_event.set_replaced_route(replaced_route_entry)
 
         self.event_target_worker.enqueue(route_event)
@@ -120,21 +112,23 @@ class BaseTestBagPipeBGP():
         return route_event
 
     def _new_flow_event(self, event_type, nlri, to_rts, attract_rts, source,
-                        afi=AFI(AFI.ipv4), safi=SAFI(SAFI.flow_vpn),
+                        afi=exa.AFI(exa.AFI.ipv4),
+                        safi=exa.SAFI(exa.SAFI.flow_vpn),
                         **kwargs):
-        attributes = Attributes()
+        attributes = exa.Attributes()
 
-        ecommunities = ExtendedCommunities()
+        ecommunities = exa.ExtendedCommunities()
         ecommunities.communities.append(
-            TrafficRedirect(ASN(int(to_rts[0].asn)), int(to_rts[0].number))
+            exa.TrafficRedirect(exa.ASN(int(to_rts[0].asn)),
+                                int(to_rts[0].number))
         )
 
         attributes.add(ecommunities)
 
-        flow_event = RouteEvent(event_type,
-                                RouteEntry(nlri, attract_rts, attributes,
-                                           source),
-                                source)
+        flow_event = engine.RouteEvent(event_type,
+                                       engine.RouteEntry(nlri, attract_rts,
+                                                         attributes, source),
+                                       source)
 
         self.event_target_worker.enqueue(flow_event)
 
@@ -146,12 +140,12 @@ class BaseTestBagPipeBGP():
         return flow_event
 
     def _revert_event(self, event):
-        if event.type == RouteEvent.ADVERTISE:
-            type = RouteEvent.WITHDRAW
+        if event.type == engine.RouteEvent.ADVERTISE:
+            type = engine.RouteEvent.WITHDRAW
         else:  # WITHDRAW
-            type = RouteEvent.ADVERTISE
+            type = engine.RouteEvent.ADVERTISE
 
-        route_event = RouteEvent(type, event.route_entry, event.source)
+        route_event = engine.RouteEvent(type, event.route_entry, event.source)
 
         self.event_target_worker.enqueue(route_event)
 

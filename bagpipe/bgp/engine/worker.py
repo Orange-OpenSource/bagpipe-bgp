@@ -15,28 +15,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import Queue
+import threading
+import traceback
 
 from oslo_log import log as logging
 
-import traceback
-
-from Queue import Queue
-
-from threading import Event
-
-from bagpipe.bgp.engine import EventSource
-from bagpipe.bgp.engine import Subscription
-from bagpipe.bgp.engine import Unsubscription
-from bagpipe.bgp.engine import WorkerCleanupEvent
-
+from bagpipe.bgp import engine
 from bagpipe.bgp.common import looking_glass as lg
+
 
 LOG = logging.getLogger(__name__)
 
 STOP_EVENT = "STOP_EVENT"
 
 
-class Worker(EventSource, lg.LookingGlassMixin):
+class Worker(engine.EventSource, lg.LookingGlassMixin):
 
     """This is the base class for objects that interact with the route table
     manager to produce and consume events related to BGP routes.
@@ -51,13 +45,13 @@ class Worker(EventSource, lg.LookingGlassMixin):
     def __init__(self, bgp_manager, worker_name):
         self.bgp_manager = bgp_manager
         self.rtm = bgp_manager.rtm
-        self._queue = Queue()
-        self._please_stop = Event()
+        self._queue = Queue.Queue()
+        self._please_stop = threading.Event()
 
         self.name = worker_name
         assert self.name is not None
 
-        EventSource.__init__(self, self.rtm)
+        engine.EventSource.__init__(self, self.rtm)
 
         # private data for RouteTableManager
         self._rtm_matches = set()
@@ -79,7 +73,7 @@ class Worker(EventSource, lg.LookingGlassMixin):
         self._stopped()
 
     def _cleanup(self):
-        self.rtm.enqueue(WorkerCleanupEvent(self))
+        self.rtm.enqueue(engine.WorkerCleanupEvent(self))
 
     def _stopped(self):
         """
@@ -126,12 +120,12 @@ class Worker(EventSource, lg.LookingGlassMixin):
         self._queue.put(event)
 
     def _subscribe(self, afi, safi, rt=None):
-        subobj = Subscription(afi, safi, rt, self)
+        subobj = engine.Subscription(afi, safi, rt, self)
         LOG.info("Subscribe: %s ", subobj)
         self.rtm.enqueue(subobj)
 
     def _unsubscribe(self, afi, safi, rt=None):
-        subobj = Unsubscription(afi, safi, rt, self)
+        subobj = engine.Unsubscription(afi, safi, rt, self)
         LOG.info("Unsubscribe: %s ", subobj)
         self.rtm.enqueue(subobj)
 

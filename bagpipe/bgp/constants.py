@@ -23,3 +23,9 @@ VPN_TYPES = [IPVPN, EVPN]
 
 def config_group(vpn_type):
     return "DATAPLANE_DRIVER_%s" % vpn_type.upper()
+
+# maximum length for a linux network device name
+#  grep 'define.*IFNAMSIZ' /usr/src/linux/include/uapi/linux/if.h
+# define    IFNAMSIZ    16
+# (minus 1 for trailing null)
+LINUX_DEV_LEN = 15

@@ -15,19 +15,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from testtools import TestCase
-
 from oslo_config import cfg
+import testtools
 
-from bagpipe.bgp.common import config # flake8: noqa
-
-from bagpipe.bgp.engine.bgp_manager import Manager
-from bagpipe.bgp.engine import Subscription
-
-from exabgp.protocol.family import SAFI
+from bagpipe.bgp.common import config  # flake8: noqa
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import bgp_manager
+from bagpipe.bgp.engine import exa
 
 
-class TestRouteTableManager(TestCase):
+class TestRouteTableManager(testtools.TestCase):
 
     def setUp(self):
         super(TestRouteTableManager, self).setUp()
@@ -35,14 +32,14 @@ class TestRouteTableManager(TestCase):
         cfg.CONF.BGP.local_address = "1.2.3.4"
         cfg.CONF.BGP.my_as = 64512
 
-        self.bgp_manager = Manager()
+        self.bgp_manager = bgp_manager.Manager()
 
     def test1(self):
-        subscription = Subscription(Subscription.ANY_AFI,
-                                    Subscription.ANY_SAFI,
-                                    Subscription.ANY_RT)
+        subscription = engine.Subscription(engine.Subscription.ANY_AFI,
+                                           engine.Subscription.ANY_SAFI,
+                                           engine.Subscription.ANY_RT)
 
         route_entry = self.bgp_manager._subscription_2_rtc_route_entry(
             subscription)
 
-        self.assertEqual(route_entry.safi, SAFI.rtc, "wrong RTC route")
+        self.assertEqual(route_entry.safi, exa.SAFI.rtc, "wrong RTC route")

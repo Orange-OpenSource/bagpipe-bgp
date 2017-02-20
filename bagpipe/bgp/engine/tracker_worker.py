@@ -15,46 +15,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABCMeta, abstractmethod
-
-import types
-
+import abc
+import socket
 import traceback
+import types
 
 from oslo_log import log as logging
 
-import socket
-
-from bagpipe.bgp.engine.worker import Worker
-from bagpipe.bgp.engine import RouteEvent, RouteEntry
-
 from bagpipe.bgp.common import looking_glass as lg
-
-from bagpipe.bgp.common.utils import plural
+from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import log_decorator
-
-from exabgp.bgp.message.update.attribute.attribute import Attribute
-from exabgp.bgp.message.update import Attributes
-
-keep_attributes_default = [Attribute.CODE.NEXT_HOP,
-                           Attribute.CODE.PMSI_TUNNEL,
-                           Attribute.CODE.MED,
-                           Attribute.CODE.EXTENDED_COMMUNITY,  # FIXME
-                           Attribute.CODE.LOCAL_PREF]
+from bagpipe.bgp.engine import worker
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp import engine
 
 
-class FilteredRouteEntry(RouteEntry):
+keep_attributes_default = [exa.Attribute.CODE.NEXT_HOP,
+                           exa.Attribute.CODE.PMSI_TUNNEL,
+                           exa.Attribute.CODE.MED,
+                           exa.Attribute.CODE.EXTENDED_COMMUNITY,  # FIXME
+                           exa.Attribute.CODE.LOCAL_PREF]
+
+
+class FilteredRouteEntry(engine.RouteEntry):
 
     def __init__(self, re, keep_attributes=None):
         if keep_attributes is None:
             keep_attributes = keep_attributes_default
 
-        attributes = Attributes()
+        attributes = exa.Attributes()
         for (attribute_id, attribute) in re.attributes.iteritems():
             if attribute_id in keep_attributes:
                 attributes.add(attribute)
 
-        RouteEntry.__init__(self, re.nlri, None, attributes)
+        engine.RouteEntry.__init__(self, re.nlri, None, attributes)
 
 
 def filtered_routes(routes):
@@ -92,13 +86,13 @@ def compare_ecmp(self, route_a, route_b):
     return 0
 
 
-class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
-    __metaclass__ = ABCMeta
+class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
+    __metaclass__ = abc.ABCMeta
 
     def __init__(self, bgp_manager, worker_name,
                  compare_routes=compare_no_ecmp):
 
-        Worker.__init__(self, bgp_manager, worker_name)
+        worker.Worker.__init__(self, bgp_manager, worker_name)
         lg.LookingGlassLocalLogger.__init__(self)
 
         # dict: entry -> list of routes:
@@ -128,9 +122,9 @@ class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
         all_routes = self.tracked_entry_2_routes.setdefault(entry, [])
 
         self.log.debug("We currently have %d route%s for this entry",
-                       len(all_routes), plural(all_routes))
+                       len(all_routes), utils.plural(all_routes))
 
-        if event.type == RouteEvent.ADVERTISE:
+        if event.type == engine.RouteEvent.ADVERTISE:
 
             withdrawn_best_routes = []
 
@@ -333,7 +327,7 @@ class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
                 pass
 
         self.log.info("We now have %d route%s for this entry.",
-                      len(all_routes), plural(all_routes))
+                      len(all_routes), utils.plural(all_routes))
 
         self._dump_state()
 
@@ -385,7 +379,7 @@ class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
 
     # Callbacks for subclasses ########################
 
-    @abstractmethod
+    @abc.abstractmethod
     def _route_2_tracked_entry(self, route):
         """
         This method is how the subclass maps a BGP route into an object that
@@ -399,14 +393,14 @@ class TrackerWorker(Worker, lg.LookingGlassLocalLogger):
         """
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def _new_best_route(self, entry, new_route):
         '''
         A new best route has been advertized for this tracked entry
         '''
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def _best_route_removed(self, entry, old_route, last):
         '''
         A route that was a best route for this tracked entry has been

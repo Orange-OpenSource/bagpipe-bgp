@@ -14,29 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import functools
-
+import logging
 import os
+import re
 import sys
 
-import re
-import urllib2
 import json
+import netaddr
+import optparse
+import urllib2
 
-from optparse import OptionParser
-from copy import copy
-
-import logging
-
-from netaddr.ip import IPNetwork
-
-from bagpipe.bgp.common import constants as consts
-
-from bagpipe.bgp.common.run_command import run_command
-from bagpipe.bgp.common.net_utils import get_device_mac
-
-from bagpipe.bgp.vpn.ipvpn import IPVPN
-from bagpipe.bgp.vpn.evpn import EVPN
+from bagpipe.bgp import constants as const
+from bagpipe.bgp.common import run_command
+from bagpipe.bgp.common import net_utils
 
 
 DEFAULT_VPN_INSTANCE_ID = "bagpipe-test"
@@ -57,7 +49,7 @@ log.addHandler(console_handler)
 
 log.setLevel(logging.WARNING)
 
-run_log_command = functools.partial(run_command, log,
+run_log_command = functools.partial(run_command.run_command, log,
                                     run_as_root=True)
 
 
@@ -85,7 +77,7 @@ def create_veth_pair(vpn_interface, ns_interface, ns_name):
 
 
 def get_vpn2ns_if_name(namespace):
-    return (VPN2NS_INTERFACE_PREFIX + namespace)[:consts.LINUX_DEV_LEN]
+    return (VPN2NS_INTERFACE_PREFIX + namespace)[:const.LINUX_DEV_LEN]
 
 
 def create_special_netns_port(options):
@@ -133,7 +125,7 @@ def classifier_callback(option, opt_str, value, parser):
 def main():
     usage = "usage: %prog [--attach|--detach] --network-type (ipvpn|evpn) "\
         "--port (<port>|netns) --ip <ip>[/<mask>] [options] (see --help)"
-    parser = OptionParser(usage)
+    parser = optparse.OptionParser(usage)
 
     parser.add_option("--attach", dest="operation",
                       action="store_const", const="attach",
@@ -144,7 +136,7 @@ def main():
 
     parser.add_option("--network-type", dest="network_type",
                       help="network type (ipvpn or evpn)",
-                      choices=[IPVPN, EVPN])
+                      choices=[const.IPVPN, const.EVPN])
     parser.add_option("--vpn-instance-id", dest="vpn_instance_id",
                       help="UUID for the network instance "
                       "(default: %default-(ipvpn|evpn))",
@@ -256,18 +248,18 @@ def main():
         parser.error("Need to specify --ip")
 
     if (len(options.route_targets) == 0 and
-            not (options.import_only_rts
-                 or options.export_only_rts)):
-        if options.network_type == IPVPN:
+            not (options.import_only_rts or
+                 options.export_only_rts)):
+        if options.network_type == const.IPVPN:
             options.route_targets = ["64512:512"]
         else:
             options.route_targets = ["64512:513"]
 
-    import_rts = copy(options.route_targets or [])
+    import_rts = copy.copy(options.route_targets or [])
     for rt in options.import_only_rts:
         import_rts.append(rt)
 
-    export_rts = copy(options.route_targets or [])
+    export_rts = copy.copy(options.route_targets or [])
     for rt in options.export_only_rts:
         export_rts.append(rt)
 
@@ -275,7 +267,7 @@ def main():
         options.ip = options.ip + "/24"
 
     if not(options.gw_ip):
-        net = IPNetwork(options.ip)
+        net = netaddr.IPNetwork(options.ip)
         print "using %s as gateway address" % str(net[-2])
         options.gw_ip = str(net[-2])
 
@@ -298,15 +290,16 @@ def main():
 
         options.port = options.if2netns
         if not options.mac:
-            options.mac = get_device_mac(run_log_command,
-                                         options.if2vpn, options.netns)
+            options.mac = net_utils.get_device_mac(run_log_command,
+                                                   options.if2vpn,
+                                                   options.netns)
 
         print "Local port: %s (%s)" % (options.port, options.mac)
         run_log_command("ip link show %s" % options.port)
 
     local_port = {}
     if options.port[:5] == "evpn:":
-        if (options.network_type == IPVPN):
+        if (options.network_type == const.IPVPN):
             print "will plug evpn %s into the IPVPN" % options.port[5:]
             local_port['evpn'] = {'id': options.port[5:]}
         else:
@@ -315,7 +308,7 @@ def main():
         local_port['linuxif'] = options.port
 
         # currently our only the MPLS OVS driver for ipvpn requires preplug
-        if (options.ovs_preplug and options.network_type == IPVPN):
+        if (options.ovs_preplug and options.network_type == const.IPVPN):
             print "pre-plugging %s into %s" % (options.port,
                                                options.bridge)
             run_log_command("ovs-vsctl del-port %s %s" %
@@ -331,7 +324,7 @@ def main():
                 local_port['ovs']['vlan'] = options.ovs_vlan
 
     if not options.mac:
-        if options.network_type == IPVPN:
+        if options.network_type == const.IPVPN:
             options.mac = "52:54:00:99:99:22"
         else:
             parser.error("Need to specify --mac for an EVPN network "

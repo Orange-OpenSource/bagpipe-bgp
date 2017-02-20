@@ -17,67 +17,48 @@
 
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import log_decorator
-
-from bagpipe.bgp.constants import IPVPN
-
-from bagpipe.bgp.vpn.vpn_instance import VPNInstance, TrafficClassifier
-
-from bagpipe.bgp.engine import RouteEntry
-
-from bagpipe.bgp.engine.flowspec import Flow
-from bagpipe.bgp.engine.ipvpn import IPVPN as IPVPNNlri
-from bagpipe.bgp.engine.ipvpn import IPVPNRouteFactory
-
-from bagpipe.bgp.vpn.dataplane_drivers import DummyDataplaneDriver \
-    as _DummyDataplaneDriver
-
 from bagpipe.bgp.common import looking_glass as lg
-
-from exabgp.bgp.message.update import Attributes
-from exabgp.bgp.message.update.attribute.community.extended \
-    import ConsistentHashSortOrder
-from exabgp.bgp.message.update.attribute.community.extended \
-    import RouteTarget as RTExtCom
-from exabgp.bgp.message.update.attribute.community.extended \
-    import TrafficRedirect
-from exabgp.bgp.message.update.attribute.community.extended.rt_record\
-    import RTRecord
-
-from exabgp.reactor.protocol import AFI
-from exabgp.reactor.protocol import SAFI
+from bagpipe.bgp import constants
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.engine import flowspec
+from bagpipe.bgp.engine import ipvpn as ipvpn_routes
+from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
+from bagpipe.bgp.vpn import vpn_instance
 
 
-class DummyDataplaneDriver(_DummyDataplaneDriver):
-    type = IPVPN
+class DummyDataplaneDriver(dp_drivers.DummyDataplaneDriver):
+    type = constants.IPVPN
 
 
-class VRF(VPNInstance, lg.LookingGlassMixin):
+class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
     # component managing a VRF:
     # - calling a driver to instantiate the dataplane
     # - registering to receive routes for the needed route targets
     # - calling the driver to setup/update/remove routes in the dataplane
     # - cleanup: calling the driver, unregistering for BGP routes
 
-    type = IPVPN
-    afi = AFI(AFI.ipv4)
-    safi = SAFI(SAFI.mpls_vpn)
+    type = constants.IPVPN
+    afi = exa.AFI(exa.AFI.ipv4)
+    safi = exa.SAFI(exa.SAFI.mpls_vpn)
 
     @log_decorator.log
     def __init__(self, *args, **kwargs):
-        VPNInstance.__init__(self, *args, **kwargs)
+        vpn_instance.VPNInstance.__init__(self, *args, **kwargs)
         self.readvertised = set()
 
     def _nlri_from(self, prefix, label, rd):
         assert rd is not None
 
-        return IPVPNRouteFactory(self.afi, prefix, label, rd,
-                                 self.dp_driver.get_local_address())
+        return ipvpn_routes.IPVPNRouteFactory(
+            self.afi, prefix, label, rd,
+            self.dp_driver.get_local_address())
 
     def generate_vif_bgp_route(self, mac_address, ip_prefix, plen, label, rd):
         # Generate BGP route and advertise it...
         nlri = self._nlri_from("%s/%s" % (ip_prefix, plen), label, rd)
 
-        return RouteEntry(nlri)
+        return engine.RouteEntry(nlri)
 
     def _get_local_labels(self):
         for port_data in self.mac_2_localport_data.itervalues():
@@ -89,19 +70,19 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
 
     def _to_readvertise(self, route):
         # Only re-advertise IP VPN routes (e.g. not Flowspec routes)
-        if not isinstance(route.nlri, IPVPNNlri):
+        if not isinstance(route.nlri, ipvpn_routes.IPVPN):
             return False
 
-        rt_records = route.ecoms(RTRecord)
+        rt_records = route.ecoms(exa.RTRecord)
         self.log.debug("RTRecords: %s (readvertise_to_rts:%s)",
                        rt_records,
                        self.readvertise_to_rts)
 
-        readvertise_targets_as_records = [RTRecord.from_rt(rt)
+        readvertise_targets_as_records = [exa.RTRecord.from_rt(rt)
                                           for rt in self.readvertise_to_rts]
 
         if self.attract_traffic:
-            readvertise_targets_as_records += [RTRecord.from_rt(rt)
+            readvertise_targets_as_records += [exa.RTRecord.from_rt(rt)
                                                for rt in self.attract_rts]
 
         if set(readvertise_targets_as_records).intersection(set(rt_records)):
@@ -122,22 +103,23 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
 
         nlri = self._nlri_from(prefix, label, rd)
 
-        attributes = Attributes()
+        attributes = exa.Attributes()
 
-        # new RTRecord = original RTRecord (if any) + orig RTs
-        orig_rtrecords = route.ecoms(RTRecord)
-        rts = route.ecoms(RTExtCom)
-        add_rtrecords = [RTRecord.from_rt(rt) for rt in rts]
+        # new RTRecord = original RTRecord (if any) + orig RTs converted into
+        # RTRecord attributes
+        orig_rtrecords = route.ecoms(exa.RTRecord)
+        rts = route.ecoms(exa.RTExtCom)
+        add_rtrecords = [exa.RTRecord.from_rt(rt) for rt in rts]
 
         final_rtrecords = list(set(orig_rtrecords) | set(add_rtrecords))
 
         ecoms = self._gen_encap_extended_communities()
         ecoms.communities += final_rtrecords
         ecoms.communities.append(
-            ConsistentHashSortOrder(lb_consistent_hash_order))
+            exa.ConsistentHashSortOrder(lb_consistent_hash_order))
         attributes.add(ecoms)
 
-        entry = RouteEntry(nlri, self.readvertise_to_rts, attributes)
+        entry = engine.RouteEntry(nlri, self.readvertise_to_rts, attributes)
         self.log.debug("RouteEntry for (re-)advertisement: %s", entry)
         return entry
 
@@ -147,7 +129,8 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             self.attract_classifier)
         prefix_classifier['destination_prefix'] = prefix
 
-        traffic_classifier = TrafficClassifier(**prefix_classifier)
+        traffic_classifier = vpn_instance.TrafficClassifier(
+            **prefix_classifier)
         self.log.debug("Advertising prefix %s for redirection based on "
                        "traffic classifier %s", prefix, traffic_classifier)
         rules = traffic_classifier.map_traffic_classifier_2_redirect_rules()
@@ -228,9 +211,10 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
 
     def vif_plugged(self, mac_address, ip_address_prefix, localport,
                     advertise_subnet=False, lb_consistent_hash_order=0):
-        VPNInstance.vif_plugged(self, mac_address, ip_address_prefix,
-                                localport, advertise_subnet,
-                                lb_consistent_hash_order)
+        vpn_instance.VPNInstance.vif_plugged(self, mac_address,
+                                             ip_address_prefix,
+                                             localport, advertise_subnet,
+                                             lb_consistent_hash_order)
 
         label = self.mac_2_localport_data[mac_address]['label']
         rd = self.endpoint_2_rd[(mac_address, ip_address_prefix)]
@@ -263,16 +247,18 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
                     route.nlri.cidr.prefix())
                 self._withdraw_route(flow_route)
 
-        VPNInstance.vif_unplugged(self, mac_address, ip_address_prefix,
-                                  advertise_subnet, lb_consistent_hash_order)
+        vpn_instance.VPNInstance.vif_unplugged(self, mac_address,
+                                               ip_address_prefix,
+                                               advertise_subnet,
+                                               lb_consistent_hash_order)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
     def _route_2_tracked_entry(self, route):
-        if isinstance(route.nlri, IPVPNNlri):
+        if isinstance(route.nlri, ipvpn_routes.IPVPN):
             return route.nlri.cidr.prefix()
-        elif isinstance(route.nlri, Flow):
-            return (Flow, route.nlri._rules())
+        elif isinstance(route.nlri, flowspec.Flow):
+            return (flowspec.Flow, route.nlri._rules())
         else:
             self.log.error("We should not receive routes of type %s",
                            type(route.nlri))
@@ -282,9 +268,9 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
     @log_decorator.log
     def _new_best_route(self, entry, new_route):
 
-        if isinstance(new_route.nlri, Flow):
-            if len(new_route.ecoms(TrafficRedirect)) == 1:
-                traffic_redirect = new_route.ecoms(TrafficRedirect)
+        if isinstance(new_route.nlri, flowspec.Flow):
+            if len(new_route.ecoms(exa.TrafficRedirect)) == 1:
+                traffic_redirect = new_route.ecoms(exa.TrafficRedirect)
                 redirect_rt = "%s:%s" % (traffic_redirect[0].asn,
                                          traffic_redirect[0].target)
 
@@ -316,9 +302,9 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             assert len(new_route.nlri.labels.labels) == 1
 
             lb_consistent_hash_order = 0
-            if new_route.ecoms(ConsistentHashSortOrder):
+            if new_route.ecoms(exa.ConsistentHashSortOrder):
                 lb_consistent_hash_order = new_route.ecoms(
-                    ConsistentHashSortOrder)[0].order
+                    exa.ConsistentHashSortOrder)[0].order
 
             self.dataplane.setup_dataplane_for_remote_endpoint(
                 prefix, new_route.nexthop,
@@ -329,11 +315,11 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
     @log_decorator.log
     def _best_route_removed(self, entry, old_route, last):
 
-        if isinstance(old_route.nlri, Flow):
-            if len(old_route.ecoms(TrafficRedirect)) == 1:
+        if isinstance(old_route.nlri, flowspec.Flow):
+            if len(old_route.ecoms(exa.TrafficRedirect)) == 1:
                 if last:
                     traffic_redirect = old_route.ecoms(
-                        TrafficRedirect)
+                        exa.TrafficRedirect)
                     redirect_rt = "%s:%s" % (traffic_redirect[0].asn,
                                              traffic_redirect[0].target)
 
@@ -369,9 +355,9 @@ class VRF(VPNInstance, lg.LookingGlassMixin):
             assert len(old_route.nlri.labels.labels) == 1
 
             lb_consistent_hash_order = 0
-            if old_route.ecoms(ConsistentHashSortOrder):
+            if old_route.ecoms(exa.ConsistentHashSortOrder):
                 lb_consistent_hash_order = old_route.ecoms(
-                    ConsistentHashSortOrder)[0].order
+                    exa.ConsistentHashSortOrder)[0].order
 
             self.dataplane.remove_dataplane_for_remote_endpoint(
                 prefix, old_route.nexthop,

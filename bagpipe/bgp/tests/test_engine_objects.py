@@ -25,40 +25,15 @@ Also validates that ExaBGP classes behave as expected by the code in
 bagpipe.bgp.engine.__init__ .
 
 """
-from oslo_log import log as logging
 
 from testtools import TestCase
 
-from bagpipe.bgp.engine import RouteEntry
-
-from bagpipe.bgp.tests import NLRI1
-
-from exabgp.bgp.message.update import Attributes
-
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
-from exabgp.bgp.message.update.nlri.qualifier.labels import Labels
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp import tests
 
 
-from exabgp.bgp.message.update.attribute.attribute import Attribute
-from exabgp.bgp.message.update.attribute.localpref import LocalPreference
-from exabgp.bgp.message.update.attribute.community.extended.communities \
-    import ExtendedCommunities
-from exabgp.bgp.message.update.attribute.community.extended \
-    import RouteTargetASN2Number as RouteTarget
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
-
-from exabgp.bgp.message.update.nlri.evpn.mac import MAC as EVPNMAC
-from exabgp.bgp.message.update.nlri.qualifier.esi import ESI
-from exabgp.bgp.message.update.nlri.qualifier.etag import EthernetTag
-from exabgp.bgp.message.update.nlri.qualifier.mac import MAC
-
-from exabgp.protocol.ip import IP
-
-LOG = logging.getLogger(__name__)
-
-
-TEST_RD = RouteDistinguisher.fromElements("42.42.42.42", 5)
+TEST_RD = exa.RouteDistinguisher.fromElements("42.42.42.42", 5)
 
 
 class TestEngineObjects(TestCase):
@@ -77,19 +52,19 @@ class TestEngineObjects(TestCase):
         hash to the same value, and be equal
         '''
 
-        nlri1 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("1.1.1.1"))
+        nlri1 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("1.1.1.1"))
 
-        nlri2 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("1.1.1.1"))
+        nlri2 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("1.1.1.1"))
 
         self.assertEqual(hash(nlri1), hash(nlri2))
         self.assertEqual(nlri1, nlri2)
@@ -101,52 +76,52 @@ class TestEngineObjects(TestCase):
         and be equal
         '''
 
-        nlri0 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("1.1.1.1"))
+        nlri0 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("1.1.1.1"))
 
         # Esi
-        nlri1 = EVPNMAC(TEST_RD,
-                        ESI([1 for _ in range(0, 10)]),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("1.1.1.1"))
+        nlri1 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI([1 for _ in range(0, 10)]),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("1.1.1.1"))
 
         # label
-        nlri2 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([4444], True),
-                        IP.create("1.1.1.1"))
+        nlri2 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([4444], True),
+                            exa.IP.create("1.1.1.1"))
 
         # IP: different IPs, but same MACs: different route
-        nlri3 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("2.2.2.2"))
+        nlri3 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("2.2.2.2"))
 
         # with a next hop...
-        nlri4 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("1.1.1.1"),
-                        IP.pton("10.10.10.10"))
-        nlri5 = EVPNMAC(TEST_RD,
-                        ESI(),
-                        EthernetTag(111),
-                        MAC("01:02:03:04:05:06"), 6*8,
-                        Labels([42], True),
-                        IP.create("1.1.1.1"),
-                        IP.pton("11.11.11.11"))
+        nlri4 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("1.1.1.1"),
+                            exa.IP.pton("10.10.10.10"))
+        nlri5 = exa.EVPNMAC(TEST_RD,
+                            exa.ESI(),
+                            exa.EthernetTag(111),
+                            exa.MAC("01:02:03:04:05:06"), 6*8,
+                            exa.Labels([42], True),
+                            exa.IP.create("1.1.1.1"),
+                            exa.IP.pton("11.11.11.11"))
 
         self.assertEqual(hash(nlri0), hash(nlri1))
         self.assertEqual(hash(nlri0), hash(nlri2))
@@ -172,16 +147,14 @@ class TestEngineObjects(TestCase):
         Two routes with same NLRI but distinct attributes should
         not be equal
         '''
-        nlri = NLRI1
+        atts1 = exa.Attributes()
+        atts1.add(exa.LocalPreference(10))
 
-        atts1 = Attributes()
-        atts1.add(LocalPreference(10))
+        atts2 = exa.Attributes()
+        atts2.add(exa.LocalPreference(20))
 
-        atts2 = Attributes()
-        atts2.add(LocalPreference(20))
-
-        entry1 = RouteEntry(nlri, None, atts1)
-        entry2 = RouteEntry(nlri, None, atts2)
+        entry1 = engine.RouteEntry(tests.NLRI1, None, atts1)
+        entry2 = engine.RouteEntry(tests.NLRI1, None, atts2)
 
         self.assertNotEqual(entry1, entry2)
 
@@ -190,16 +163,14 @@ class TestEngineObjects(TestCase):
         Two routes with same NLRI but and same attributes should
         hash to the same values and be equal.
         '''
-        nlri = NLRI1
+        atts1 = exa.Attributes()
+        atts1.add(exa.LocalPreference(10))
 
-        atts1 = Attributes()
-        atts1.add(LocalPreference(10))
+        atts2 = exa.Attributes()
+        atts2.add(exa.LocalPreference(10))
 
-        atts2 = Attributes()
-        atts2.add(LocalPreference(10))
-
-        entry1 = RouteEntry(nlri, None, atts1)
-        entry2 = RouteEntry(nlri, None, atts2)
+        entry1 = engine.RouteEntry(tests.NLRI1, None, atts1)
+        entry2 = engine.RouteEntry(tests.NLRI1, None, atts2)
 
         self.assertEqual(hash(entry1), hash(entry2))
         self.assertEqual(entry1, entry2)
@@ -211,101 +182,107 @@ class TestEngineObjects(TestCase):
         multivalued attributes, like extended community, the values
         appear in a distinct order
         '''
-        nlri = NLRI1
-
-        atts1 = Attributes()
-        ecoms1 = ExtendedCommunities()
-        ecoms1.communities.append(RouteTarget(64512, 1))
-        ecoms1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        ecoms1.communities.append(RouteTarget(64512, 2))
+        atts1 = exa.Attributes()
+        ecoms1 = exa.ExtendedCommunities()
+        ecoms1.communities.append(exa.RouteTarget(64512, 1))
+        ecoms1.communities.append(exa.Encapsulation(
+            exa.Encapsulation.Type.VXLAN))
+        ecoms1.communities.append(exa.RouteTarget(64512, 2))
         atts1.add(ecoms1)
 
-        atts2 = Attributes()
-        ecoms2 = ExtendedCommunities()
-        ecoms2.communities.append(RouteTarget(64512, 2))
-        ecoms2.communities.append(RouteTarget(64512, 1))
-        ecoms2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
+        atts2 = exa.Attributes()
+        ecoms2 = exa.ExtendedCommunities()
+        ecoms2.communities.append(exa.RouteTarget(64512, 2))
+        ecoms2.communities.append(exa.RouteTarget(64512, 1))
+        ecoms2.communities.append(exa.Encapsulation(
+            exa.Encapsulation.Type.VXLAN))
         atts2.add(ecoms2)
 
-        entry1 = RouteEntry(nlri, None, atts1)
-
-        entry2 = RouteEntry(nlri, None, atts2)
+        entry1 = engine.RouteEntry(tests.NLRI1, None, atts1)
+        entry2 = engine.RouteEntry(tests.NLRI1, None, atts2)
 
         self.assertEqual(hash(entry1), hash(entry2))
         self.assertEqual(entry1, entry2)
 
     def test_8_route_entry_set_rts(self):
-        atts = Attributes()
-        ecoms = ExtendedCommunities()
-        ecoms.communities.append(RouteTarget(64512, 1))
-        ecoms.communities.append(RouteTarget(64512, 2))
-        ecoms.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        atts.add(LocalPreference(20))
+        atts = exa.Attributes()
+        ecoms = exa.ExtendedCommunities()
+        ecoms.communities.append(exa.RouteTarget(64512, 1))
+        ecoms.communities.append(exa.RouteTarget(64512, 2))
+        ecoms.communities.append(exa.Encapsulation(
+            exa.Encapsulation.Type.VXLAN))
+        atts.add(exa.LocalPreference(20))
         atts.add(ecoms)
 
-        entry = RouteEntry(NLRI1, None, atts)
+        entry = engine.RouteEntry(tests.NLRI1, None, atts)
 
         # check that the route_entry object has the RTs we wanted
-        self.assertIn(RouteTarget(64512, 1), entry.route_targets)
-        self.assertIn(RouteTarget(64512, 2), entry.route_targets)
+        self.assertIn(exa.RouteTarget(64512, 1), entry.route_targets)
+        self.assertIn(exa.RouteTarget(64512, 2), entry.route_targets)
 
         # modify the route targets
-        entry.set_route_targets([RouteTarget(64512, 3), RouteTarget(64512, 1)])
+        entry.set_route_targets([exa.RouteTarget(64512, 3),
+                                 exa.RouteTarget(64512, 1)])
 
         # check that the new RTs have replaced the old ones
-        self.assertIn(RouteTarget(64512, 1), entry.route_targets)
-        self.assertIn(RouteTarget(64512, 3), entry.route_targets)
-        self.assertNotIn(RouteTarget(64512, 2), entry.route_targets)
+        self.assertIn(exa.RouteTarget(64512, 1), entry.route_targets)
+        self.assertIn(exa.RouteTarget(64512, 3), entry.route_targets)
+        self.assertNotIn(exa.RouteTarget(64512, 2), entry.route_targets)
 
         # also need to check the RTs in the attributes
-        ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
-        self.assertIn(RouteTarget(64512, 1), ecoms)
-        self.assertIn(RouteTarget(64512, 3), ecoms)
-        self.assertNotIn(RouteTarget(64512, 2), ecoms)
+        ecoms = entry.attributes[
+            exa.Attribute.CODE.EXTENDED_COMMUNITY].communities
+        self.assertIn(exa.RouteTarget(64512, 1), ecoms)
+        self.assertIn(exa.RouteTarget(64512, 3), ecoms)
+        self.assertNotIn(exa.RouteTarget(64512, 2), ecoms)
 
         # check that other communities were preserved
-        self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
+        self.assertIn(exa.Encapsulation(exa.Encapsulation.Type.VXLAN), ecoms)
 
     def test_9_route_entry_rts_as_init_param(self):
-        atts = Attributes()
-        ecoms = ExtendedCommunities()
-        ecoms.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        atts.add(LocalPreference(20))
+        atts = exa.Attributes()
+        ecoms = exa.ExtendedCommunities()
+        ecoms.communities.append(exa.Encapsulation(
+            exa.Encapsulation.Type.VXLAN))
+        atts.add(exa.LocalPreference(20))
         atts.add(ecoms)
 
-        rts = [RouteTarget(64512, 1), RouteTarget(64512, 2)]
+        rts = [exa.RouteTarget(64512, 1), exa.RouteTarget(64512, 2)]
 
-        entry = RouteEntry(NLRI1, rts, atts)
+        entry = engine.RouteEntry(tests.NLRI1, rts, atts)
 
-        self.assertIn(RouteTarget(64512, 1), entry.route_targets)
-        self.assertIn(RouteTarget(64512, 2), entry.route_targets)
+        self.assertIn(exa.RouteTarget(64512, 1), entry.route_targets)
+        self.assertIn(exa.RouteTarget(64512, 2), entry.route_targets)
 
-        ecoms = entry.attributes[Attribute.CODE.EXTENDED_COMMUNITY].communities
-        self.assertIn(RouteTarget(64512, 1), ecoms)
-        self.assertIn(RouteTarget(64512, 2), ecoms)
-        self.assertIn(Encapsulation(Encapsulation.Type.VXLAN), ecoms)
+        ecoms = entry.attributes[
+            exa.Attribute.CODE.EXTENDED_COMMUNITY].communities
+        self.assertIn(exa.RouteTarget(64512, 1), ecoms)
+        self.assertIn(exa.RouteTarget(64512, 2), ecoms)
+        self.assertIn(exa.Encapsulation(exa.Encapsulation.Type.VXLAN), ecoms)
 
     def test_10_ecoms(self):
-        ecoms1 = ExtendedCommunities()
-        ecoms1.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        atts1 = Attributes()
+        ecoms1 = exa.ExtendedCommunities()
+        ecoms1.communities.append(exa.Encapsulation(
+            exa.Encapsulation.Type.VXLAN))
+        atts1 = exa.Attributes()
         atts1.add(ecoms1)
 
-        ecoms2 = ExtendedCommunities()
-        ecoms2.communities.append(Encapsulation(Encapsulation.Type.VXLAN))
-        ecoms2.communities.append(RouteTarget(64512, 1))
-        atts2 = Attributes()
+        ecoms2 = exa.ExtendedCommunities()
+        ecoms2.communities.append(exa.Encapsulation(
+            exa.Encapsulation.Type.VXLAN))
+        ecoms2.communities.append(exa.RouteTarget(64512, 1))
+        atts2 = exa.Attributes()
         atts2.add(ecoms2)
 
         self.assertFalse(atts1.sameValuesAs(atts2))
         self.assertFalse(atts2.sameValuesAs(atts1))
 
     def test_11_rts(self):
-        rt1a = RouteTarget(64512, 1)
-        rt1b = RouteTarget(64512, 1)
+        rt1a = exa.RouteTarget(64512, 1)
+        rt1b = exa.RouteTarget(64512, 1)
 
-        rt3 = RouteTarget(64512, 2)
-        rt4 = RouteTarget(64513, 1)
+        rt3 = exa.RouteTarget(64512, 2)
+        rt4 = exa.RouteTarget(64513, 1)
 
         self.assertEqual(hash(rt1a), hash(rt1b))
         # self.assertEqual(hash(rt1a), hash(rt2))

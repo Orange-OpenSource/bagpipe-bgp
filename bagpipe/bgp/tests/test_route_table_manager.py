@@ -58,44 +58,27 @@
 
 """
 
-from oslo_log import log as logging
-
 import mock
+import testtools
 
-from testtools import TestCase
-
-from bagpipe.bgp.tests import BaseTestBagPipeBGP, RT1, RT2, RT3, \
-    NLRI1, NLRI2, NH1, NH2
-
-from bagpipe.bgp.engine import RouteEvent
-from bagpipe.bgp.engine import RouteEntry
-from bagpipe.bgp.engine import Subscription
-from bagpipe.bgp.engine import Unsubscription
-from bagpipe.bgp.engine.worker import Worker
-from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.route_table_manager import RouteTableManager
-from bagpipe.bgp.engine.route_table_manager import Match
-from bagpipe.bgp.engine.route_table_manager import WorkerCleanupEvent
-
-from exabgp.bgp.message.update.attribute.community.extended \
-    import RouteTargetASN2Number as RouteTarget
-
-from exabgp.reactor.protocol import AFI, SAFI
-
-from exabgp.bgp.message.update import Attributes
-
-log = logging.getLogger()
-
-MATCH1 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RT1)
-MATCH2 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RT2)
-MATCH3 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RT3)
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import bgp_peer_worker as bpw
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.engine import route_table_manager as rtm
+from bagpipe.bgp.engine import worker
+from bagpipe.bgp import tests as t
 
 
-class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
+MATCH1 = rtm.Match(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.mpls_vpn), t.RT1)
+MATCH2 = rtm.Match(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.mpls_vpn), t.RT2)
+MATCH3 = rtm.Match(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.mpls_vpn), t.RT3)
+
+
+class TestRouteTableManager(testtools.TestCase, t.BaseTestBagPipeBGP):
 
     def setUp(self):
         super(TestRouteTableManager, self).setUp()
-        self.rtm = RouteTableManager(mock.Mock(), mock.Mock())
+        self.rtm = rtm.RouteTableManager(mock.Mock(), mock.Mock())
         self.rtm.start()
         self.set_event_target_worker(self.rtm)
 
@@ -113,18 +96,20 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         return worker
 
     def _worker_subscriptions(self, worker, rts, wait=True,
-                              afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
+                              afi=exa.AFI(exa.AFI.ipv4),
+                              safi=exa.SAFI(exa.SAFI.mpls_vpn)):
         for rt in rts:
-            subscribe = Subscription(afi, safi, rt, worker)
+            subscribe = engine.Subscription(afi, safi, rt, worker)
             self.rtm.enqueue(subscribe)
 
         if wait:
             self._wait()
 
     def _worker_unsubscriptions(self, worker, rts, wait=True,
-                                afi=AFI(AFI.ipv4), safi=SAFI(SAFI.mpls_vpn)):
+                                afi=exa.AFI(exa.AFI.ipv4),
+                                safi=exa.SAFI(exa.SAFI.mpls_vpn)):
         for rt in rts:
-            unsubscribe = Unsubscription(afi, safi, rt, worker)
+            unsubscribe = engine.Unsubscription(afi, safi, rt, worker)
             self.rtm.enqueue(unsubscribe)
 
         if wait:
@@ -151,7 +136,7 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
         'events'
         '''
         for (call_args, _) in events:
-            if (call_args[0].type == RouteEvent.ADVERTISE):
+            if (call_args[0].type == engine.RouteEvent.ADVERTISE):
                 self.assertIn(call_args[0].route_entry, advertised_routes,
                               "Bad advertised route")
                 advertised_routes.remove(call_args[0].route_entry)
@@ -164,14 +149,14 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_a1_subscriptions_with_no_route_to_synthesize(self):
         # Worker1 subscribes to RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # check subscriptions
         self._check_subscriptions(worker1, [MATCH1, MATCH2])
 
     def test_a1_check_first_last_local_worker_callback(self):
-        bgp_worker1 = self._new_worker("Worker-1", BGPPeerWorker)
-        self._worker_subscriptions(bgp_worker1, [RT1])
+        bgp_worker1 = self._new_worker("worker.Worker-1", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_worker1, [t.RT1])
         self._wait()
         self.assertEqual(
             0,
@@ -179,34 +164,34 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
             "first_local_subscriber_callback should not have been called "
             " (non local worker)")
 
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
         self.assertEqual(
             1,
             self.rtm.first_local_subscriber_callback.call_count,
             "first_local_subscriber_callback should have been called")
 
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT1])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT1])
         self.assertEqual(
             1,
             self.rtm.first_local_subscriber_callback.call_count,
             "first_local_subscriber_callback should not have been called a "
             "second time")
 
-        self._worker_unsubscriptions(worker2, [RT1])
+        self._worker_unsubscriptions(worker2, [t.RT1])
         self.assertEqual(
             0,
             self.rtm.last_local_subscriber_callback.call_count,
             "last_local_subscriber_callback should not have been called")
 
-        self._worker_unsubscriptions(worker1, [RT1])
+        self._worker_unsubscriptions(worker1, [t.RT1])
         self.assertEqual(
             1,
             self.rtm.last_local_subscriber_callback.call_count,
             "last_local_subscriber_callback should have been called")
 
-        self._worker_unsubscriptions(bgp_worker1, [RT1])
+        self._worker_unsubscriptions(bgp_worker1, [t.RT1])
         self.assertEqual(
             1,
             self.rtm.last_local_subscriber_callback.call_count,
@@ -215,26 +200,26 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_a2_subscriptions_with_route_to_synthesize(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                     [RT1, RT2], bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        evt1 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                                     [t.RT1, t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 advertises an other route for RT2
-        evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI2,
-                                     [RT2], bgp_peer_worker1, NH1)
+        evt2 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI2,
+                                     [t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 subscribes to RT1
-        self._worker_subscriptions(bgp_peer_worker1, [RT1])
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1])
         # Worker1 subscribes to RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # Worker2 subscribes to RT1
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT1])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT1])
         # Worker3 subscribes to RT3
-        worker3 = self._new_worker("Worker-3", Worker)
-        self._worker_subscriptions(worker3, [RT3])
+        worker3 = self._new_worker("worker.Worker-3", worker.Worker)
+        self._worker_subscriptions(worker3, [t.RT3])
         # BGPPeerWorker2 subscribes to RT1
-        bgp_peer_worker2 = self._new_worker("BGPWorker2", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker2, [RT1])
+        bgp_peer_worker2 = self._new_worker("BGPWorker2", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker2, [t.RT1])
         # Waiting for RouteTableManager thread finishes to process the
         # subscription
         self._wait()
@@ -256,19 +241,20 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_a3_resubscription(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        route_event = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                            [RT1, RT2], bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        route_event = self._new_route_event(engine.RouteEvent.ADVERTISE,
+                                            t.NLRI1, [t.RT1, t.RT2],
+                                            bgp_peer_worker1, t.NH1)
         # Worker1 subscribes to RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # Worker1 subscribes again to RT1
-        self._worker_subscriptions(worker1, [RT1])
+        self._worker_subscriptions(worker1, [t.RT1])
         # Worker2 subscribes to RT1
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT1])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT1])
         # Worker1 subscribes again to RT2
-        self._worker_subscriptions(worker2, [RT2])
+        self._worker_subscriptions(worker2, [t.RT2])
         # check route entry synthesized
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route advertised should be synthesized to Worker1")
@@ -281,30 +267,31 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_a4_two_subscriptions(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
 
         # Worker2 subscribes to RT1
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT1])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT1])
 
         # Worker2 advertises a route to RT1
-        self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1], worker2, NH1)
+        self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                              [t.RT1], worker2, t.NH1)
 
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route advertised should be synthesized to Worker1")
 
     def test_b1_unsubscription_with_no_route_to_synthesize(self):
         # Worker1 subscribes to RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # BGPPeerWorker1 subscribes to RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker1, [RT1, RT2])
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1, t.RT2])
         # Worker1 unsubscribes to RT1
-        self._worker_unsubscriptions(worker1, [RT1])
+        self._worker_unsubscriptions(worker1, [t.RT1])
         # BGPPeerWorker1 unsubscribes to RT1 and RT2
-        self._worker_unsubscriptions(bgp_peer_worker1, [RT1, RT2])
+        self._worker_unsubscriptions(bgp_peer_worker1, [t.RT1, t.RT2])
         # check subscription/unsubscriptions
         self._check_unsubscriptions(worker1, [MATCH1])
         self._check_subscriptions(worker1, [MATCH2])
@@ -312,32 +299,33 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_b2_unsubscription_with_route_to_synthesize(self):
         # BGPPeerWorker1 advertises a route for RT1
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                     bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        evt1 = self._new_route_event(engine.RouteEvent.ADVERTISE,
+                                     t.NLRI1, [t.RT1, t.RT2],
+                                     bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 advertises an other route for RT2
-        evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI2, [RT2],
-                                     bgp_peer_worker1, NH1)
+        evt2 = self._new_route_event(engine.RouteEvent.ADVERTISE,
+                                     t.NLRI2, [t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 subscribes to RT1
-        self._worker_subscriptions(bgp_peer_worker1, [RT1])
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1])
         # Worker1 subscribes to RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # Worker2 subscribes to RT2
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT2])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT2])
         # Worker3 subscribes to RT3
-        worker3 = self._new_worker("Worker-3", Worker)
-        self._worker_subscriptions(worker3, [RT3])
+        worker3 = self._new_worker("worker.Worker-3", worker.Worker)
+        self._worker_subscriptions(worker3, [t.RT3])
         # BGPPeerWorker2 subscribes to RT1
-        bgp_peer_worker2 = self._new_worker("BGPWorker2", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker2, [RT1])
+        bgp_peer_worker2 = self._new_worker("BGPWorker2", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker2, [t.RT1])
         # Workers and BGPPeerWorker unsubscriptions
-        self._worker_unsubscriptions(bgp_peer_worker1, [RT1], False)
-        self._worker_unsubscriptions(worker1, [RT1], False)
-        self._worker_unsubscriptions(worker2, [RT2], False)
-        self._worker_unsubscriptions(worker3, [RT3], False)
-        self._worker_unsubscriptions(bgp_peer_worker2, [RT1], False)
+        self._worker_unsubscriptions(bgp_peer_worker1, [t.RT1], False)
+        self._worker_unsubscriptions(worker1, [t.RT1], False)
+        self._worker_unsubscriptions(worker2, [t.RT2], False)
+        self._worker_unsubscriptions(worker3, [t.RT3], False)
+        self._worker_unsubscriptions(bgp_peer_worker2, [t.RT1], False)
         # Waiting for RouteTableManager thread finishes to process the
         # subscription
         self._wait()
@@ -363,53 +351,55 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_b3_unsubscription_not_registered(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
         # Worker1 unsubscribes to RT2
-        self._worker_unsubscriptions(worker1, [RT2])
+        self._worker_unsubscriptions(worker1, [t.RT2])
         # BGPPeerWorker1 unsubscribes to RT1
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        self._worker_unsubscriptions(bgp_peer_worker1, [RT1, RT2])
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        self._worker_unsubscriptions(bgp_peer_worker1, [t.RT1, t.RT2])
         # check subscription/unsubscriptions
         self._check_subscriptions(worker1, [MATCH1])
         self._check_unsubscriptions(bgp_peer_worker1, [MATCH1, MATCH2])
 
     def test_c1_route_advertise_by_worker_without_propagation(self):
         # Worker1 advertises a route for RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        route_event = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                            [RT1, RT2], worker1, NH1)
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        route_event = self._new_route_event(engine.RouteEvent.ADVERTISE,
+                                            t.NLRI1, [t.RT1, t.RT2],
+                                            worker1, t.NH1)
         # check route entry has been inserted
         self.assertIn(route_event.route_entry, worker1._rtm_route_entries,
                       "Route entry not found")
 
     def test_c2_route_withdraw_by_worker_without_propagation(self):
         # Worker1 advertises then withdraws a route
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                              [RT1, RT2], worker1, NH1)
-        route_event = self._new_route_event(RouteEvent.WITHDRAW, NLRI1,
-                                            [RT1], worker1, NH1)
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                              [t.RT1, t.RT2], worker1, t.NH1)
+        route_event = self._new_route_event(engine.RouteEvent.WITHDRAW,
+                                            t.NLRI1, [t.RT1], worker1, t.NH1)
         # check route entry has been removed
         self.assertNotIn(route_event.route_entry, worker1._rtm_route_entries,
                          "Route entry found")
 
     def test_c3_route_advertise_by_bgp_peer_with_propagation(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
         # Worker2 subscribes to RT2
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT2])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT2])
         # BGPPeerWorker1 subscribes to RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker1, [RT1, RT2])
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1, t.RT2])
         # BGPPeerWorker2 subscribes to RT1 and RT2
-        bgp_peer_worker2 = self._new_worker("BGPWorker2", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker2, [RT1, RT2])
+        bgp_peer_worker2 = self._new_worker("BGPWorker2", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker2, [t.RT1, t.RT2])
         # BGPPeerWorker1 advertises a route for RT1
-        route_event = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                            [RT1], bgp_peer_worker1, NH1)
+        route_event = self._new_route_event(engine.RouteEvent.ADVERTISE,
+                                            t.NLRI1, [t.RT1], bgp_peer_worker1,
+                                            t.NH1)
         # check route_event propagation
         self.assertEqual(1, worker1.enqueue.call_count,
                          "1 route should be propagated to Worker1")
@@ -424,26 +414,28 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_c4_route_withdraw_by_peer_worker_with_propagation(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
         # Worker2 subscribes to RT2
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT2])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT2])
         # Worker3 subscribes to RT3
-        worker3 = self._new_worker("Worker-3", Worker)
-        self._worker_subscriptions(worker3, [RT3])
+        worker3 = self._new_worker("worker.Worker-3", worker.Worker)
+        self._worker_subscriptions(worker3, [t.RT3])
         # BGPPeerWorker1 subscribes to RT1
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker1, [RT1])
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1])
         # BGPPeerWorker2 subscribes to RT2
-        bgp_peer_worker2 = self._new_worker("BGPWorker2", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker2, [RT2])
+        bgp_peer_worker2 = self._new_worker("BGPWorker2", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker2, [t.RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        route_eventA = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                             [RT1, RT2], bgp_peer_worker1, NH1)
+        route_eventA = self._new_route_event(engine.RouteEvent.ADVERTISE,
+                                             t.NLRI1, [t.RT1, t.RT2],
+                                             bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 withdraw previous route (without RT
-        route_eventW = self._new_route_event(RouteEvent.WITHDRAW, NLRI1,
-                                             [], bgp_peer_worker1, NH1)
+        route_eventW = self._new_route_event(engine.RouteEvent.WITHDRAW,
+                                             t.NLRI1, [],
+                                             bgp_peer_worker1, t.NH1)
         # check route_event propagation
         self.assertEqual(2, worker1.enqueue.call_count,
                          "2 routes should be propagated to Worker1")
@@ -464,22 +456,24 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_c5_route_update_by_bgp_peer_with_withdraw_propagation(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
         # Worker2 subscribes to RT2
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT2])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT2])
         # Worker3 subscribes to RT3
-        worker3 = self._new_worker("Worker-3", Worker)
-        self._worker_subscriptions(worker3, [RT3])
+        worker3 = self._new_worker("worker.Worker-3", worker.Worker)
+        self._worker_subscriptions(worker3, [t.RT3])
         # BGPPeerWorker1 advertises a route for RT1, RT2 and RT3
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                     [RT1, RT2, RT3], bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        evt1 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                                     [t.RT1, t.RT2, t.RT3],
+                                     bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 advertises the same nlri with attributes NH and RTs
         # modification
-        evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                                     [RT1, RT2], bgp_peer_worker1, NH2)
+        evt2 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                                     [t.RT1, t.RT2],
+                                     bgp_peer_worker1, t.NH2)
         # check route event propagation
         # TO DO : check route_event.replaced_route
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
@@ -499,15 +493,15 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_c6_route_readvertised(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2, RT3])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2, t.RT3])
         # BGPPeerWorker1 advertises a route for RT1, RT2 and RT3
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                     bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        evt1 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                                     [t.RT1, t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 advertises the same nlri with same attributes and RTs
-        self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                              bgp_peer_worker1, NH1)
+        self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                              [t.RT1, t.RT2], bgp_peer_worker1, t.NH1)
         # check route event propagation
         self.assertEqual(0, bgp_peer_worker1.enqueue.call_count,
                          "Route should not be propagated to its source")
@@ -518,15 +512,15 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_c7_route_withdraw_not_registered(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                     bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        evt1 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                                     [t.RT1, t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 withdraw a not registered route (without RT
-        self._new_route_event(RouteEvent.WITHDRAW, NLRI2, [],
-                              bgp_peer_worker1, NH1)
+        self._new_route_event(engine.RouteEvent.WITHDRAW, t.NLRI2, [],
+                              bgp_peer_worker1, t.NH1)
         # Waiting for RouteTableManager thread finishes to process route_event
         self._wait()
         # check route_event propagation
@@ -539,22 +533,22 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_d1_worker_cleanup(self):
         # Worker1 subscribes to RT1
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1])
         # Worker2 subscribes to RT2
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT2])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT2])
         # BGPPeerWorker1 subscribes to RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        self._worker_subscriptions(bgp_peer_worker1, [RT1, RT2])
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1, t.RT2])
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        evt1 = self._new_route_event(RouteEvent.ADVERTISE, NLRI1, [RT1, RT2],
-                                     bgp_peer_worker1, NH1)
+        evt1 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                                     [t.RT1, t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 advertises an other route for RT2
-        evt2 = self._new_route_event(RouteEvent.ADVERTISE, NLRI2, [RT2],
-                                     bgp_peer_worker1, NH1)
+        evt2 = self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI2,
+                                     [t.RT2], bgp_peer_worker1, t.NH1)
         # Cleanup Worker1
-        self.rtm.enqueue(WorkerCleanupEvent(bgp_peer_worker1))
+        self.rtm.enqueue(engine.WorkerCleanupEvent(bgp_peer_worker1))
         # Waiting for RouteTableManager thread finishes to process the
         # subscriptions
         self._wait()
@@ -586,33 +580,42 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
 
     def test_e1_dump_state(self):
         # BGPPeerWorker1 advertises a route for RT1 and RT2
-        bgp_peer_worker1 = self._new_worker("BGPWorker1", BGPPeerWorker)
-        self._new_route_event(RouteEvent.ADVERTISE, NLRI1,
-                              [RT1, RT2], bgp_peer_worker1, NH1)
+        bgp_peer_worker1 = self._new_worker("BGPWorker1", bpw.BGPPeerWorker)
+        self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI1,
+                              [t.RT1, t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 advertises an other route for RT2
-        self._new_route_event(RouteEvent.ADVERTISE, NLRI2,
-                              [RT2], bgp_peer_worker1, NH1)
+        self._new_route_event(engine.RouteEvent.ADVERTISE, t.NLRI2,
+                              [t.RT2], bgp_peer_worker1, t.NH1)
         # BGPPeerWorker1 subscribes to RT1
-        self._worker_subscriptions(bgp_peer_worker1, [RT1])
+        self._worker_subscriptions(bgp_peer_worker1, [t.RT1])
         # Worker1 subscribes to RT1 and RT2
-        worker1 = self._new_worker("Worker-1", Worker)
-        self._worker_subscriptions(worker1, [RT1, RT2])
+        worker1 = self._new_worker("worker.Worker-1", worker.Worker)
+        self._worker_subscriptions(worker1, [t.RT1, t.RT2])
         # Worker2 subscribes to RT1
-        worker2 = self._new_worker("Worker-2", Worker)
-        self._worker_subscriptions(worker2, [RT1])
+        worker2 = self._new_worker("worker.Worker-2", worker.Worker)
+        self._worker_subscriptions(worker2, [t.RT1])
         # Worker3 subscribes to RT3
-        worker3 = self._new_worker("Worker-3", Worker)
-        self._worker_subscriptions(worker3, [RT3])
+        worker3 = self._new_worker("worker.Worker-3", worker.Worker)
+        self._worker_subscriptions(worker3, [t.RT3])
 
         self.rtm._dump_state()
 
     def test_7_matches(self):
-        m1a = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1))
-        m1b = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1))
-        m1c = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 1,
-                                                                    False))
-        m2 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64512, 2))
-        m3 = Match(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), RouteTarget(64513, 1))
+        m1a = rtm.Match(exa.AFI(exa.AFI.ipv4),
+                        exa.SAFI(exa.SAFI.mpls_vpn),
+                        exa.RouteTarget(64512, 1))
+        m1b = rtm.Match(exa.AFI(exa.AFI.ipv4),
+                        exa.SAFI(exa.SAFI.mpls_vpn),
+                        exa.RouteTarget(64512, 1))
+        m1c = rtm.Match(exa.AFI(exa.AFI.ipv4),
+                        exa.SAFI(exa.SAFI.mpls_vpn),
+                        exa.RouteTarget(64512, 1, False))
+        m2 = rtm.Match(exa.AFI(exa.AFI.ipv4),
+                       exa.SAFI(exa.SAFI.mpls_vpn),
+                       exa.RouteTarget(64512, 2))
+        m3 = rtm.Match(exa.AFI(exa.AFI.ipv4),
+                       exa.SAFI(exa.SAFI.mpls_vpn),
+                       exa.RouteTarget(64513, 1))
 
         self.assertEqual(hash(m1a), hash(m1b))
         self.assertEqual(hash(m1a), hash(m1c))
@@ -627,18 +630,19 @@ class TestRouteTableManager(TestCase, BaseTestBagPipeBGP):
     def test_f1_test_empty_rt(self):
         # worker advertises a route with no RT
 
-        w1 = self._new_worker("Worker1", Worker)
+        w1 = self._new_worker("Worker1", worker.Worker)
 
-        subscribe = Subscription(AFI(AFI.ipv4),
-                                 SAFI(SAFI.mpls_vpn),
-                                 None, w1)
+        subscribe = engine.Subscription(exa.AFI(exa.AFI.ipv4),
+                                        exa.SAFI(exa.SAFI.mpls_vpn),
+                                        None, w1)
         self.rtm.enqueue(subscribe)
 
-        w2 = self._new_worker("Worker2", Worker)
+        w2 = self._new_worker("Worker2", worker.Worker)
 
-        route_event = RouteEvent(RouteEvent.ADVERTISE,
-                                 RouteEntry(NLRI1, None, Attributes()),
-                                 w2)
+        route_event = engine.RouteEvent(
+            engine.RouteEvent.ADVERTISE,
+            engine.RouteEntry(t.NLRI1, None, exa.Attributes()),
+            w2)
 
         self.rtm.enqueue(route_event)
 

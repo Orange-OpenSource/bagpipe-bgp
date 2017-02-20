@@ -15,15 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
+import threading
 
 from oslo_log import log as logging
 
-import random
-
-from threading import Lock
-
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import looking_glass as lg
+
 
 LOG = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class LabelAllocator(lg.LookingGlassMixin):
         # need be the same on all compute nodes
         self.labels = dict()
 
-        self.lock = Lock()
+        self.lock = threading.Lock()
 
     @utils.synchronized
     def get_new_label(self, description):

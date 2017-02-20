@@ -27,11 +27,14 @@ It can be used to act as a super crude route reflector between
 two bagpipe-bgp instances.  But it won't support more than 2 !
 """
 
-from threading import Lock
+import threading
 
 from twisted.protocols import basic
-from twisted.application import service, internet
-from twisted.internet import protocol, reactor, endpoints
+from twisted.application import service
+from twisted.application import internet
+from twisted.internet import protocol
+from twisted.internet import reactor
+from twisted.internet import endpoints
 
 
 class FakeRR(basic.LineReceiver):
@@ -39,7 +42,7 @@ class FakeRR(basic.LineReceiver):
     delimiter = chr(255) * 16
 
     def __init__(self):
-        self.lock = Lock()
+        self.lock = threading.Lock()
 
     def connectionMade(self):
         with self.lock:

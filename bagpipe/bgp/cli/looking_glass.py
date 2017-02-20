@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from sys import stdout
 
-import os
-import urllib2
 import json
+import optparse
+import urllib2
 
-from optparse import OptionParser
 
 BAGPIPE_PORT = 8082
 LOOKING_GLASS_BASE = "looking-glass"
@@ -115,7 +115,7 @@ def main():
     usage = """ %prog [--server <ip>] path to object in looking-glass
 
 e.g.: %prog vpns instances"""
-    parser = OptionParser(usage)
+    parser = optparse.OptionParser(usage)
 
     parser.add_option(
         "--server", dest="server", default="127.0.0.1",

@@ -15,28 +15,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_log import log as logging
+import collections
+import Queue
+import threading
 import traceback
 
-from threading import Thread
-from Queue import Queue
-
-from collections import defaultdict
-
-from bagpipe.bgp.engine import RouteEvent
-from bagpipe.bgp.engine import Subscription
-from bagpipe.bgp.engine import Unsubscription
-from bagpipe.bgp.engine import WorkerCleanupEvent
-
-from bagpipe.bgp.engine.worker import Worker
-from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
+from oslo_log import log as logging
 
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import log_decorator
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.engine import worker as worker_m
+from bagpipe.bgp.engine import bgp_peer_worker
 
-from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.update.attribute.community.extended import \
-    RouteTargetASN2Number as RouteTarget
 
 LOG = logging.getLogger(__name__)
 
@@ -44,9 +36,10 @@ LOG = logging.getLogger(__name__)
 class Match(object):
 
     def __init__(self, afi, safi, route_target):
-        assert isinstance(afi, AFI)
-        assert isinstance(safi, SAFI)
-        assert route_target is None or isinstance(route_target, RouteTarget)
+        assert isinstance(afi, exa.AFI)
+        assert isinstance(safi, exa.SAFI)
+        assert route_target is None or isinstance(route_target,
+                                                  exa.RouteTarget)
         self.afi = afi
         self.safi = safi
         self.route_target = route_target
@@ -66,13 +59,13 @@ class Match(object):
     def __cmp__(self, other):
         assert isinstance(other, Match)
 
-        self_afi = self.afi or AFI(0)
-        self_safi = self.safi or SAFI(0)
-        self_rt = self.route_target or RouteTarget(0, 0)
+        self_afi = self.afi or exa.AFI(0)
+        self_safi = self.safi or exa.SAFI(0)
+        self_rt = self.route_target or exa.RouteTarget(0, 0)
 
-        other_afi = other.afi or AFI(0)
-        other_safi = other.safi or SAFI(0)
-        other_rt = other.route_target or RouteTarget(0, 0)
+        other_afi = other.afi or exa.AFI(0)
+        other_safi = other.safi or exa.SAFI(0)
+        other_rt = other.route_target or exa.RouteTarget(0, 0)
 
         val = cmp((self_afi, self_safi, str(self_rt)),
                   (other_afi, other_safi, str(other_rt)))
@@ -80,9 +73,9 @@ class Match(object):
         return val
 
 
-MATCH_ANY = Match(Subscription.ANY_AFI,
-                  Subscription.ANY_SAFI,
-                  Subscription.ANY_RT)
+MATCH_ANY = Match(engine.Subscription.ANY_AFI,
+                  engine.Subscription.ANY_SAFI,
+                  engine.Subscription.ANY_RT)
 
 
 def matches_for(afi, safi, route_targets):
@@ -90,8 +83,8 @@ def matches_for(afi, safi, route_targets):
     # and these routetargets, with all possible wildcards
     #
     # There are 4*(n+1) possible Match object (for n route_targets)
-    for _afi in (Subscription.ANY_AFI, afi):
-        for _safi in (Subscription.ANY_SAFI, safi):
+    for _afi in (engine.Subscription.ANY_AFI, afi):
+        for _safi in (engine.Subscription.ANY_SAFI, safi):
             yield Match(_afi, _safi, None)
             if route_targets is not None:
                 for rt in route_targets:
@@ -112,14 +105,14 @@ class WorkersAndEntries(object):
     def add_worker(self, worker):
         """ returns True iif first local worker """
         self.workers.add(worker)
-        if not isinstance(worker, BGPPeerWorker):
+        if not isinstance(worker, bgp_peer_worker.BGPPeerWorker):
             self.n_local_workers += 1
             return self.n_local_workers == 1
 
     def del_worker(self, worker):
         """ returns True iif last local worker """
         self.workers.remove(worker)
-        if not isinstance(worker, BGPPeerWorker):
+        if not isinstance(worker, bgp_peer_worker.BGPPeerWorker):
             self.n_local_workers -= 1
             return self.n_local_workers == 0
 
@@ -139,14 +132,14 @@ def test_should_dispatch(route_event, target_worker):
     '''
     if route_event.source == target_worker:
         return (False, "not dispatching an update back to its source")
-    elif (isinstance(route_event.source, BGPPeerWorker)
-          and isinstance(target_worker, BGPPeerWorker)):
+    elif (isinstance(route_event.source, bgp_peer_worker.BGPPeerWorker) and
+          isinstance(target_worker, bgp_peer_worker.BGPPeerWorker)):
         return (False, "do not dispatch a route between BGP peers")
     else:
         return (True, "")
 
 
-class RouteTableManager(Thread, lg.LookingGlassMixin):
+class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
 
     """
     This singleton class will dispatch events between Workers.
@@ -161,11 +154,12 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
     """
 
     def __init__(self, first_local_subscriber_cb, last_local_subscriber_cb):
-        Thread.__init__(self, name="RouteTableManager")
+        threading.Thread.__init__(self, name="RouteTableManager")
         self.setDaemon(True)
 
         # keys are Matches, values are WorkersAndEntries objects:
-        self._match_2_workers_entries = defaultdict(WorkersAndEntries)
+        self._match_2_workers_entries = (
+            collections.defaultdict(WorkersAndEntries))
 
         # workers known to us
         # name -> worker dict
@@ -177,7 +171,7 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         self.first_local_subscriber_callback = first_local_subscriber_cb
         self.last_local_subscriber_callback = last_local_subscriber_cb
 
-        self._queue = Queue()
+        self._queue = Queue.Queue()
 
     @log_decorator.log_info
     def stop(self):
@@ -189,13 +183,13 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
             event = self._queue.get()
             LOG.debug("RouteTableManager received event %s", event)
             try:
-                if event.__class__ == RouteEvent:
+                if event.__class__ == engine.RouteEvent:
                     self._receive_route_event(event)
-                elif event.__class__ == Subscription:
+                elif event.__class__ == engine.Subscription:
                     self._worker_subscribes(event)
-                elif event.__class__ == Unsubscription:
+                elif event.__class__ == engine.Unsubscription:
                     self._worker_unsubscribes(event)
-                elif event.__class__ == WorkerCleanupEvent:
+                elif event.__class__ == engine.WorkerCleanupEvent:
                     self._worker_cleanup(event.worker)
                 elif event == STOP_EVENT:
                     LOG.info("STOP_EVENT => breaking main loop")
@@ -241,7 +235,7 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         # Ideally, the code should detect that the worker is already subscribed
         # and skip the subscription.
 
-        assert isinstance(sub.worker, Worker)
+        assert isinstance(sub.worker, worker_m.Worker)
         LOG.info("workerSubscribes: %s", sub)
 
         worker = sub.worker
@@ -261,7 +255,7 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         # re-synthesize events
         for entry in wa.entries:
             LOG.debug("Found an entry for this match: %s", entry)
-            event = RouteEvent(RouteEvent.ADVERTISE, entry)
+            event = engine.RouteEvent(engine.RouteEvent.ADVERTISE, entry)
             (dispatch, reason) = test_should_dispatch(event, worker)
 
             if dispatch:
@@ -289,7 +283,7 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         # self._dump_state()
 
     def _worker_unsubscribes(self, sub):
-        assert isinstance(sub.worker, Worker)
+        assert isinstance(sub.worker, worker_m.Worker)
 
         worker = sub.worker
 
@@ -319,7 +313,8 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
                               intersect)
                 else:
                     LOG.debug("Found an entry for this match: %s", entry)
-                    event = RouteEvent(RouteEvent.WITHDRAW, entry)
+                    event = engine.RouteEvent(engine.RouteEvent.WITHDRAW,
+                                              entry)
                     (dispatch, reason) = test_should_dispatch(event, worker)
                     if dispatch:
                         LOG.info("Dispatching re-synthesized event for %s",
@@ -400,13 +395,14 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         LOG.debug("   Result: %s", replaced_entry)
 
         # replaced_entry should be non-empty for a withdraw
-        if replaced_entry is None and route_event.type == RouteEvent.WITHDRAW:
+        if (replaced_entry is None and
+                route_event.type == engine.RouteEvent.WITHDRAW):
             LOG.warning("WITHDRAW but found no route that we could remove: %s",
                         route_event.route_entry)
             return
 
         # Propagate events to interested workers...
-        if route_event.type == RouteEvent.ADVERTISE:
+        if route_event.type == engine.RouteEvent.ADVERTISE:
 
             if replaced_entry == route_event.route_entry:
                 LOG.warning("Ignoring, the route advertized is the same as the"
@@ -429,9 +425,9 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         if replaced_entry is not None:
             LOG.debug("Synthesizing a withdraw event for replaced route %s",
                       replaced_entry)
-            removal_event = RouteEvent(RouteEvent.WITHDRAW,
-                                       replaced_entry,
-                                       route_event.source)
+            removal_event = engine.RouteEvent(engine.RouteEvent.WITHDRAW,
+                                              replaced_entry,
+                                              route_event.source)
 
             self._propagate_route_event(removal_event,
                                         workers_already_notified)
@@ -452,7 +448,7 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
             # update the route entries for this source
             replaced_entry.source._rtm_route_entries.discard(replaced_entry)
 
-        if route_event.type == RouteEvent.ADVERTISE:
+        if route_event.type == engine.RouteEvent.ADVERTISE:
             # Update match2entries and source2entries for the newly
             # advertized route
             for match in matches_for(entry.afi,
@@ -483,14 +479,14 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         Consider this worker unsubscribed from all of its current
         subscriptions.
         '''
-        assert isinstance(worker, Worker)
+        assert isinstance(worker, worker_m.Worker)
         LOG.info("Cleanup for worker %s", worker.name)
         # synthesize withdraw events for all routes from this worker
         LOG.info("  Preparing to withdraw %d routes that were advertised "
                  "by worker", len(worker._rtm_route_entries))
         for entry in worker._rtm_route_entries:
             LOG.info("  Enqueue event to Withdraw route %s", entry)
-            self.enqueue(RouteEvent(RouteEvent.WITHDRAW, entry))
+            self.enqueue(engine.RouteEvent(engine.RouteEvent.WITHDRAW, entry))
 
         # remove worker from all of its subscriptions
         for match in worker._rtm_matches:
@@ -555,13 +551,18 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
         result = {}
 
         match_IPVPN = Match(
-            AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn), Subscription.ANY_RT)
+            exa.AFI(exa.AFI.ipv4),
+            exa.SAFI(exa.SAFI.mpls_vpn),
+            engine.Subscription.ANY_RT)
         match_EVPN = Match(
-            AFI(AFI.l2vpn), SAFI(SAFI.evpn), Subscription.ANY_RT)
-        match_RTC = Match(AFI(AFI.ipv4), SAFI(SAFI.rtc), Subscription.ANY_RT)
-        match_FlowSpecVPN = Match(AFI(AFI.ipv4),
-                                  SAFI(SAFI.flow_vpn),
-                                  Subscription.ANY_RT)
+            exa.AFI(exa.AFI.l2vpn),
+            exa.SAFI(exa.SAFI.evpn),
+            engine.Subscription.ANY_RT)
+        match_RTC = Match(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.rtc),
+                          engine.Subscription.ANY_RT)
+        match_FlowSpecVPN = Match(exa.AFI(exa.AFI.ipv4),
+                                  exa.SAFI(exa.SAFI.flow_vpn),
+                                  engine.Subscription.ANY_RT)
         for match in [match_IPVPN, match_EVPN, match_RTC, match_FlowSpecVPN]:
             match_result = []
             wa = self._match_2_workers_entries.get(match)
@@ -580,20 +581,21 @@ class RouteTableManager(Thread, lg.LookingGlassMixin):
 
     def get_all_routes_but_rtc(self):
         return [re for re in self._match_2_workers_entries[MATCH_ANY].entries
-                if not (re.afi == AFI(AFI.ipv4) and
-                        re.safi == SAFI(SAFI.rtc))
+                if not (re.afi == exa.AFI(exa.AFI.ipv4) and
+                        re.safi == exa.SAFI(exa.SAFI.rtc))
                 ]
 
     def get_local_routes_count(self):
         return reduce(
             lambda count, entry:
-            count + (not isinstance(entry.source, BGPPeerWorker)),
+            count + (not isinstance(entry.source,
+                                    bgp_peer_worker.BGPPeerWorker)),
             self.get_all_routes_but_rtc(),
             0)
 
     def get_received_routes_count(self):
         return reduce(
             lambda count, entry:
-            count + isinstance(entry.source, BGPPeerWorker),
+            count + isinstance(entry.source, bgp_peer_worker.BGPPeerWorker),
             self.get_all_routes_but_rtc(),
             0)

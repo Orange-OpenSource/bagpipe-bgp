@@ -14,40 +14,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import abc
+import copy
+import collections
+import socket
+import threading
+
+import netaddr
 from oslo_log import log as logging
 
-import socket
-from socket import inet_pton
-
-from abc import ABCMeta, abstractmethod
-
-from collections import defaultdict
-
-from copy import copy
-
-from threading import Thread
-from threading import Lock
-
-from netaddr.ip import IPNetwork
-import netaddr
-
-from bagpipe.bgp.common import utils
+from bagpipe.bgp.common import exceptions as exc
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
-
-from bagpipe.bgp.engine.flowspec import FlowRouteFactory
-from bagpipe.bgp.engine.tracker_worker import TrackerWorker, \
-    compare_ecmp, compare_no_ecmp
-from bagpipe.bgp.engine import RouteEntry
-
-from bagpipe.bgp.common import exceptions as exc
-
-from exabgp.reactor.protocol import AFI, SAFI
-from exabgp.bgp.message.open.asn import ASN
-from exabgp.bgp.message.update.attribute.community import extended as ec
-from exabgp.bgp.message.update.nlri import flow
-
-from exabgp.protocol import Protocol
+from bagpipe.bgp.common import utils
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import exa
+from bagpipe.bgp.engine import flowspec
+from bagpipe.bgp.engine import tracker_worker
 
 
 LOG = logging.getLogger(__name__)
@@ -141,23 +125,24 @@ class TrafficClassifier(object):
 
             if int(port_min) == 0:
                 # Operator <
-                port_rules.append(flow_object(flow.NumericOperator.LT,
+                port_rules.append(flow_object(exa.flow.NumericOperator.LT,
                                               port_max))
             elif int(port_max) == 65535:
                 # Operator >
-                port_rules.append(flow_object(flow.NumericOperator.GT,
+                port_rules.append(flow_object(exa.flow.NumericOperator.GT,
                                               port_min))
             else:
                 # Operator >=
-                gt_eq_op = (flow.NumericOperator.GT | flow.NumericOperator.EQ)
+                gt_eq_op = (exa.flow.NumericOperator.GT |
+                            exa.flow.NumericOperator.EQ)
                 # Operator &<=
-                lt_eq_op = (flow.NumericOperator.AND |
-                            flow.NumericOperator.LT |
-                            flow.NumericOperator.EQ)
+                lt_eq_op = (exa.flow.NumericOperator.AND |
+                            exa.flow.NumericOperator.LT |
+                            exa.flow.NumericOperator.EQ)
                 port_rules.append(flow_object(gt_eq_op, port_min))
                 port_rules.append(flow_object(lt_eq_op, port_max))
         else:
-            port_rules.append(flow_object(flow.NumericOperator.EQ,
+            port_rules.append(flow_object(exa.flow.NumericOperator.EQ,
                                           port_range))
 
         return port_rules
@@ -179,45 +164,51 @@ class TrafficClassifier(object):
         self.destination_port = self._interpret_port_rule(rule)
 
     def _get_protocol(self, rule):
-        self.protocol = Protocol.names[rule[0].value]
+        self.protocol = exa.Protocol.names[rule[0].value]
 
     def map_traffic_classifier_2_redirect_rules(self):
         rules = list()
         if self.source_pfx:
             ip, mask = self.source_pfx.split('/')
-            if IPNetwork(self.source_pfx).version == 4:
-                rules.append(flow.Flow4Source(inet_pton(socket.AF_INET, ip),
-                                              int(mask)))
-            elif IPNetwork(self.source_pfx).version == 6:
+            if netaddr.IPNetwork(self.source_pfx).version == 4:
+                rules.append(
+                    exa.flow.Flow4Source(socket.inet_pton(socket.AF_INET, ip),
+                                         int(mask)))
+            elif netaddr.IPNetwork(self.source_pfx).version == 6:
                 # TODO: IPv6 offset ??
-                rules.append(flow.Flow6Source(inet_pton(socket.AF_INET6, ip),
-                                              int(mask), 0))
+                rules.append(
+                    exa.flow.Flow6Source(socket.inet_pton(socket.AF_INET6, ip),
+                                         int(mask), 0))
 
         if self.destination_pfx:
             ip, mask = self.destination_pfx.split('/')
-            if IPNetwork(self.destination_pfx).version == 4:
+            if netaddr.IPNetwork(self.destination_pfx).version == 4:
                 rules.append(
-                    flow.Flow4Destination(inet_pton(socket.AF_INET, ip),
-                                          int(mask))
+                    exa.flow.Flow4Destination(socket.inet_pton(socket.AF_INET,
+                                                               ip),
+                                              int(mask))
                 )
-            elif IPNetwork(self.destination_pfx).version == 6:
+            elif netaddr.IPNetwork(self.destination_pfx).version == 6:
                 # TODO: IPv6 offset ??
                 rules.append(
-                    flow.Flow6Destination(inet_pton(socket.AF_INET6, ip),
-                                          int(mask), 0)
+                    exa.flow.Flow6Destination(socket.inet_pton(socket.AF_INET6,
+                                                               ip),
+                                              int(mask), 0)
                 )
 
         if self.source_port:
             rules += self._construct_port_rules(self.source_port,
-                                                flow.FlowSourcePort)
+                                                exa.flow.FlowSourcePort)
 
         if self.destination_port:
             rules += self._construct_port_rules(self.destination_port,
-                                                flow.FlowDestinationPort)
+                                                exa.flow.FlowDestinationPort)
 
         if self.protocol:
-            rules.append(flow.FlowIPProtocol(flow.NumericOperator.EQ,
-                                             Protocol.named(self.protocol)))
+            rules.append(exa.flow.FlowIPProtocol(exa.flow.NumericOperator.EQ,
+                                                 exa.Protocol.named(
+                                                     self.protocol)
+                                                 ))
 
         return rules
 
@@ -233,8 +224,10 @@ class TrafficClassifier(object):
             components[ID](rule)
 
 
-class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
-    __metaclass__ = ABCMeta
+class VPNInstance(tracker_worker.TrackerWorker,
+                  threading.Thread,
+                  lg.LookingGlassLocalLogger):
+    __metaclass__ = abc.ABCMeta
 
     type = None  # set by subclasses: 'ipvpn', 'evpn', etc.
     afi = None
@@ -251,22 +244,24 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         self.instance_type = self.__class__.__name__
         self.instance_id = instance_id
 
-        Thread.__init__(self)
+        threading.Thread.__init__(self)
         self.setDaemon(True)
 
         if dataplane_driver.ecmp_support:
-            compare_routes = compare_ecmp
+            compare_routes = tracker_worker.compare_ecmp
         else:
-            compare_routes = compare_no_ecmp
+            compare_routes = tracker_worker.compare_no_ecmp
 
-        TrackerWorker.__init__(self, self.manager.bgp_manager, "%s-%d" %
-                               (self.instance_type, self.instance_id),
-                               compare_routes)
+        tracker_worker.TrackerWorker.__init__(
+            self,
+            self.manager.bgp_manager, "%s-%d" % (self.instance_type,
+                                                 self.instance_id),
+            compare_routes)
 
         lg.LookingGlassLocalLogger.__init__(self,
                                             "%s-%d" % (self.instance_type,
                                                        self.instance_id))
-        self.lock = Lock()
+        self.lock = threading.Lock()
 
         self.import_rts = import_rts
         self.export_rts = export_rts
@@ -278,8 +273,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
-        assert isinstance(self.afi, AFI)
-        assert isinstance(self.safi, SAFI)
+        assert isinstance(self.afi, exa.AFI)
+        assert isinstance(self.safi, exa.SAFI)
 
         self.dp_driver = dataplane_driver
 
@@ -314,7 +309,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             self._subscribe(self.afi, self.safi, rt)
             # Subscribe to FlowSpec routes
             # FIXME(tmorin): this maybe isn't applicable yet to E-VPN yet
-            self._subscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
+            self._subscribe(self.afi, exa.SAFI(exa.SAFI.flow_vpn), rt)
 
         if readvertise:
             self.readvertise = True
@@ -365,7 +360,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
 
         # this makes sure that the thread will be stopped, and any remaining
         # routes/subscriptions are released:
-        TrackerWorker.stop(self)
+        tracker_worker.TrackerWorker.stop(self)
 
     @utils.synchronized
     @log_decorator.log
@@ -400,12 +395,12 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         # Register to BGP with these route targets
         for rt in added_import_rt:
             self._subscribe(self.afi, self.safi, rt)
-            self._subscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
+            self._subscribe(self.afi, exa.SAFI(exa.SAFI.flow_vpn), rt)
 
         # Unregister from BGP with these route targets
         for rt in removed_import_rt:
             self._unsubscribe(self.afi, self.safi, rt)
-            self._unsubscribe(self.afi, SAFI(SAFI.flow_vpn), rt)
+            self._unsubscribe(self.afi, exa.SAFI(exa.SAFI.flow_vpn), rt)
 
         # Update import and export route targets
         self.import_rts = new_import_rts
@@ -424,8 +419,10 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
                 self.log.info("Re-advertising route %s with updated RTs (%s)",
                               route_entry.nlri, new_export_rts)
 
-                updated_route_entry = RouteEntry(route_entry.nlri, None,
-                                                 copy(route_entry.attributes))
+                updated_route_entry = engine.RouteEntry(
+                    route_entry.nlri,
+                    None,
+                    copy.copy(route_entry.attributes))
                 # reset the route_targets
                 # will RTs originally present in route_entry.attributes
                 updated_route_entry.set_route_targets(self.export_rts)
@@ -444,7 +441,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         ip_address = ""
         mask = 0
         try:
-            net = IPNetwork(ip_address_prefix)
+            net = netaddr.IPNetwork(ip_address_prefix)
             (ip_address, mask) = (str(net.ip), net.prefixlen)
         except netaddr.core.AddrFormatError:
             raise exc.APIException("Bogus IP prefix: %s" % ip_address_prefix)
@@ -452,19 +449,20 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         return (ip_address, mask)
 
     def _gen_encap_extended_communities(self):
-        ecommunities = ec.ExtendedCommunities()
+        ecommunities = exa.extcoms.ExtendedCommunities()
         for encap in self.dp_driver.supported_encaps():
-            if not isinstance(encap, ec.Encapsulation):
+            if not isinstance(encap, exa.Encapsulation):
                 raise Exception("dp_driver.supported_encaps() should "
                                 "return a list of Encapsulation objects (%s)",
                                 type(encap))
 
-            if encap != ec.Encapsulation(ec.Encapsulation.Type.DEFAULT):
+            if encap != exa.Encapsulation(
+                    exa.Encapsulation.Type.DEFAULT):
                 ecommunities.communities.append(encap)
         # FIXME: si DEFAULT + xxx => adv MPLS
         return ecommunities
 
-    @abstractmethod
+    @abc.abstractmethod
     def generate_vif_bgp_route(self, mac_address, ip_prefix, plen, label, rd):
         '''
         returns a RouteEntry
@@ -477,14 +475,14 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         rd = route_distinguisher if route_distinguisher else self.instance_rd
         route_entry = self.generate_vif_bgp_route(mac_address, ip_prefix, plen,
                                                   label, rd)
-        assert isinstance(route_entry, RouteEntry)
+        assert isinstance(route_entry, engine.RouteEntry)
 
         route_entry.attributes.add(self._gen_encap_extended_communities())
         route_entry.set_route_targets(self.export_rts)
 
-        ecommunities = ec.ExtendedCommunities()
+        ecommunities = exa.ExtendedCommunities()
         ecommunities.communities.append(
-            ec.ConsistentHashSortOrder(lb_consistent_hash_order))
+            exa.ConsistentHashSortOrder(lb_consistent_hash_order))
         route_entry.attributes.add(ecommunities)
 
         self.log.debug("Synthesized Vif route entry: %s", route_entry)
@@ -493,21 +491,21 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
     def synthesize_redirect_bgp_route(self, rules):
         self.log.info("synthesize_redirect_bgp_route called for rules %s",
                       rules)
-        nlri = FlowRouteFactory(self.afi, self.instance_rd)
+        nlri = flowspec.FlowRouteFactory(self.afi, self.instance_rd)
         for rule in rules:
             nlri.add(rule)
 
-        route_entry = RouteEntry(nlri)
+        route_entry = engine.RouteEntry(nlri)
 
-        assert isinstance(route_entry, RouteEntry)
+        assert isinstance(route_entry, engine.RouteEntry)
 
-        ecommunities = ec.ExtendedCommunities()
+        ecommunities = exa.ExtendedCommunities()
 
         # checked at __init__:
         assert len(self.readvertise_to_rts) == 1
         rt = self.readvertise_to_rts[0]
         ecommunities.communities.append(
-            ec.TrafficRedirect(ASN(int(rt.asn)), int(rt.number))
+            exa.TrafficRedirect(exa.ASN(int(rt.asn)), int(rt.number))
         )
 
         route_entry.attributes.add(ecommunities)
@@ -760,7 +758,7 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
             # per prefix)
             # Can be inverted to one traffic classifier -> Multiple redirect
             # route targets
-            self.redirect_rt_2_classifiers = defaultdict(set)
+            self.redirect_rt_2_classifiers = collections.defaultdict(set)
 
         self.redirect_rt_2_classifiers[redirect_rt].add(classifier)
 
@@ -801,13 +799,14 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         '''
         adv_encaps = None
         try:
-            adv_encaps = route.ecoms(ec.Encapsulation)
+            adv_encaps = route.ecoms(exa.Encapsulation)
             self.log.debug("Advertized Encaps: %s", adv_encaps)
         except KeyError:
             self.log.debug("no encap advertized, let's use default")
 
         if not adv_encaps:
-            adv_encaps = [ec.Encapsulation(ec.Encapsulation.Type.DEFAULT)]
+            adv_encaps = [exa.Encapsulation(
+                exa.Encapsulation.Type.DEFAULT)]
 
         good_encaps = set(adv_encaps) & set(
             self.dp_driver.supported_encaps())
@@ -828,8 +827,8 @@ class VPNInstance(TrackerWorker, Thread, lg.LookingGlassLocalLogger):
         whether or not the route removed is the last one and depending on
         the desired behavior for the dataplane driver
         '''
-        return not last and not (self.dp_driver.makebefore4break_support
-                                 or self.dp_driver.ecmp_support)
+        return not last and not (self.dp_driver.makebefore4break_support or
+                                 self.dp_driver.ecmp_support)
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 

@@ -15,33 +15,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from threading import Lock
-
 import re
+import threading
+
 from oslo_log import log as logging
 
-from bagpipe.bgp.constants import IPVPN
-from bagpipe.bgp.constants import EVPN
-
-from bagpipe.bgp.vpn.ipvpn import VRF
-from bagpipe.bgp.vpn.evpn import EVI
-
-import bagpipe.bgp.common.exceptions as exc
-
+from bagpipe.bgp.common import exceptions as exc
+from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.common import utils
-from bagpipe.bgp.common import log_decorator
-from bagpipe.bgp.common.run_command import run_command
-
+from bagpipe.bgp.common import run_command
+from bagpipe.bgp import constants
 from bagpipe.bgp.engine import bgp_manager
-
+from bagpipe.bgp.engine import exa
 from bagpipe.bgp.vpn import dataplane_drivers as dp_drivers
-from bagpipe.bgp.vpn.label_allocator import LabelAllocator
-from bagpipe.bgp.vpn.rd_allocator import RDAllocator
-
-from exabgp.bgp.message.update.attribute.community.extended \
-    import RouteTargetASN2Number as RouteTarget
+from bagpipe.bgp.vpn import evpn
+from bagpipe.bgp.vpn import ipvpn
+from bagpipe.bgp.vpn import label_allocator
+from bagpipe.bgp.vpn import rd_allocator
 
 
 LOG = logging.getLogger(__name__)
@@ -60,7 +51,7 @@ def convert_route_targets(orig_list):
             continue
         try:
             asn, nn = rt.split(':')
-            list_.append(RouteTarget(int(asn), int(nn)))
+            list_.append(exa.RouteTarget(int(asn), int(nn)))
         except Exception:
             raise Exception("Malformed route target: '%s'" % rt)
     return list_
@@ -78,8 +69,8 @@ class VPNManager(lg.LookingGlassMixin):
 
     _instance = None
 
-    type2class = {IPVPN: VRF,
-                  EVPN: EVI
+    type2class = {constants.IPVPN: ipvpn.VRF,
+                  constants.EVPN: evpn.EVI
                   }
 
     @log_decorator.log
@@ -94,16 +85,17 @@ class VPNManager(lg.LookingGlassMixin):
         self.vpn_instances = {}
 
         LOG.debug("Creating label allocator")
-        self.label_allocator = LabelAllocator()
+        self.label_allocator = label_allocator.LabelAllocator()
 
         LOG.debug("Creating route distinguisher allocator")
-        self.rd_allocator = RDAllocator(self.bgp_manager.get_local_address())
+        self.rd_allocator = rd_allocator.RDAllocator(
+            self.bgp_manager.get_local_address())
 
         # dict containing info how an ipvpn is plugged
         # from an evpn  (keys: ipvpn instances)
         self._evpn_ipvpn_ifs = {}
 
-        self.lock = Lock()
+        self.lock = threading.Lock()
 
     def load_drivers(self):
         return dp_drivers.instantiate_dataplane_drivers()
@@ -117,7 +109,7 @@ class VPNManager(lg.LookingGlassMixin):
             raise exc.MalformedIPAddress
 
     def _run_command(self, *args, **kwargs):
-        run_command(LOG, *args, run_as_root=True, **kwargs)
+        run_command.run_command(LOG, *args, run_as_root=True, **kwargs)
 
     @log_decorator.log_info
     def _attach_evpn_2_ipvpn(self, localport, ipvpn_instance):
@@ -144,7 +136,7 @@ class VPNManager(lg.LookingGlassMixin):
             raise Exception("The specified evpn instance does not exist (%s)"
                             % localport['evpn'])
 
-        if evpn.type != EVPN:
+        if evpn.type != constants.EVPN:
             raise Exception("The specified instance to plug is not an evpn"
                             "instance (is %s instead)" % evpn.type)
 
@@ -338,7 +330,7 @@ class VPNManager(lg.LookingGlassMixin):
         # retrieve network mask
         mask = int(ip_address_prefix.split('/')[1])
 
-        if instance_type == EVPN and linuxbr:
+        if instance_type == constants.EVPN and linuxbr:
             kwargs = {'linuxbr': linuxbr}
         else:
             kwargs = {}
@@ -354,7 +346,7 @@ class VPNManager(lg.LookingGlassMixin):
 
         vpn_instance.update_fallback(fallback)
 
-        if instance_type == IPVPN and 'evpn' in localport:
+        if instance_type == constants.IPVPN and 'evpn' in localport:
             # special processing for the case where what we plug into
             # the ipvpn is not an existing interface but an interface
             # to create, connected to an existing evpn instance
@@ -386,7 +378,7 @@ class VPNManager(lg.LookingGlassMixin):
         # Unplug VIF from VPN instance
         vpn_instance.vif_unplugged(mac_address, ip_address_prefix, readvertise)
 
-        if vpn_instance.type == IPVPN and 'evpn' in localport:
+        if vpn_instance.type == constants.IPVPN and 'evpn' in localport:
             self._detach_evpn_2_ipvpn(vpn_instance)
 
         if vpn_instance.stop_if_empty():
@@ -443,7 +435,7 @@ class VPNManager(lg.LookingGlassMixin):
         for vpn_instance in self.vpn_instances.itervalues():
             vpn_instance.stop()
             # Cleanup veth pair
-            if (vpn_instance.type == IPVPN and
+            if (vpn_instance.type == constants.IPVPN and
                     self._evpn_ipvpn_ifs.get(vpn_instance)):
                 self._cleanup_evpn2ipvpn(vpn_instance)
         for vpn_instance in self.vpn_instances.itervalues():

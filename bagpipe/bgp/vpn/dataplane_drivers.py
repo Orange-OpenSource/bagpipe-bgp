@@ -15,33 +15,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 import traceback
 
-from abc import ABCMeta, abstractmethod
-
-from distutils.version import StrictVersion
-
+from distutils import version
+from oslo_config import cfg
+from oslo_log import log as logging
 import stevedore
 
-from oslo_config import cfg
-
 from bagpipe.bgp import constants
-
+from bagpipe.bgp.engine import exa
 from bagpipe.bgp.common import log_decorator
 from bagpipe.bgp.common import looking_glass as lg
-from bagpipe.bgp.common.run_command import run_command
+from bagpipe.bgp.common import run_command
 from bagpipe.bgp.common import utils
 
-from exabgp.bgp.message.update.attribute.community.extended.encapsulation \
-    import Encapsulation
 
-from oslo_log import log as logging
 LOG = logging.getLogger(__name__)
+
 
 # NOTE(tmorin): have dataplane_local_address default to
 #               cfg.CONF.BGP.local_address does not work (import order issue)
 # TODO(tmorin): list possible values for dataplane_driver,
-#               see what neutron-db-manange does
+#               see what neutron-db-manage does
 dataplane_common_opts = [
     cfg.IPOpt("dataplane_local_address", version=4,
 
@@ -98,13 +94,13 @@ def instantiate_dataplane_drivers():
 
 
 class DataplaneDriver(lg.LookingGlassLocalLogger):
-    __metaclass__ = ABCMeta
+    __metaclass__ = abc.ABCMeta
 
     type = None
 
     dataplane_instance_class = None
-    encaps = [Encapsulation(Encapsulation.Type.DEFAULT),
-              Encapsulation(Encapsulation.Type.MPLS)]
+    encaps = [exa.Encapsulation(exa.Encapsulation.Type.DEFAULT),
+              exa.Encapsulation(exa.Encapsulation.Type.MPLS)]
     makebefore4break_support = False
     ecmp_support = False
 
@@ -132,8 +128,8 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         o = self._run_command("uname -r")
         self.kernel_release = o[0][0].split("-")[0]
         if getattr(self, 'required_kernel', None):
-            if (StrictVersion(self.kernel_release) <
-                    StrictVersion(self.required_kernel)):
+            if (version.StrictVersion(self.kernel_release) <
+                    version.StrictVersion(self.required_kernel)):
                 self.log.warning("%s requires at least Linux kernel %s"
                                  " (you are running %s)",
                                  self.__class__.__name__,
@@ -144,11 +140,11 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         # vif_plugged
         self.first_init = True
 
-    @abstractmethod
+    @abc.abstractmethod
     def reset_state(self):
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def initialize(self):
         '''
         This is called after reset_state (which, e.g. cleans up the stuff
@@ -203,7 +199,8 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         return self.__class__.encaps
 
     def _run_command(self, command, run_as_root=False, *args, **kwargs):
-        return run_command(self.log, command, run_as_root, *args, **kwargs)
+        return run_command.run_command(self.log, command, run_as_root,
+                                       *args, **kwargs)
 
     def get_lg_map(self):
         encaps = []
@@ -219,7 +216,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
 
 
 class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
-    __metaclass__ = ABCMeta
+    __metaclass__ = abc.ABCMeta
 
     @log_decorator.log_info
     def __init__(self, dataplane_driver, instance_id, external_instance_id,
@@ -233,15 +230,15 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
         self.mask = mask
         self.instance_label = instance_label
 
-    @abstractmethod
+    @abc.abstractmethod
     def cleanup(self):
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def vif_plugged(self, mac_address, ip_address_prefix, localport, label):
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def vif_unplugged(self, mac_address, ip_address_prefix, localport, label,
                       last_endpoint=True):
         pass
@@ -251,13 +248,13 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
             self.log.warning("fallback  specified (%s) but not supported by"
                              " driver, ignoring", fallback)
 
-    @abstractmethod
+    @abc.abstractmethod
     def setup_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
                                             nlri, encaps,
                                             lb_consistent_hash_order=0):
         pass
 
-    @abstractmethod
+    @abc.abstractmethod
     def remove_dataplane_for_remote_endpoint(self, prefix, remote_pe, label,
                                              nlri, encaps,
                                              lb_consistent_hash_order=0):

@@ -15,61 +15,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
+import logging as python_logging
 import select
 import time
-
-import six
-
-from collections import defaultdict
-
 import traceback
 
+from exabgp.bgp import fsm as exa_fsm
+from exabgp.bgp import neighbor as exa_neighbor
+from exabgp.bgp import message as exa_message
+from exabgp.bgp.message import open as exa_open
+from exabgp import logger as exa_logger
+from exabgp import reactor as exa_reactor
+from exabgp.reactor import peer as exa_peer
 from oslo_log import log as logging
-
 from oslo_config import cfg
-
-from bagpipe.bgp.engine.bgp_peer_worker import BGPPeerWorker
-from bagpipe.bgp.engine.bgp_peer_worker import FSM
-from bagpipe.bgp.engine.bgp_peer_worker import KEEP_ALIVE_RECEIVED
-from bagpipe.bgp.engine.bgp_peer_worker import InitiateConnectionException
-from bagpipe.bgp.engine.bgp_peer_worker import OpenWaitTimeout
-from bagpipe.bgp.engine.bgp_peer_worker import StoppedException
-from bagpipe.bgp.engine.bgp_peer_worker import DEFAULT_HOLDTIME
-
-from bagpipe.bgp.engine import RouteEntry
-from bagpipe.bgp.engine import RouteEvent
+import six
 
 from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp import engine
+from bagpipe.bgp.engine import bgp_peer_worker
+from bagpipe.bgp.engine import exa
 
-from exabgp.reactor.peer import Peer
-from exabgp.reactor.peer import Interrupted
-from exabgp.reactor.peer import ACTION
-from exabgp.bgp.neighbor import Neighbor
-from exabgp.bgp.message.open.asn import ASN
-
-from exabgp.protocol.ip import IP
-
-from exabgp.reactor.protocol import AFI
-from exabgp.reactor.protocol import SAFI
-from exabgp.reactor.network.error import LostConnection
-
-from exabgp.bgp.message.open import RouterID
-from exabgp.bgp.message.open.capability.capability import Capability
-from exabgp.bgp.message.open.holdtime import HoldTime
-
-from exabgp.bgp.message import NOP
-from exabgp.bgp.message import Notification
-from exabgp.bgp.message import Notify
-from exabgp.bgp.message import Update
-from exabgp.bgp.message import KeepAlive
-
-from exabgp.bgp.message import IN
-
-from exabgp.bgp.fsm import FSM as ExaFSM
-
-from exabgp import logger as exabgp_logger
-
-import logging as python_logging
 
 LOG = logging.getLogger(__name__)
 
@@ -86,7 +53,7 @@ def setup_exabgp_env():
     # we "tweak" the internals of exabgp Logger, so that (a) it does not break
     # oslo_log and (b) it logs through oslo_log
     # decorating the original restart would be better...
-    exabgp_logger.Logger._restart = exabgp_logger.Logger.restart
+    exa_logger.Logger._restart = exa_logger.Logger.restart
 
     def decorated_restart(f):
         @six.wraps(f)
@@ -96,20 +63,19 @@ def setup_exabgp_env():
             return f(self, False)
         return restart_never_first
 
-    exabgp_logger.Logger.restart = decorated_restart(
-        exabgp_logger.Logger.restart
+    exa_logger.Logger.restart = decorated_restart(
+        exa_logger.Logger.restart
         )
 
-    exabgp_logger.Logger._syslog = logging.getLogger(__name__ +
-                                                     ".exabgp").logger
+    exa_logger.Logger._syslog = logging.getLogger(__name__ + ".exabgp").logger
 
     # prevent exabgp Logger code from adding or removing handlers from
     # this logger
     def noop(handler):
         pass
 
-    exabgp_logger.Logger._syslog.addHandler = noop
-    exabgp_logger.Logger._syslog.removeHandler = noop
+    exa_logger.Logger._syslog.addHandler = noop
+    exa_logger.Logger._syslog.removeHandler = noop
 
     # no need to format all the information twice:
     def patched_format(self, timestamp, level, source, message):
@@ -117,7 +83,7 @@ def setup_exabgp_env():
             return message
         return "%-13s %s" % (source, message)
 
-    exabgp_logger.Logger._format = patched_format
+    exa_logger.Logger._format = patched_format
 
     env.log.enable = True
 
@@ -131,24 +97,30 @@ def setup_exabgp_env():
     env.log.packets = True
 
 
-TRANSLATE_EXABGP_STATE = {ExaFSM.IDLE: FSM.Idle,
-                          ExaFSM.ACTIVE: FSM.Active,
-                          ExaFSM.CONNECT: FSM.Connect,
-                          ExaFSM.OPENSENT: FSM.OpenSent,
-                          ExaFSM.OPENCONFIRM: FSM.OpenConfirm,
-                          ExaFSM.ESTABLISHED: FSM.Established,
+TRANSLATE_EXABGP_STATE = {exa_fsm.FSM.IDLE: bgp_peer_worker.FSM.Idle,
+                          exa_fsm.FSM.ACTIVE: bgp_peer_worker.FSM.Active,
+                          exa_fsm.FSM.CONNECT: bgp_peer_worker.FSM.Connect,
+                          exa_fsm.FSM.OPENSENT: bgp_peer_worker.FSM.OpenSent,
+                          exa_fsm.FSM.OPENCONFIRM:
+                              bgp_peer_worker.FSM.OpenConfirm,
+                          exa_fsm.FSM.ESTABLISHED:
+                              bgp_peer_worker.FSM.Established,
                           }
 
 
-class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
+class ExaBGPPeerWorker(bgp_peer_worker.BGPPeerWorker, lg.LookingGlassMixin):
 
-    enabled_families = [(AFI(AFI.ipv4), SAFI(SAFI.mpls_vpn)),
-                        # (AFI(AFI.ipv6), SAFI(SAFI.mpls_vpn)),
-                        (AFI(AFI.l2vpn), SAFI(SAFI.evpn)),
-                        (AFI(AFI.ipv4), SAFI(SAFI.flow_vpn))]
+    enabled_families = [(exa.AFI(exa.AFI.ipv4),
+                         exa.SAFI(exa.SAFI.mpls_vpn)),
+                        # (exa.AFI(exa.exa.AFI.ipv6),
+                        #  exa.SAFI(exa.SAFI.mpls_vpn)),
+                        (exa.AFI(exa.AFI.l2vpn),
+                         exa.SAFI(exa.SAFI.evpn)),
+                        (exa.AFI(exa.AFI.ipv4),
+                         exa.SAFI(exa.SAFI.flow_vpn))]
 
     def __init__(self, bgp_manager, peer_address):
-        BGPPeerWorker.__init__(self, bgp_manager, peer_address)
+        bgp_peer_worker.BGPPeerWorker.__init__(self, bgp_manager, peer_address)
 
         self.local_address = cfg.CONF.BGP.local_address
         self.peer_address = peer_address
@@ -179,7 +151,7 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             self.log.debug("RTC active, subscribing to all RTC routes")
             # subscribe to RTC routes, to be able to propagate them from
             # internal workers to this peer
-            self._subscribe(AFI(AFI.ipv4), SAFI(SAFI.rtc))
+            self._subscribe(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.rtc))
         else:
             self.log.debug("RTC inactive, subscribing to all active families")
             # if we don't use RTC with our peer, then we need to see events for
@@ -195,55 +167,59 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
         self.rtc_active = False
 
-        neighbor = Neighbor()
-        neighbor.router_id = RouterID(self.local_address)
-        neighbor.local_as = ASN(cfg.CONF.BGP.my_as)
+        neighbor = exa_neighbor.Neighbor()
+        neighbor.router_id = exa_open.RouterID(self.local_address)
+        neighbor.local_as = exa.ASN(cfg.CONF.BGP.my_as)
         # no support for eBGP yet:
-        neighbor.peer_as = ASN(cfg.CONF.BGP.my_as)
-        neighbor.local_address = IP.create(self.local_address)
-        neighbor.md5_ip = IP.create(self.local_address)
-        neighbor.peer_address = IP.create(self.peer_address)
-        neighbor.hold_time = HoldTime(DEFAULT_HOLDTIME)
-        neighbor.api = defaultdict(list)
+        neighbor.peer_as = exa.ASN(cfg.CONF.BGP.my_as)
+        neighbor.local_address = exa.IP.create(self.local_address)
+        neighbor.md5_ip = exa.IP.create(self.local_address)
+        neighbor.peer_address = exa.IP.create(self.peer_address)
+        neighbor.hold_time = exa_open.HoldTime(
+            bgp_peer_worker.DEFAULT_HOLDTIME)
+        neighbor.api = collections.defaultdict(list)
 
         for afi_safi in self.enabled_families:
             neighbor.add_family(afi_safi)
 
         if cfg.CONF.BGP.enable_rtc:
-            neighbor.add_family((AFI(AFI.ipv4), SAFI(SAFI.rtc)))
+            neighbor.add_family((exa.AFI(exa.AFI.ipv4),
+                                 exa.SAFI(exa.SAFI.rtc)))
 
         self.log.debug("Instantiate ExaBGP Peer")
-        self.peer = Peer(neighbor, None)
+        self.peer = exa_peer.Peer(neighbor, None)
 
         try:
             for action in self.peer._connect():
                 self.fsm.state = TRANSLATE_EXABGP_STATE[
                     self.peer._outgoing.fsm.state]
 
-                if action == ACTION.LATER:
+                if action == exa_peer.ACTION.LATER:
                     time.sleep(2)
-                elif action == ACTION.NOW:
+                elif action == exa_peer.ACTION.NOW:
                     time.sleep(0.1)
 
                 if self.should_stop:
                     self.log.debug("We're closing, raise StoppedException")
-                    raise StoppedException()
+                    raise bgp_peer_worker.StoppedException()
 
-                if action == ACTION.CLOSE:
+                if action == exa_peer.ACTION.CLOSE:
                     self.log.debug("Socket status is CLOSE, "
                                    "raise InitiateConnectionException")
-                    raise InitiateConnectionException("Socket is closed")
-        except Interrupted:
+                    raise bgp_peer_worker.InitiateConnectionException(
+                        "Socket is closed")
+        except exa_peer.Interrupted:
             self.log.debug("Connect was interrupted, "
                            "raise InitiateConnectionException")
-            raise InitiateConnectionException("Connect was interrupted")
-        except Notify as e:
+            raise bgp_peer_worker.InitiateConnectionException(
+                "Connect was interrupted")
+        except exa_message.Notify as e:
             self.log.debug("Notify: %s", e)
             if (e.code, e.subcode) == (1, 1):
-                raise OpenWaitTimeout(str(e))
+                raise bgp_peer_worker.OpenWaitTimeout(str(e))
             else:
                 raise Exception("Notify received: %s" % e)
-        except LostConnection as e:
+        except exa_reactor.network.error.LostConnection as e:
             raise
 
         # check the capabilities of the session just established...
@@ -255,15 +231,16 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         self._set_hold_time(self.protocol.negotiated.holdtime)
 
         mp_capabilities = received_open.capabilities.get(
-            Capability.CODE.MULTIPROTOCOL, [])
+            exa_open.capability.Capability.CODE.MULTIPROTOCOL, [])
 
         # check that our peer advertized at least mpls_vpn and evpn
         # capabilities
         self._active_families = []
         for (afi, safi) in (self.__class__.enabled_families +
-                            [(AFI(AFI.ipv4), SAFI(SAFI.rtc))]):
+                            [(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.rtc))]):
             if (afi, safi) not in mp_capabilities:
-                if (((afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc))) or
+                if (((afi, safi) != (exa.AFI(exa.AFI.ipv4),
+                                     exa.SAFI(exa.SAFI.rtc))) or
                         cfg.CONF.BGP.enable_rtc):
                     self.log.warning("Peer does not advertise (%s,%s) "
                                      "capability", afi, safi)
@@ -279,7 +256,8 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
         self.rtc_active = False
 
         if cfg.CONF.BGP.enable_rtc:
-            if (AFI(AFI.ipv4), SAFI(SAFI.rtc)) in mp_capabilities:
+            if (exa.AFI(exa.AFI.ipv4),
+                    exa.SAFI(exa.SAFI.rtc)) in mp_capabilities:
                 self.log.info(
                     "RTC successfully enabled with peer %s", self.peer_address)
                 self.rtc_active = True
@@ -297,12 +275,12 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
 
             message = self.protocol.read_message().next()
 
-            if message.ID != NOP.ID:
+            if message.ID != exa_message.NOP.ID:
                 self.log.debug("protocol read message: %s", message)
-        except Notification as e:
+        except exa_message.Notification as e:
             self.log.error("Notification: %s", e)
             return 2
-        except LostConnection as e:
+        except exa_reactor.network.error.LostConnection as e:
             self.log.warning("Lost connection while waiting for message: %s",
                              e)
             return 2
@@ -313,25 +291,25 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             self.log.error("Error while reading BGP message: %s", e)
             raise
 
-        if message.ID == NOP.ID:
+        if message.ID == exa_message.NOP.ID:
             return 1
-        if message.ID == Update.ID:
-            if self.fsm.state != FSM.Established:
+        if message.ID == exa_message.Update.ID:
+            if self.fsm.state != bgp_peer_worker.FSM.Established:
                 raise Exception("Update received but not in Established state")
             # more below
-        elif message.ID == KeepAlive.ID:
-            self.enqueue(KEEP_ALIVE_RECEIVED)
+        elif message.ID == exa_message.KeepAlive.ID:
+            self.enqueue(bgp_peer_worker.KEEP_ALIVE_RECEIVED)
             self.log.debug("Received message: %s", message)
         else:
             self.log.warning("Received unexpected message: %s", message)
 
-        if isinstance(message, Update):
+        if isinstance(message, exa_message.Update):
             if message.nlris:
                 for nlri in message.nlris:
-                    if nlri.action == IN.ANNOUNCED:
-                        action = RouteEvent.ADVERTISE
-                    elif nlri.action == IN.WITHDRAWN:
-                        action = RouteEvent.WITHDRAW
+                    if nlri.action == exa_message.IN.ANNOUNCED:
+                        action = engine.RouteEvent.ADVERTISE
+                    elif nlri.action == exa_message.IN.WITHDRAWN:
+                        action = engine.RouteEvent.WITHDRAW
                     else:
                         raise Exception("should not be reached (action:%s)",
                                         nlri.action)
@@ -342,18 +320,18 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
     def _process_received_route(self, action, nlri, attributes):
         self.log.info("Received route: %s, %s", nlri, attributes)
 
-        route_entry = RouteEntry(nlri, None, attributes)
+        route_entry = engine.RouteEntry(nlri, None, attributes)
 
-        if action == IN.ANNOUNCED:
+        if action == exa_message.IN.ANNOUNCED:
             self._advertise_route(route_entry)
-        elif action == IN.WITHDRAWN:
+        elif action == exa_message.IN.WITHDRAWN:
             self._withdraw_route(route_entry)
         else:
             raise Exception("unsupported action ??? (%s)" % action)
 
         # TODO(tmmorin): move RTC code out-of the peer-specific code
-        if (nlri.afi, nlri.safi) == (AFI(AFI.ipv4),
-                                     SAFI(SAFI.rtc)):
+        if (nlri.afi, nlri.safi) == (exa.AFI(exa.AFI.ipv4),
+                                     exa.SAFI(exa.SAFI.rtc)):
             self.log.info("Received an RTC route")
 
             if nlri.rt is None:
@@ -363,10 +341,11 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             # if our peer subscribed to a Route Target, it means that we needs
             # to send him all routes of any AFI/SAFI carrying this RouteTarget.
             for (afi, safi) in self._active_families:
-                if (afi, safi) != (AFI(AFI.ipv4), SAFI(SAFI.rtc)):
-                    if action == IN.ANNOUNCED:
+                if (afi, safi) != (exa.AFI(exa.AFI.ipv4),
+                                   exa.SAFI(exa.SAFI.rtc)):
+                    if action == exa_message.IN.ANNOUNCED:
                         self._subscribe(afi, safi, nlri.rt)
-                    elif action == IN.WITHDRAWN:
+                    elif action == exa_message.IN.WITHDRAWN:
                         self._unsubscribe(afi, safi, nlri.rt)
                     else:
                         raise Exception("unsupported action ??? (%s)" % action)
@@ -383,11 +362,12 @@ class ExaBGPPeerWorker(BGPPeerWorker, lg.LookingGlassMixin):
             self.log.warning("%s", traceback.format_exc())
 
     def _keep_alive_message_data(self):
-        return KeepAlive().message()
+        return exa_message.KeepAlive().message()
 
     def _update_for_route_event(self, event):
         try:
-            r = Update([event.route_entry.nlri], event.route_entry.attributes)
+            r = exa_message.Update([event.route_entry.nlri],
+                                   event.route_entry.attributes)
             return ''.join(r.messages(self.protocol.negotiated))
         except Exception as e:
             self.log.error("Exception while generating message for "

@@ -16,11 +16,12 @@
 # limitations under the License.
 
 import logging as python_logging
-from oslo_log import log as logging
-
 import re
-import urllib
+
+from oslo_log import log as logging
 import six
+import urllib
+
 
 LOG = logging.getLogger(__name__)
 

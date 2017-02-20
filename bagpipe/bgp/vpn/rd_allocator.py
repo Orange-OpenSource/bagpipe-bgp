@@ -15,17 +15,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
+import threading
 
 from oslo_log import log as logging
 
-import random
-
-from threading import Lock
-
 from bagpipe.bgp.common import utils
 from bagpipe.bgp.common import looking_glass as lg
+from bagpipe.bgp.engine import exa
 
-from exabgp.bgp.message.update.nlri.qualifier.rd import RouteDistinguisher
 
 LOG = logging.getLogger(__name__)
 
@@ -39,7 +37,7 @@ class RDAllocator(lg.LookingGlassMixin):
         self.current_id = random.randint(100, 200)
         self.rds = dict()
 
-        self.lock = Lock()
+        self.lock = threading.Lock()
 
     @utils.synchronized
     def get_new_rd(self, description):
@@ -50,7 +48,7 @@ class RDAllocator(lg.LookingGlassMixin):
                       "them", MAX_RD_LOCAL_ID)
             raise Exception("Out of local ids")
 
-        rd = RouteDistinguisher.fromElements(self.prefix, self.current_id)
+        rd = exa.RouteDistinguisher.fromElements(self.prefix, self.current_id)
         self.current_id += 1
         self.rds[rd] = description
 
