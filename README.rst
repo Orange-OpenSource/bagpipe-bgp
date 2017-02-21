@@ -466,7 +466,4 @@ A report of unit tests coverage can be produced with:
 License
 -------
 
-Apache 2.0 license (except additions and modifications to ExaBGP,
-licensed as 3-Clause BSD license).
-
-See `LICENSE <LICENSE>`__ file.
+Apache 2.0 license, see `LICENSE <LICENSE>`__ file.

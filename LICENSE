@@ -1,8 +1,3 @@
-This license notice does not apply to the content of the src/exabgp sub-directory.
-The licence for the 'src/exabgp' sub-directory is the licence of the ExaBGP project - BSD 3-Clause license (src/exabgp/COPYRIGHT).
-
-------------------------------------------------------------------------------
-
 BaGPipe BGP 
 
 Copyright 2014 Orange
