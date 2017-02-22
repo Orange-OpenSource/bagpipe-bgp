@@ -17,8 +17,8 @@
 import os
 from sys import stdout
 
-import json
 import optparse
+from oslo_serialization import jsonutils
 import urllib2
 
 
@@ -52,7 +52,7 @@ def pretty_print_recurse(data, indent, recursive_requests, url,
                 if target_url.startswith(url):
                     response = urllib2.urlopen(target_url)
                     if response.getcode() == 200:
-                        pretty_print_recurse(json.load(response),
+                        pretty_print_recurse(jsonutils.load(response),
                                              indent + INDENT_INCREMENT,
                                              recursive_requests, target_url,
                                              already_anew_line=False)
@@ -143,14 +143,14 @@ e.g.: %prog vpns instances"""
         response = urllib2.urlopen(target_url)
 
         if response.getcode() == 200:
-            data = json.load(response)
+            data = jsonutils.load(response)
 
             if (isinstance(data, dict) and "href" in data):
                 target_url_bis = data["href"]
                 response_bis = urllib2.urlopen(target_url_bis)
                 if response.getcode() == 200:
                     target_url = target_url_bis
-                    data = json.load(response_bis)
+                    data = jsonutils.load(response_bis)
 
             pretty_print_recurse(data, 0, options.recurse, target_url,
                                  already_anew_line=True)

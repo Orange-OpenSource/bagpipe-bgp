@@ -16,8 +16,8 @@
 
 import os
 
-import json
 import optparse
+from oslo_serialization import jsonutils
 import urllib2
 
 
@@ -34,7 +34,7 @@ def request(options, server, args):
         response = urllib2.urlopen(target_url)
 
         if response.getcode() == 200:
-            return json.load(response)
+            return jsonutils.load(response)
     except urllib2.HTTPError as e:
         if e.code == 404:
             return {}

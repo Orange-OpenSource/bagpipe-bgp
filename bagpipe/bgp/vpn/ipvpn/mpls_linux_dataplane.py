@@ -18,9 +18,9 @@
 import errno
 import socket
 
-import json
 import netaddr
 from oslo_config import cfg
+from oslo_serialization import jsonutils
 import pyroute2
 from pyroute2 import netlink
 
@@ -40,6 +40,7 @@ RT_TABLE_BASE = 1000
 RT_PROT_BAGPIPE = 19
 
 
+# NOTE(tmorin): can this be removed ? (is jsonutils to_primitive() enough?)
 def json_set_default(obj):
     if isinstance(obj, set):
         return list(obj)
@@ -335,7 +336,8 @@ class MPLSLinuxVRFDataplane(dp_drivers.VPNInstanceDataplane,
     @log_decorator.log_info
     def get_lg_routes(self, path_prefix):
         routes = self.ip.routes.tables[self.rt_table]
-        return [{r['dst']: json.loads(json.dumps(r, default=json_set_default))}
+        return [{r['dst']:
+                 jsonutils.loads(jsonutils.dumps(r, default=json_set_default))}
                 for r in routes]
 
 

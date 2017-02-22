@@ -21,9 +21,9 @@ import os
 import re
 import sys
 
-import json
 import netaddr
 import optparse
+from oslo_serialization import jsonutils
 import urllib2
 
 from bagpipe.bgp import constants as const
@@ -344,7 +344,7 @@ def main():
             parser.error("Need to specify --redirect-rt and at least one "
                          "traffic classifier option")
 
-    json_data = json.dumps(
+    json_data = jsonutils.dumps(
         {"import_rt":  import_rts,
          "export_rt":  export_rts,
          "local_port":  local_port,
