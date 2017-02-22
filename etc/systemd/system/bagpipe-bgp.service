@@ -1,0 +1,14 @@
+[Unit]
+Description=BaGPipe-BGP server
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/bagpipe-bgp
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
+

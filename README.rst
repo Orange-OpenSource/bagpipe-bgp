@@ -42,10 +42,10 @@ namespaces (see `below <#netns-example>`__).
 Installation
 ------------
 
-Installation can be done with ``python setup.py install``.
+Installation can be done with ``python setup.py install --install-data=/``.
 
 Running ``install.sh`` will take care of this and will *also* install
-startup scripts in ``/etc/init.d`` and sample config files in
+startup scripts in ``/etc`` and sample config files in
 ``/etc/bagpipe-bgp``.
 
 BGP and Route Reflection
@@ -165,13 +165,13 @@ Usage
 BaGPipe BGP daemon
 ~~~~~~~~~~~~~~~~~~
 
-If init scripts are installed, the daemon is typically started with:
-``service bagpipe-bgp start``
+If systemd init scripts are installed, the daemon is typically started with:
+``systemctl start bagpipe-bgp``
 
 It can also be started directly with the ``bagpipe-bgp`` command
-(``--help`` to see what parameters can be used; e.g. ``--no-deamon``).
+(``--help`` to see what parameters can be used).
 
-It outputs logs in ``/var/log/bagpipe-bgp/bagpipe-bgp.log``.
+By default, it outputs logs on stdin (captured by systemd if run under systemd).
 
 BaGPipe Fake BGP Route Reflector
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -179,7 +179,7 @@ BaGPipe Fake BGP Route Reflector
 If you choose to use our fake BGP Route Reflector (see `BGP Route
 Reflection <#bgprr>`__), you can start it whether with the
 ``bagpipe-fakerr`` command, or if you have startup scripts installed,
-with ``service bagpipe-bgp start``.
+with ``service bagpipe-fakerr start``.
 
 There isn't anything to configure, logs will be in syslog.
 

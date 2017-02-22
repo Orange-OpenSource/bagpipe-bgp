@@ -19,42 +19,17 @@ import logging as python_logging
 import sys
 import signal
 
-from daemon import runner
 from oslo_config import cfg
 from oslo_log import log as logging
 import pbr.version
 
 from bagpipe.bgp.api import api
 from bagpipe.bgp.common import config  # flake8: noqa
-from bagpipe.bgp.common import looking_glass as lg
 from bagpipe.bgp.engine import exabgp_peer_worker
 from bagpipe.bgp.vpn import dataplane_drivers as drivers
 
 
 LOG = logging.getLogger(__name__)
-
-BACKWARD_COMPAT_LOG_PATH = "/var/log/bagpipe-bgp/bagpipe-bgp.log"
-
-
-class BgpDaemon(lg.LookingGlassMixin):
-
-    def __init__(self):
-        self.stdin_path = '/dev/null'
-        self.stdout_path = '/dev/null'
-        self.stderr_path = '/dev/null'
-        self.pidfile_path = '/var/run/bagpipe-bgp/bagpipe-bgp.pid'
-        self.pidfile_timeout = 5
-
-    def run(self):
-        LOG.info("Starting bagpipe-bgp...")
-        self.pecan_api = api.PecanAPI()
-        self.pecan_api.run()
-
-    def stop(self, signum, _):
-        LOG.info("Received signal %d, stopping...", signum)
-        self.pecan_api.stop()
-        LOG.info("All threads now stopped...")
-        raise SystemExit("Terminated on signal %d" % signum)
 
 
 def setup_config():
@@ -82,20 +57,13 @@ def setup_logging():
 def fix_log_file():
     # required to transition from past bagpipe-bgp version which were
     # using --log-file to specify the location of a file to configure logging
-    if not cfg.CONF.ack_oslo_log:
-        if (not cfg.CONF.log_file or
-                cfg.CONF.log_file == '/etc/bagpipe-bgp/log.conf'):
-            if not cfg.CONF.no_daemon:
-                LOG.warning("now using oslo_log, will use %s as log file, "
-                            "use --ack-oslo-log --log-file <path> to "
-                            "specify another path" % BACKWARD_COMPAT_LOG_PATH)
-                cfg.CONF.log_file = BACKWARD_COMPAT_LOG_PATH
-        else:
-            LOG.warning("now using oslo_log, will ignore --log-file option "
-                        "unless you also set --ack-oslo-log, in which case "
-                        "--log-file will specify a log file location" %
-                        cfg.CONF.log_file)
-            cfg.CONF.log_file = None
+    if (not cfg.CONF.ack_oslo_log and
+            cfg.CONF.log_file and
+            cfg.CONF.log_file != '/etc/bagpipe-bgp/log.conf'):
+        LOG.warning("now using oslo_log, will ignore --log-file option "
+                    "unless you also set --ack-oslo-log, in which case "
+                    "--log-file will have to specify a log file location")
+        cfg.CONF.log_file = None
 
 
 def daemon_main():
@@ -103,33 +71,32 @@ def daemon_main():
 
     setup_config()
 
+    if cfg.CONF.action != "unset":
+        LOG.warning("Running daemonized and using start/stop is not supported "
+                    "anymore, use of systemd is your typical alternative")
+        if cfg.CONF.action == "stop":
+            sys.exit(-1)
+
     fix_log_file()
 
     setup_logging()
 
     exabgp_peer_worker.setup_exabgp_env()
 
-    sys.argv[1:] = [cfg.CONF.action]
-    daemon = BgpDaemon()
-
     try:
-        if not cfg.CONF.no_daemon:
-            daemon_runner = runner.DaemonRunner(daemon)
-            # This ensures that the logger file handler does not get closed
-            # during daemonization
-            daemon_runner.daemon_context.files_preserve = [
-                python_logging.getLogger().handlers[0].stream]
-            daemon_runner.daemon_context.signal_map = {
-                signal.SIGTERM: daemon.stop
-            }
-            daemon_runner.do_action()
-        else:
-            signal.signal(signal.SIGTERM, daemon.stop)
-            signal.signal(signal.SIGINT, daemon.stop)
-            if cfg.CONF.action == "stop":
-                LOG.error("Can't use 'stop' with --no-daemon")
-            else:
-                daemon.run()
+        LOG.info("Starting bagpipe-bgp...")
+        pecan_api = api.PecanAPI()
+
+        def stop(signum, _):
+            LOG.info("Received signal %d, stopping...", signum)
+            pecan_api.stop()
+            LOG.info("All threads now stopped...")
+            raise SystemExit("Terminated on signal %d" % signum)
+
+        signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGINT, stop)
+
+        pecan_api.run()
     except Exception as e:
         LOG.exception("Error while starting BGP daemon: %s", e)
 

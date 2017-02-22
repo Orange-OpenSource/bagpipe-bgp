@@ -17,9 +17,6 @@ echo "*** Installing BaGPipe BGP ***"
 
 python setup.py install --install-data=/
 
-echo -e "\n*** Creating BaGPipe BGP service ***"
-update-rc.d bagpipe-bgp defaults 80
-
 confFile=/etc/bagpipe-bgp/bgp.conf
 oldConf=/etc/bagpipe-bgp/bgp_conf.ini
 if [ ! -f $confFile -a -f $oldConf ]; then
@@ -34,14 +31,15 @@ fi
 
 case $1 in
     "manual")
-        echo -e "\n\n*** WARNING: BaGPipe BGP component service must be started manually ***"
+        echo -e "\n\n*** WARNING: BaGPipe BGP service must be started manually ***"
         ;;
     "auto"|"")
-        echo -e "\n\n*** Starting BaGPipe BGP component service ***"
-        service bagpipe-bgp restart
+        echo -e "\n\n*** Starting BaGPipe BGP service ***"
+        systemctl enable bagpipe-bgp
+        systemctl start bagpipe-bgp
     
         if [ $? -ne 0 ]; then
-            echo -e "\nAn error occurred when starting BGP component service\n"
+            echo -e "\nAn error occurred when starting BGP service\n"
             exit 1
         fi
         ;;
