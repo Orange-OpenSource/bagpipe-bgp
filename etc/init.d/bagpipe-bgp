@@ -34,7 +34,7 @@ case "$1" in
     # Start the daemon
     if [ "$(pgrep -fl $BGP_DAEMON)" == "" ]; then
         echo "Starting BGP component..."
-        $BGP_DAEMON start $OPTIONS
+        $BGP_DAEMON --ack-oslo-log start $OPTIONS
     else
         echo "WARNING: BGP component has already been started..."
     fi
@@ -43,7 +43,7 @@ case "$1" in
     # Stop the daemon with dataplane cleanup
     echo "Stopping BGP component with dataplane cleanup..."
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
-        $BGP_DAEMON stop $OPTIONS
+        $BGP_DAEMON --ack-oslo-log stop $OPTIONS
     
         # Clean dataplane when daemon has been stopped
         while pgrep -fl $BGP_DAEMON > /dev/null; do
@@ -51,7 +51,7 @@ case "$1" in
         done
         
         echo "Cleaning dataplane..."
-        $BGP_DATAPLANE_CLEANUP $OPTIONS
+        $BGP_DATAPLANE_CLEANUP --ack-oslo-log $OPTIONS
     else
         echo "WARNING: BGP component was already stopped..."
     fi
@@ -60,7 +60,7 @@ case "$1" in
     # Stop the daemon without dataplane cleanup
     echo "Stopping BGP component (without dataplane cleanup)..."
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
-        $BGP_DAEMON stop $OPTIONS
+        $BGP_DAEMON --ack-oslo-log stop $OPTIONS
     else
         echo "WARNING: BGP component was already stopped..."
     fi
@@ -68,16 +68,16 @@ case "$1" in
   restart)
     if [ "$(pgrep -fl $BGP_DAEMON)" != "" ]; then
         echo -n "Restarting BGP component... stopping..."
-        $BGP_DAEMON stop  $OPTIONS
+        $BGP_DAEMON --ack-oslo-log stop  $OPTIONS
         while pgrep -fl $BGP_DAEMON > /dev/null; do
             sleep 1
             echo -n "."
         done
         echo "...starting"
-        $BGP_DAEMON start  $OPTIONS
+        $BGP_DAEMON --ack-oslo-log start  $OPTIONS
     else
         echo "Starting BGP component (was already stopped)"
-        $BGP_DAEMON start  $OPTIONS
+        $BGP_DAEMON --ack-oslo-log start  $OPTIONS
     fi
     ;;
   status)
