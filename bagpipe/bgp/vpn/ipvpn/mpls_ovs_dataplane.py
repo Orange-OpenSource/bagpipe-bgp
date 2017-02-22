@@ -1096,13 +1096,13 @@ class MPLSOVSDataplaneDriver(dp_drivers.DataplaneDriver, lg.LookingGlassMixin):
             try:
                 self.mpls_if_mac_address = net_utils.get_device_mac(
                     self._run_command,
-                    self.driver.mpls_interface)
+                    self.mpls_interface)
             except:
                 # Interface without MAC address (patch port case), use MPLS
                 # bridge MAC address instead
                 self.mpls_if_mac_address = net_utils.get_device_mac(
                     self._run_command,
-                    self.driver.bridge)
+                    self.bridge)
 
         self._ovs_flow_add("in_port=%d,mpls" % self.mpls_in_port(),
                            "resubmit(,%d)" % self.encap_in_table,
