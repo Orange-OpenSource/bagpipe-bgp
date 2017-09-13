@@ -1,0 +1,26 @@
+[loggers]
+keys=root
+
+[handlers]
+keys=console
+
+[formatters]
+keys=standard
+
+[logger_root]
+level=WARNING
+propagate=0
+qualname=(root)
+handlers=console
+parent=
+
+[handler_console]
+class=StreamHandler
+args=(sys.stdout,)
+formatter=standard
+
+[formatter_standard]
+class=logging.Formatter
+format=%(asctime)s %(threadName)-30s %(name)-30s %(levelname)-8s %(message)s
+datefmt=
+
