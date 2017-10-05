@@ -30,14 +30,38 @@ from bagpipe.bgp.engine import exa
 from bagpipe.bgp import engine
 
 
+# Explanations on FilteredRoute
+
+# We need to call self.best_route_removed for a route that was
+# implicitly withdrawn, except if, in best_routes, there is
+# a route that is the same with reference to what the
+# best_route_removed callback will do:
+# - if there is a route with same nexthop, same encap, same label
+#   (other attributes make the route different)
+#   => no call to best_route_removed
+# - if there is a route with same nexthop, but a different label or
+#   a different encap
+#   => need to call best_route_removed
+#
+# Similarly, when multiple best routes exist for an entry
+# (ECMP case), we don't want to call new_best_route multiple times
+# uselessly for instance for two routes that would be 'same' wrt
+# the actions done by the new_best_route callback. So we will do a
+# call to self.new_best_route... *only* if the
+# new_route is different from all current best routes.
+#
+# FilteredRoute is the class we use to identify a route
+# that would be the 'same', based on the above.  For instance
+# FilteredRoute removes information on the .source and
+# only BGP attributes that are used by callbacks.
 keep_attributes_default = [exa.Attribute.CODE.NEXT_HOP,
                            exa.Attribute.CODE.PMSI_TUNNEL,
                            exa.Attribute.CODE.MED,
-                           exa.Attribute.CODE.EXTENDED_COMMUNITY,  # FIXME
+                           exa.Attribute.CODE.EXTENDED_COMMUNITY,
                            exa.Attribute.CODE.LOCAL_PREF]
 
 
-class FilteredRouteEntry(engine.RouteEntry):
+class FilteredRoute(engine.RouteEntry):
 
     def __init__(self, re, keep_attributes=None):
         if keep_attributes is None:
@@ -48,20 +72,25 @@ class FilteredRouteEntry(engine.RouteEntry):
             if attribute_id in keep_attributes:
                 attributes.add(attribute)
 
-        engine.RouteEntry.__init__(self, re.nlri, None, attributes)
+        super(FilteredRoute, self).__init__(re.nlri, None, attributes)
 
 
-def filtered_routes(routes):
-    return [FilteredRouteEntry(route) for route in routes]
+def equivalent_route_in_routes(function, route, routes):
+    reference = function(route)
+    for r in routes:
+        if function(r) == reference:
+            return True
+    return False
 
-
-# def _compare_routes(self, route_a, route_b):
-#         """
-#         should return:
-#          - an int>0 if route_a is better than route_b
-#          - an int<0 if route_b is better than route_a
-#          - else 0
-#         """
+# a compare_route callback has the following signature:
+#
+# def compare_route(self, route_a, route_b):
+#     """
+#     should return:
+#      - an int>0 if route_a is better than route_b
+#      - an int<0 if route_b is better than route_a
+#      - else 0
+#     """
 
 # TODO: both comparison should first compare local_pref and MAC Mobility
 # if present
@@ -75,14 +104,14 @@ def compare_no_ecmp(self, route_a, route_b):
     bagpipe-bgp instances will not necessarily elect the same route as the
     best one.
     '''
-    self.log.debug("compare_no_ecmp used")
+    self.log.trace("compare_no_ecmp used")
     salt = socket.gethostname() + self.name
     return cmp([hash(salt + repr(route_a)), route_a],
                [hash(salt + repr(route_b)), route_b])
 
 
 def compare_ecmp(self, route_a, route_b):
-    self.log.debug("compare_ecmp used")
+    self.log.trace("compare_ecmp used")
     return 0
 
 
@@ -105,16 +134,16 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
     @log_decorator.log
     def _on_event(self, event):
         new_route = event.route_entry
-        filtered_new_route = FilteredRouteEntry(new_route)
+        filtered_new_route = FilteredRoute(new_route)
 
-        entry = self._route_2_tracked_entry(new_route)
+        entry = self.route_to_tracked_entry(new_route)
 
         if entry is None:
             self.log.debug("Route not mapped to a tracked entry, ignoring: %s",
                            new_route)
             return
 
-        self.log.debug("tracked_entry for this route: %s (type: %s)",
+        self.log.trace("tracked_entry for this route: %s (type: %s)",
                        TrackerWorker._display_entry(entry), type(entry))
 
         self._dump_state()
@@ -131,14 +160,13 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
             best_routes = self.tracked_entry_2_best_routes.get(entry)
 
             if best_routes is None:
-                self.log.debug("We had no route for this entry (%s)")
+                self.log.trace("We had no route for this entry (%s)")
                 self.tracked_entry_2_best_routes[entry] = set([new_route])
                 best_routes = set()
-                self.log.debug("Calling new_best_route")
                 self._call_new_best_route(entry, filtered_new_route)
             else:
                 if event.replaced_route is not None:
-                    self.log.debug("Will remove replaced route from all_routes"
+                    self.log.trace("Will remove replaced route from all_routes"
                                    " and best_routes: %s",
                                    event.replaced_route)
                     try:
@@ -149,23 +177,23 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
                                        "we had no route ??? (bug ?)")
 
                     if event.replaced_route in best_routes:
-                        self.log.debug(
+                        self.log.trace(
                             "Removing replaced_route from best_routes")
                         best_routes.remove(event.replaced_route)
                         withdrawn_best_routes.append(event.replaced_route)
                     else:
-                        self.log.debug("replaced_route is not in best_routes")
-                        self.log.debug("best_routes: %s", best_routes)
+                        self.log.trace("replaced_route is not in best_routes")
+                        self.log.trace("best_routes: %s", best_routes)
                 else:
-                    self.log.debug("No replaced route to remove")
+                    self.log.trace("No replaced route to remove")
 
                 call_new_best_route_4_all = False
                 if len(best_routes) == 0:
-                    self.log.debug("All best routes have been replaced")
+                    self.log.trace("All best routes have been replaced")
                     self._recompute_best_routes(all_routes, best_routes)
                     if best_routes:
                         current_best = iter(best_routes).next()
-                        self.log.debug("We'll need to call new_best_route for "
+                        self.log.trace("We'll need to call new_best_route for "
                                        "all our new best routes")
                         call_new_best_route_4_all = True
                     else:
@@ -176,7 +204,7 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
                     # take the first one)
                     current_best = iter(best_routes).next()
 
-                    self.log.debug("Current best route: %s", current_best)
+                    self.log.trace("Current best route: %s", current_best)
 
                     if new_route == current_best:
                         self.log.info("New route is a route we already had, "
@@ -191,12 +219,12 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
                 else:
                     route_comparison = 1
 
-                self.log.debug("route_comparison: %d", route_comparison)
+                self.log.trace("route_comparison: %d", route_comparison)
 
                 if route_comparison > 0:
                     # new_route is a strictly better route than any current
                     # one, discard all the current best routes
-                    self.log.debug("Replacing all best routes with new one")
+                    self.log.trace("Replacing all best routes with new one")
                     withdrawn_best_routes.extend(best_routes.copy())
                     best_routes.clear()
                     best_routes.add(new_route)
@@ -204,75 +232,54 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
                     call_new_best_route_4_all = False
                 elif route_comparison == 0:
                     # new_route is as good as the current ones
-                    self.log.debug("Adding new_route to best_routes...")
+                    self.log.trace("Adding new_route to best_routes...")
 
                     if call_new_best_route_4_all:
                         self._call_new_best_route_for_routes(entry,
                                                              best_routes)
 
-                    # We'll do a call to self._new_best_route... *only* if the
-                    # new_route is different from all current best routes. This
-                    # comparison uses FilteredRouteEntry to *not* take into
-                    # account .source (the BGP peer which advertized the route)
-                    # and only takes into account a specific set of BGP
-                    # attributes.
-                    # TODO: explain more on theses BGP attributes
-                    #       related to the cases where a route is re-advertized
-                    #       with updated attributes
-                    is_really_new = (FilteredRouteEntry(new_route) not in
-                                     filtered_routes(best_routes))
-
-                    best_routes.add(new_route)
-
-                    if is_really_new:
-                        self.log.debug("Calling self._new_best_route since we "
+                    if not equivalent_route_in_routes(FilteredRoute,
+                                                      new_route,
+                                                      best_routes):
+                        best_routes.add(new_route)
+                        self.log.trace("Calling self.new_best_route since we "
                                        "yet had no such route in best routes")
                         self._call_new_best_route(entry, filtered_new_route)
                     else:
-                        self.log.debug("Not calling _new_best_route since we "
+                        best_routes.add(new_route)
+                        self.log.trace("Not calling new_best_route since we "
                                        "had received a similar route already")
                 else:
-                    self.log.debug("The route is no better than current "
+                    self.log.trace("The route is no better than current "
                                    "best ones")
 
                     if call_new_best_route_4_all:
                         self._call_new_best_route_for_routes(entry,
                                                              best_routes)
 
-            # We need to call self._best_route_removed for routes that where
-            # implicitly withdrawn, but only if they don't have an equal route
-            # (in the sense of FilteredRouteEntry) in best_routes
-            filtered_best_routes = filtered_routes(best_routes)
-            self.log.debug("Considering implicitly withdrawn best routes")
+            self.log.trace("Considering implicitly withdrawn best routes")
             for r in withdrawn_best_routes:
-                filtered_r = FilteredRouteEntry(r)
-                if filtered_r not in filtered_best_routes:
-                    self.log.debug("   calling self._best_route_removed for "
-                                   "route: %s (not last)", filtered_r)
-                    self._call_best_route_removed(entry,
-                                                  filtered_r,
-                                                  last=False)
-                else:
-                    self.log.debug("   not calling self._best_route_removed "
-                                   "for route: %s", filtered_r)
+                self._selective_best_route_removed(entry,
+                                                   r, best_routes,
+                                                   False)
 
             # add the route to the list of routes for this entry
-            self.log.debug("Adding route to all_routes for this entry")
+            self.log.trace("Adding route to all_routes for this entry")
             all_routes.append(new_route)
 
         else:  # RouteEvent.WITHDRAW
 
             withdrawn_route = new_route
 
-            self.log.debug("Removing route from all_routes for this entry")
+            self.log.trace("Removing route from all_routes for this entry")
 
             # let's update known routes for this entry
             try:
                 all_routes.remove(withdrawn_route)
             except ValueError:
                 # we did not have any route for this entry
-                self.log.error("Withdraw received for an entry for which we"
-                               " had no route ??? (not supposed to happen)")
+                self.log.error("Withdraw received for an entry for which we "
+                               "had no route ??? (not supposed to happen)")
 
             # let's now update best routes
             best_routes = self.tracked_entry_2_best_routes.get(entry)
@@ -284,8 +291,8 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
                 return
 
             if withdrawn_route in best_routes:
-                self.log.debug("The event received is about a route which"
-                               " is among the best routes for this entry")
+                self.log.trace("The event received is about a route which "
+                               "is among the best routes for this entry")
                 # remove the route from best_routes
                 best_routes.remove(withdrawn_route)
 
@@ -298,30 +305,17 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
                         self._call_new_best_route_for_routes(entry,
                                                              best_routes)
                     else:
-                        self.log.debug("Cleanup all_routes and best_routes")
+                        self.log.trace("Cleanup all_routes and best_routes")
                         withdrawn_route_is_last = True
                         del self.tracked_entry_2_best_routes[entry]
                         del self.tracked_entry_2_routes[entry]
 
-                self.log.debug("Calling best_route_removed...?")
-                # We need to call self._best_route_removed, but only if the
-                # withdrawn route does not have an equal route in
-                # best_routes (in the sense of FilteredRouteEntry)
-                filtered_withdrawn_route = FilteredRouteEntry(withdrawn_route)
-                if (filtered_withdrawn_route not
-                        in filtered_routes(best_routes)):
-                    self.log.debug("Calling best_route_removed: %s(last:%s)",
-                                   filtered_withdrawn_route,
-                                   withdrawn_route_is_last)
-                    self._call_best_route_removed(entry,
-                                                  filtered_withdrawn_route,
-                                                  withdrawn_route_is_last)
-                else:
-                    self.log.debug("No need to call bestRouteRemved: %s",
-                                   filtered_withdrawn_route)
-
+                self._selective_best_route_removed(entry,
+                                                   withdrawn_route,
+                                                   best_routes,
+                                                   withdrawn_route_is_last)
             else:
-                self.log.debug("The event received is not related to any "
+                self.log.trace("The event received is not related to any "
                                "of the best routes for this entry")
                 # no need to update our best route list
                 pass
@@ -350,29 +344,57 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
         best_routes.clear()
         best_routes.update(new_best_routes)
 
-        self.log.debug("Recomputed new best routes: %s", best_routes)
+        self.log.trace("Recomputed new best routes: %s", best_routes)
 
+    @log_decorator.log
+    def _selective_best_route_removed(self, entry, withdrawn_route,
+                                      filtered_best_routes,
+                                      withdrawn_route_is_last):
+        if not equivalent_route_in_routes(FilteredRoute,
+                                          withdrawn_route,
+                                          filtered_best_routes):
+            self._call_best_route_removed(entry,
+                                          FilteredRoute(withdrawn_route),
+                                          withdrawn_route_is_last)
+        else:
+            self.log.trace("No need to call best_route_removed: %s",
+                           FilteredRoute(withdrawn_route))
+
+    def equivalent_route_in_best_routes(self, route, function):
+        # This method checks if there is in the best routes for the same
+        # tracked entry as 'route', at least one route r for which function(r)
+        # is equal to function(route)
+        return equivalent_route_in_routes(
+            function,
+            route,
+            self.tracked_entry_2_best_routes.get(
+                self.route_to_tracked_entry(route),
+                []
+            )
+        )
+
+    @log_decorator.log
     def _call_new_best_route_for_routes(self, entry, routes):
-        self.log.debug("Calling new_best_route for routes, without dups")
-        self.log.debug("   Routes: %s", routes)
-        routes_no_dups = set([FilteredRouteEntry(r) for r in routes])
+        routes_no_dups = set([FilteredRoute(r) for r in routes])
         self.log.debug("   After filtering duplicates: %s", routes_no_dups)
         for route in routes_no_dups:
             self._call_new_best_route(entry, route)
 
+    @log_decorator.log
     def _call_new_best_route(self, entry, new_route):
         try:
-            self._new_best_route(entry, new_route)
+            self.new_best_route(entry, new_route)
         except Exception as e:
-            self.log.error("Exception in <subclass>._new_best_route: %s", e)
+            self.log.error("Exception in <subclass>.new_best_route: %s", e)
             if self.log.isEnabledFor(logging.WARNING):
                 self.log.info("%s", traceback.format_exc())
 
+    @log_decorator.log
     def _call_best_route_removed(self, entry, old_route, last):
         try:
-            self._best_route_removed(entry, old_route, last)
+            self.best_route_removed(entry, old_route, last)
         except Exception as e:
-            self.log.error("Exception in <subclass>._best_route_removed: %s",
+            self.log.error("Exception in <subclass>.best_route_removed: %s",
                            e)
             if self.log.isEnabledFor(logging.WARNING):
                 self.log.info("%s", traceback.format_exc())
@@ -380,7 +402,7 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
     # Callbacks for subclasses ########################
 
     @abc.abstractmethod
-    def _route_2_tracked_entry(self, route):
+    def route_to_tracked_entry(self, route):
         """
         This method is how the subclass maps a BGP route into an object that
         the TrackerWorker code will track.
@@ -394,14 +416,14 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
         pass
 
     @abc.abstractmethod
-    def _new_best_route(self, entry, new_route):
+    def new_best_route(self, entry, new_route):
         '''
         A new best route has been advertized for this tracked entry
         '''
         pass
 
     @abc.abstractmethod
-    def _best_route_removed(self, entry, old_route, last):
+    def best_route_removed(self, entry, old_route, last):
         '''
         A route that was a best route for this tracked entry has been
         removed. The 'last' flag indicates if this was the last route
@@ -412,23 +434,23 @@ class TrackerWorker(worker.Worker, lg.LookingGlassLocalLogger):
     # Debug support methods #########
 
     def _dump_state(self):
-        if self.log.isEnabledFor(logging.DEBUG):
-            self.log.debug("--- tracked_entry_2_routes ---")
+        if self.log.isEnabledFor(logging.TRACE):
+            self.log.trace("--- tracked_entry_2_routes ---")
             for (entry, routes) in self.tracked_entry_2_routes.iteritems():
-                self.log.debug(
+                self.log.trace(
                     "  Entry: %s", TrackerWorker._display_entry(entry))
                 for route in routes:
-                    self.log.debug("    Route: %s", route)
+                    self.log.trace("    Route: %s", route)
 
-            self.log.debug("--- tracked_entry_2_best_routes ---")
+            self.log.trace("--- tracked_entry_2_best_routes ---")
             for (entry, best_routes) in \
                     self.tracked_entry_2_best_routes.iteritems():
-                self.log.debug("  Entry: %s",
+                self.log.trace("  Entry: %s",
                                TrackerWorker._display_entry(entry))
                 for route in best_routes:
-                    self.log.debug("    Route: %s", route)
+                    self.log.trace("    Route: %s", route)
 
-            self.log.debug("--- ---")
+            self.log.trace("--- ---")
 
     @staticmethod
     def _display_entry(entry):

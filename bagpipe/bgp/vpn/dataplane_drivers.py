@@ -23,6 +23,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 import stevedore
 
+from bagpipe.bgp.common import config
 from bagpipe.bgp import constants
 from bagpipe.bgp.engine import exa
 from bagpipe.bgp.common import log_decorator
@@ -39,11 +40,11 @@ LOG = logging.getLogger(__name__)
 # TODO(tmorin): list possible values for dataplane_driver,
 #               see what neutron-db-manage does
 dataplane_common_opts = [
-    cfg.IPOpt("dataplane_local_address", version=4,
-
-              help=("IP address to use as next-hop in our route "
-                    "advertisements, will be used to send us "
-                    "VPN traffic")),
+    cfg.Opt("dataplane_local_address",
+            type=config.InterfaceAddress(),
+            help=("IP address to use as next-hop in our route "
+                  "advertisements, will be used to send us "
+                  "VPN traffic")),
     cfg.StrOpt("dataplane_driver", default="dummy",
                help="Dataplane driver.")
 ]
@@ -86,7 +87,7 @@ def instantiate_dataplane_drivers():
             drivers[vpn_type] = driver_class()
         except Exception as e:
             LOG.error("Error while instantiating dataplane"
-                      " driver for %s with %s: %s", vpn_type, driver_class, e)
+                      " driver for %s with %s: %s", vpn_type, driver_name, e)
             LOG.error(traceback.format_exc())
             raise
 
@@ -103,6 +104,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
               exa.Encapsulation(exa.Encapsulation.Type.MPLS)]
     makebefore4break_support = False
     ecmp_support = False
+    required_kernel = None
 
     driver_opts = []
 
@@ -127,7 +129,7 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
         # Linux kernel version check
         o = self._run_command("uname -r")
         self.kernel_release = o[0][0].split("-")[0]
-        if getattr(self, 'required_kernel', None):
+        if self.required_kernel:
             if (version.StrictVersion(self.kernel_release) <
                     version.StrictVersion(self.required_kernel)):
                 self.log.warning("%s requires at least Linux kernel %s"
@@ -188,10 +190,6 @@ class DataplaneDriver(lg.LookingGlassLocalLogger):
                                              gateway_ip, mask,
                                              instance_label, **kwargs)
 
-    def cleanup(self):
-        # FIXME: to be clarified: can be removed ? should call reset_state ?
-        self._cleanup_real()
-
     def get_local_address(self):
         return self.local_address
 
@@ -220,7 +218,7 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
 
     @log_decorator.log_info
     def __init__(self, dataplane_driver, instance_id, external_instance_id,
-                 gateway_ip, mask, instance_label=None):
+                 gateway_ip, mask, instance_label=None, **kwargs):
         lg.LookingGlassLocalLogger.__init__(self, repr(instance_id))
         self.driver = dataplane_driver
         self.config = dataplane_driver.config
@@ -265,7 +263,7 @@ class VPNInstanceDataplane(lg.LookingGlassLocalLogger):
 
     # Looking glass info ####
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
         driver = {"id": self.driver.type,
                   "href": lg.get_absolute_path(
                       "DATAPLANE_DRIVERS", path_prefix, [self.driver.type])}
@@ -320,8 +318,4 @@ class DummyDataplaneDriver(DataplaneDriver):
 
     @log_decorator.log_info
     def reset_state(self):
-        pass
-
-    @log_decorator.log_info
-    def _cleanup_real(self):
         pass

@@ -365,7 +365,7 @@ class BGPPeerWorker(worker.Worker,
 
     # Looking glass hooks ###
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
         return {
             "protocol": {
                 "state": self.fsm.state,

@@ -1,4 +1,4 @@
-pbr >= 0.11, < 2.0
+pbr>=2.0.0
 netaddr >= 0.7.7
 twisted >= 13.2
 pyroute2 >= 0.4.1
@@ -9,9 +9,5 @@ oslo.log>=1.14.0  # Apache-2.0
 oslo.rootwrap>=2.0.0
 oslo.serialization>=1.10.0 # Apache-2.0
 pecan
-
-#exabgp >= 3.9
-#until exabgp 3.9 or 4 is released:
--e git+https://github.com/Exa-Networks/exabgp.git#egg=exabgp
-#-e https://github.com/Exa-Networks/exabgp.git@<commitid>#egg=exabgp
+exabgp >= 4.0.2
 

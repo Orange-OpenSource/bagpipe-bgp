@@ -39,8 +39,8 @@ class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
     # - cleanup: calling the driver, unregistering for BGP routes
 
     type = constants.IPVPN
-    afi = exa.AFI(exa.AFI.ipv4)
-    safi = exa.SAFI(exa.SAFI.mpls_vpn)
+    afi = exa.AFI.ipv4
+    safi = exa.SAFI.mpls_vpn
 
     @log_decorator.log
     def __init__(self, *args, **kwargs):
@@ -254,7 +254,7 @@ class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     # Callbacks for BGP route updates (TrackerWorker) ########################
 
-    def _route_2_tracked_entry(self, route):
+    def route_to_tracked_entry(self, route):
         if isinstance(route.nlri, ipvpn_routes.IPVPN):
             return route.nlri.cidr.prefix()
         elif isinstance(route.nlri, flowspec.Flow):
@@ -266,7 +266,7 @@ class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     @utils.synchronized
     @log_decorator.log
-    def _new_best_route(self, entry, new_route):
+    def new_best_route(self, entry, new_route):
 
         if isinstance(new_route.nlri, flowspec.Flow):
             if len(new_route.ecoms(exa.TrafficRedirect)) == 1:
@@ -313,7 +313,7 @@ class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     @utils.synchronized
     @log_decorator.log
-    def _best_route_removed(self, entry, old_route, last):
+    def best_route_removed(self, entry, old_route, last):
 
         if isinstance(old_route.nlri, flowspec.Flow):
             if len(old_route.ecoms(exa.TrafficRedirect)) == 1:
@@ -348,6 +348,15 @@ class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
                                "dataplane does not want it")
                 return
 
+            # if we still have a route with same dataplane properties in
+            # best routes, then we don't want to clear the dataplane entry
+            if self.equivalent_route_in_best_routes(
+                    old_route,
+                    lambda r: (r.nexthop, r.nlri.labels.labels[0])):
+                self.log.debug("Route for same dataplane is still in best "
+                               "routes, skipping removal")
+                return
+
             encaps = self._check_encaps(old_route)
             if not encaps:
                 return
@@ -372,5 +381,5 @@ class VRF(vpn_instance.VPNInstance, lg.LookingGlassMixin):
         }
 
     def get_lg_readvertised_routes(self, path_prefix):
-        return [route.get_log_local_info(path_prefix)
+        return [route.get_lg_local_info(path_prefix)
                 for route in self.readvertised]

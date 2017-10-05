@@ -67,8 +67,6 @@ class RouteEntry(lg.LookingGlassMixin):
         self.source = source
         self.afi = nlri.afi
         self.safi = nlri.safi
-        assert isinstance(self.afi, exa.AFI)
-        assert isinstance(self.safi, exa.SAFI)
         self.nlri = nlri
         self.attributes = attributes
         # a list of exa.bgp.message.update.attribute.community.
@@ -169,7 +167,7 @@ class RouteEntry(lg.LookingGlassMixin):
             self.afi, self.safi, self.nlri, nexthop,
             self.attributes, from_string)
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
 
         att_dict = {}
 
@@ -263,8 +261,6 @@ class RouteEvent(object):
 class _SubUnsubCommon(object):
 
     def __init__(self, afi, safi, route_target, worker=None):
-        assert isinstance(afi, exa.AFI)
-        assert isinstance(safi, exa.SAFI)
         assert route_target is None or isinstance(route_target,
                                                   exa.RouteTarget)
         self.afi = afi
@@ -293,8 +289,8 @@ Any of these (afi, safi or route target) can be replaced by a wildcard:
 * Subscription.ANY_RT
     """
 
-    ANY_AFI = exa.AFI(0)
-    ANY_SAFI = exa.SAFI(0)
+    ANY_AFI = None
+    ANY_SAFI = None
     ANY_RT = None
 
     def __init__(self, afi, safi, route_target=None, worker=None):

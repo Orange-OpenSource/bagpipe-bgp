@@ -39,5 +39,5 @@ class IPVPN(exa.IPVPN):
 def IPVPNRouteFactory(afi, prefix, label, rd, nexthop):
     packed_prefix, mask = prefix_to_packed_ip_mask(prefix)
 
-    return IPVPN.new(afi, exa.SAFI(exa.SAFI.mpls_vpn), packed_prefix, mask,
+    return IPVPN.new(afi, exa.SAFI.mpls_vpn, packed_prefix, mask,
                      exa.Labels([label], True), rd, nexthop)

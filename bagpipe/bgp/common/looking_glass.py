@@ -46,7 +46,7 @@ def _get_lg_local_info_recurse(obj, cls, path_prefix):
     if cls == LookingGlassMixin:
         return {}
 
-    result = cls.get_log_local_info(obj, path_prefix)
+    result = cls.get_lg_local_info(obj, path_prefix)
 
     assert isinstance(result, dict)
 
@@ -143,14 +143,14 @@ class LookingGlassMixin(object):
         """
         return {}
 
-    def _get_log_local_info(self, path_prefix):
+    def _get_lg_local_info(self, path_prefix):
         """
-        not to be overridden: calls get_log_local_info, on each of
+        not to be overridden: calls get_lg_local_info, on each of
           the super classes and merge the result in a dict
         """
         return _get_lg_local_info_recurse(self, self.__class__, path_prefix)
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
         """
         Can be overriden by looking glass objects.
 
@@ -279,7 +279,7 @@ class LookingGlassMixin(object):
 
         # firt_segment is None or is not in our map
         # let's build LookingGlassLocalInfo
-        info = self._get_log_local_info(path_prefix)
+        info = self._get_lg_local_info(path_prefix)
         for (path_item, (mapping_type, mapping_target)) in lg_map.iteritems():
             if path_item in info:
                 LOG.warning("overriding '%s', present both in "
@@ -315,7 +315,7 @@ class LookingGlassMixin(object):
 class NoSuchLookingGlassObject(Exception):
 
     def __init__(self, path_prefix, path):
-        Exception.__init__(self)
+        super(NoSuchLookingGlassObject, self).__init__()
         assert isinstance(path_prefix, six.string_types)
         self.path_prefix = path_prefix
 
@@ -358,7 +358,7 @@ class LookingGlassLogHandler(python_logging.Handler):
     """
 
     def __init__(self, level=logging.WARNING, max_size=100):
-        python_logging.Handler.__init__(self, level)
+        super(LookingGlassLogHandler, self).__init__(level)
         self.records = []
         self.max_size = max_size
         self.setFormatter(

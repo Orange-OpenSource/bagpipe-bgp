@@ -70,5 +70,5 @@ class LabelAllocator(lg.LookingGlassMixin):
         else:
             LOG.warn("asked to release a non registered label: %d", label)
 
-    def get_log_local_info(self, prefix):
+    def get_lg_local_info(self, prefix):
         return self.labels

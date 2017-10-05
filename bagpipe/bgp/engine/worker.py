@@ -137,7 +137,7 @@ class Worker(engine.EventSource, lg.LookingGlassMixin):
 
     # Looking glass ###
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
         return {
             "name": self.name,
             "internals": {

@@ -273,8 +273,6 @@ class VPNInstance(tracker_worker.TrackerWorker,
 
         self.afi = self.__class__.afi
         self.safi = self.__class__.safi
-        assert isinstance(self.afi, exa.AFI)
-        assert isinstance(self.safi, exa.SAFI)
 
         self.dp_driver = dataplane_driver
 
@@ -309,7 +307,7 @@ class VPNInstance(tracker_worker.TrackerWorker,
             self._subscribe(self.afi, self.safi, rt)
             # Subscribe to FlowSpec routes
             # FIXME(tmorin): this maybe isn't applicable yet to E-VPN yet
-            self._subscribe(self.afi, exa.SAFI(exa.SAFI.flow_vpn), rt)
+            self._subscribe(self.afi, exa.SAFI.flow_vpn, rt)
 
         if readvertise:
             self.readvertise = True
@@ -392,18 +390,20 @@ class VPNInstance(tracker_worker.TrackerWorker,
         self.log.debug("%s %d - Removed Import RTs: %s",
                        self.instance_type, self.instance_id, removed_import_rt)
 
-        # Register to BGP with these route targets
-        for rt in added_import_rt:
-            self._subscribe(self.afi, self.safi, rt)
-            self._subscribe(self.afi, exa.SAFI(exa.SAFI.flow_vpn), rt)
-
         # Unregister from BGP with these route targets
         for rt in removed_import_rt:
             self._unsubscribe(self.afi, self.safi, rt)
-            self._unsubscribe(self.afi, exa.SAFI(exa.SAFI.flow_vpn), rt)
+            self._unsubscribe(self.afi, exa.SAFI.flow_vpn, rt)
 
         # Update import and export route targets
+        # (needs to be done before subscribe or we get a race where
+        # VRF._imported rejects route that it's supposed to use)
         self.import_rts = new_import_rts
+
+        # Register to BGP with these route targets
+        for rt in added_import_rt:
+            self._subscribe(self.afi, self.safi, rt)
+            self._subscribe(self.afi, exa.SAFI.flow_vpn, rt)
 
         # Re-advertise all routes with new export RTs
         self.log.debug("Exports RTs: %s -> %s", self.export_rts,
@@ -612,7 +612,8 @@ class VPNInstance(tracker_worker.TrackerWorker,
                     del self.localport_2_endpoints[linuxif]
             if mac_address in self.mac_2_localport_data:
                 del self.mac_2_localport_data[mac_address]
-            if ip_address_prefix in self.ip_address_2_mac:
+            if (ip_address_prefix in self.ip_address_2_mac and
+                    mac_address in self.ip_address_2_mac[ip_address_prefix]):
                 self.ip_address_2_mac[ip_address_prefix].remove(mac_address)
 
             raise
@@ -631,7 +632,9 @@ class VPNInstance(tracker_worker.TrackerWorker,
         pdata = self.mac_2_localport_data.get(mac_address)
         if (not pdata or
                 (ip_address_prefix in self.ip_address_2_mac and
-                 mac_address not in self.ip_address_2_mac[ip_address_prefix])):
+                 mac_address not in self.ip_address_2_mac[ip_address_prefix])
+                or
+                (mac_address, ip_address_prefix) not in self.endpoint_2_rd):
             self.log.error("vif_unplugged called for endpoint (%s, %s), but "
                            "no consistent informations or was not plugged yet",
                            mac_address, ip_address_prefix)
@@ -834,12 +837,12 @@ class VPNInstance(tracker_worker.TrackerWorker,
 
     @utils.synchronized
     @log_decorator.log
-    def _new_best_route(self, entry, new_route):
+    def new_best_route(self, entry, new_route):
         pass
 
     @utils.synchronized
     @log_decorator.log
-    def _best_route_removed(self, entry, old_route, last):
+    def best_route_removed(self, entry, old_route, last):
         pass
 
     # Looking Glass ####

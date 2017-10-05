@@ -107,7 +107,8 @@ class Manager(engine.EventSource, lg.LookingGlassMixin):
 
     def _subscription_2_rtc_route_entry(self, subscription):
 
-        nlri = exa.RTC.new(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.rtc),
+        nlri = exa.RTC.new(exa.AFI.ipv4,
+                           exa.SAFI.rtc,
                            cfg.CONF.BGP.my_as,
                            subscription.route_target,
                            exa.IP.create(self.get_local_address()))

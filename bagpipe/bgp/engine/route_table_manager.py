@@ -36,8 +36,6 @@ LOG = logging.getLogger(__name__)
 class Match(object):
 
     def __init__(self, afi, safi, route_target):
-        assert isinstance(afi, exa.AFI)
-        assert isinstance(safi, exa.SAFI)
         assert route_target is None or isinstance(route_target,
                                                   exa.RouteTarget)
         self.afi = afi
@@ -59,12 +57,12 @@ class Match(object):
     def __cmp__(self, other):
         assert isinstance(other, Match)
 
-        self_afi = self.afi or exa.AFI(0)
-        self_safi = self.safi or exa.SAFI(0)
+        self_afi = self.afi or engine.Subscription.ANY_AFI
+        self_safi = self.safi or engine.Subscription.ANY_SAFI
         self_rt = self.route_target or exa.RouteTarget(0, 0)
 
-        other_afi = other.afi or exa.AFI(0)
-        other_safi = other.safi or exa.SAFI(0)
+        other_afi = other.afi or engine.Subscription.ANY_AFI
+        other_safi = other.safi or engine.Subscription.ANY_SAFI
         other_rt = other.route_target or exa.RouteTarget(0, 0)
 
         val = cmp((self_afi, self_safi, str(self_rt)),
@@ -181,27 +179,32 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
         while True:
             LOG.debug("RouteTableManager waiting on queue")
             event = self._queue.get()
-            LOG.debug("RouteTableManager received event %s", event)
-            try:
-                if event.__class__ == engine.RouteEvent:
-                    self._receive_route_event(event)
-                elif event.__class__ == engine.Subscription:
-                    self._worker_subscribes(event)
-                elif event.__class__ == engine.Unsubscription:
-                    self._worker_unsubscribes(event)
-                elif event.__class__ == engine.WorkerCleanupEvent:
-                    self._worker_cleanup(event.worker)
-                elif event == STOP_EVENT:
-                    LOG.info("STOP_EVENT => breaking main loop")
-                    break
-            except Exception as e:
-                LOG.error("Exception during processing of event: %s", repr(e))
-                LOG.error("%s", traceback.format_exc())
-                LOG.error("    event was: %s", event)
-
+            if event == STOP_EVENT:
+                LOG.info("STOP_EVENT => breaking main loop")
+                break
+            else:
+                self._on_event(event)
             LOG.debug("RouteTableManager queue size: %d", self._queue.qsize())
 
         LOG.info("Out of main loop")
+
+    @log_decorator.log_info
+    def _on_event(self, event):
+        try:
+            if event.__class__ == engine.RouteEvent:
+                self._receive_route_event(event)
+            elif event.__class__ == engine.Subscription:
+                self._worker_subscribes(event)
+            elif event.__class__ == engine.Unsubscription:
+                self._worker_unsubscribes(event)
+            elif event.__class__ == engine.WorkerCleanupEvent:
+                self._worker_cleanup(event.worker)
+            else:
+                raise Exception("unknown event: %s", event)
+        except Exception as e:
+            LOG.error("Exception during processing of event: %s", repr(e))
+            LOG.error("%s", traceback.format_exc())
+            LOG.error("    event was: %s", event)
 
     def enqueue(self, event):
         self._queue.put(event)
@@ -342,12 +345,11 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
 
         # self._dump_state()
 
+    @log_decorator.log
     def _propagate_route_event(self, route_event, except_workers=None):
         '''Propagate route_event to workers subscribed to the route RTs
         or wildcards, except the workers in except_workers. Returns the list of
         workers to which the event was propagated.'''
-
-        LOG.debug("Propagate event to interested workers: %s", route_event)
 
         re = route_event.route_entry
 
@@ -383,9 +385,8 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
 
         return target_workers
 
+    @log_decorator.log_info
     def _receive_route_event(self, route_event):
-        LOG.info("receive: %s", route_event)
-
         entry = route_event.route_entry
 
         LOG.debug("Try to find an entry from same worker with same nlri")
@@ -473,6 +474,7 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
 
         #  self._dump_state()
 
+    @log_decorator.log_info
     def _worker_cleanup(self, worker):
         '''
         Consider all routes announced by this worker as withdrawn.
@@ -480,7 +482,6 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
         subscriptions.
         '''
         assert isinstance(worker, worker_m.Worker)
-        LOG.info("Cleanup for worker %s", worker.name)
         # synthesize withdraw events for all routes from this worker
         LOG.info("  Preparing to withdraw %d routes that were advertised "
                  "by worker", len(worker._rtm_route_entries))
@@ -550,18 +551,13 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
     def get_lg_routes(self, path_prefix):
         result = {}
 
-        match_IPVPN = Match(
-            exa.AFI(exa.AFI.ipv4),
-            exa.SAFI(exa.SAFI.mpls_vpn),
-            engine.Subscription.ANY_RT)
-        match_EVPN = Match(
-            exa.AFI(exa.AFI.l2vpn),
-            exa.SAFI(exa.SAFI.evpn),
-            engine.Subscription.ANY_RT)
-        match_RTC = Match(exa.AFI(exa.AFI.ipv4), exa.SAFI(exa.SAFI.rtc),
+        match_IPVPN = Match(exa.AFI.ipv4, exa.SAFI.mpls_vpn,
+                            engine.Subscription.ANY_RT)
+        match_EVPN = Match(exa.AFI.l2vpn, exa.SAFI.evpn,
+                           engine.Subscription.ANY_RT)
+        match_RTC = Match(exa.AFI.ipv4, exa.SAFI.rtc,
                           engine.Subscription.ANY_RT)
-        match_FlowSpecVPN = Match(exa.AFI(exa.AFI.ipv4),
-                                  exa.SAFI(exa.SAFI.flow_vpn),
+        match_FlowSpecVPN = Match(exa.AFI.ipv4, exa.SAFI.flow_vpn,
                                   engine.Subscription.ANY_RT)
         for match in [match_IPVPN, match_EVPN, match_RTC, match_FlowSpecVPN]:
             match_result = []
@@ -581,8 +577,7 @@ class RouteTableManager(threading.Thread, lg.LookingGlassMixin):
 
     def get_all_routes_but_rtc(self):
         return [re for re in self._match_2_workers_entries[MATCH_ANY].entries
-                if not (re.afi == exa.AFI(exa.AFI.ipv4) and
-                        re.safi == exa.SAFI(exa.SAFI.rtc))
+                if (re.afi, re.safi) != (exa.AFI.ipv4, exa.SAFI.rtc)
                 ]
 
     def get_local_routes_count(self):

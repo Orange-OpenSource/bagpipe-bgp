@@ -40,4 +40,5 @@ def set_device_mac(run_command_fn, dev_name, mac_address, netns_name=None):
         command_prefix = ""
 
     run_command_fn("%s ip link set %s address %s" % (command_prefix,
-                                                     dev_name, mac_address))
+                                                     dev_name, mac_address),
+                   run_as_root=True)

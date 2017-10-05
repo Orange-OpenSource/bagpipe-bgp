@@ -63,11 +63,10 @@ def proxy_arp(ifname, enable):
     sysctl(['net', 'ipv4', 'conf', ifname, 'proxy_arp_pvlan'], int(enable))
 
 
-class MPLSLinuxVRFDataplane(dp_drivers.VPNInstanceDataplane,
-                            lg.LookingGlassMixin):
+class MPLSLinuxVRFDataplane(dp_drivers.VPNInstanceDataplane):
 
     def __init__(self, *args, **kwargs):
-        dp_drivers.VPNInstanceDataplane.__init__(self, *args)
+        super(MPLSLinuxVRFDataplane, self).__init__(*args, **kwargs)
 
         # FIXME: maybe not thread safe ?
         self.ip = self.driver.ip
@@ -341,8 +340,7 @@ class MPLSLinuxVRFDataplane(dp_drivers.VPNInstanceDataplane,
                 for r in routes]
 
 
-class MPLSLinuxDataplaneDriver(dp_drivers.DataplaneDriver,
-                               lg.LookingGlassMixin):
+class MPLSLinuxDataplaneDriver(dp_drivers.DataplaneDriver):
 
     """
     This dataplane driver relies on the MPLS stack in the Linux kernel,

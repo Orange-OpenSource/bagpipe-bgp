@@ -98,8 +98,8 @@ class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
     '''
 
     type = constants.EVPN
-    afi = exa.AFI(exa.AFI.l2vpn)
-    safi = exa.SAFI(exa.SAFI.evpn)
+    afi = exa.AFI.l2vpn
+    safi = exa.SAFI.evpn
 
     @log_decorator.log
     def __init__(self, *args, **kwargs):
@@ -161,7 +161,7 @@ class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     # TrackerWorker callbacks for BGP route updates ##########################
 
-    def _route_2_tracked_entry(self, route):
+    def route_to_tracked_entry(self, route):
         if isinstance(route.nlri, exa.EVPNMAC):
             return (exa.EVPNMAC, route.nlri.mac)
         elif isinstance(route.nlri, exa.EVPNMulticast):
@@ -176,7 +176,7 @@ class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     @utils.synchronized
     @log_decorator.log
-    def _new_best_route(self, entry, new_route):
+    def new_best_route(self, entry, new_route):
         (entry_class, info) = entry
 
         encaps = self._check_encaps(new_route)
@@ -216,7 +216,7 @@ class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
 
     @utils.synchronized
     @log_decorator.log
-    def _best_route_removed(self, entry, old_route, last):
+    def best_route_removed(self, entry, old_route, last):
         (entry_class, info) = entry
 
         if entry_class == exa.EVPNMAC:
@@ -226,10 +226,18 @@ class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
                                "dataplane does not want it")
                 return
 
+            def ip_label_from_route(route):
+                return (route.nexthop, route.nlri.labels.labels[0])
+
+            if self.equivalent_route_in_best_routes(old_route,
+                                                    ip_label_from_route):
+                self.log.debug("Route for same dataplane is still in best "
+                               "routes, skipping removal")
+                return
+
             prefix = info
 
-            remote_pe = old_route.nexthop
-            label = old_route.nlri.label.labels[0]
+            remote_pe, label = ip_label_from_route(old_route)
 
             self.dataplane.remove_dataplane_for_remote_endpoint(
                 prefix, remote_pe, label, old_route.nlri)
@@ -237,26 +245,39 @@ class EVI(vpn_instance.VPNInstance, lg.LookingGlassMixin):
         elif entry_class == exa.EVPNMulticast:
             remote_endpoint = info
 
+            def ip_label_from_route(route):
+                pmsi_tunnel = route.attributes.get(exa.PMSI.ID)
+                remote_endpoint = pmsi_tunnel.ip
+                label = pmsi_tunnel.label
+                return (remote_endpoint, label)
+
             # check that the route is actually carrying an PMSITunnel of type
             # ingress replication
             pmsi_tunnel = old_route.attributes.get(exa.PMSI.ID)
             if not isinstance(pmsi_tunnel, exa.PMSIIngressReplication):
                 self.log.warning("PMSITunnel of suppressed route is of"
                                  " unsupported type")
-            else:
-                remote_endpoint = pmsi_tunnel.ip
-                label = pmsi_tunnel.label
-                self.log.info("Cleaning up dataplane for ingress replication "
-                              "destination %s", remote_endpoint)
-                self.dataplane.remove_dataplane_for_bum_endpoint(
-                    remote_endpoint, label, old_route.nlri)
+                return
+
+            if self.equivalent_route_in_best_routes(old_route,
+                                                    ip_label_from_route):
+                self.log.debug("Route for same dataplane is still in best "
+                               "routes, skipping removal")
+                return
+
+            remote_endpoint, label = ip_label_from_route(old_route)
+            self.log.info("Cleaning up dataplane for ingress replication "
+                          "destination %s", remote_endpoint)
+
+            self.dataplane.remove_dataplane_for_bum_endpoint(
+                remote_endpoint, label, old_route.nlri)
         else:
             self.log.warning("unsupported entry_class: %s",
                              entry_class.__name__)
 
     # Looking Glass ####
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
         if not self.gw_port:
             return {"gateway_port": None}
         else:

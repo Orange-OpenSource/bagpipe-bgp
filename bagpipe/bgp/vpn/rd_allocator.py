@@ -65,5 +65,5 @@ class RDAllocator(lg.LookingGlassMixin):
             LOG.warn("Asked to release a non registered route distinguisher: "
                      "%s", rd)
 
-    def get_log_local_info(self, prefix):
+    def get_lg_local_info(self, prefix):
         return self.rds

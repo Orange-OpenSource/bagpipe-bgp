@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import subprocess
 import threading
 
@@ -115,10 +114,6 @@ def run_command(log, command,
         - putting -1 in the acceptable_return_codes list means that *any* exit
         code is acceptable
     '''
-    if run_as_root and os.geteuid() == 0:
-        # do not need to wrap any call
-        run_as_root = False
-
     if run_as_root and cfg.CONF.COMMON.root_helper_daemon:
         log.debug("Running command in rootwrap mode: %s", command)
         exit_code, output, error = _rootwrap_command(log,

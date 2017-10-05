@@ -32,7 +32,7 @@ VXLAN_INTERFACE_PREFIX = "vxlan--"
 class LinuxVXLANEVIDataplane(evpn.VPNInstanceDataplane):
 
     def __init__(self, *args, **kwargs):
-        evpn.VPNInstanceDataplane.__init__(self, *args)
+        super(LinuxVXLANEVIDataplane, self).__init__(*args, **kwargs)
 
         if 'linuxbr' in kwargs:
             self.bridge_name = kwargs.get('linuxbr')
@@ -297,7 +297,7 @@ class LinuxVXLANEVIDataplane(evpn.VPNInstanceDataplane):
 
     # Looking glass ####
 
-    def get_log_local_info(self, path_prefix):
+    def get_lg_local_info(self, path_prefix):
         return {
             "linux_bridge": self.bridge_name,
             "vxlan_if": self.vxlan_if_name
@@ -322,21 +322,13 @@ class LinuxVXLANDataplaneDriver(dp_drivers.DataplaneDriver):
                          "to standard IANA-allocated port)")),
     ]
 
-    def __init__(self):
-        lg.LookingGlassLocalLogger.__init__(self, __name__)
-
-        self.log.info("Initializing %s", self.__class__.__name__)
-        dp_drivers.DataplaneDriver.__init__(self)
-
+    @log_decorator.log_info
     def initialize(self):
-        self.log.info("Really initializing %s", self.__class__.__name__)
-
         self._run_command("modprobe vxlan",
                           run_as_root=True)
 
+    @log_decorator.log_info
     def reset_state(self):
-        self.log.debug("Resetting %s dataplane", self.__class__.__name__)
-
         # delete all EVPN bridges
         cmd = "brctl show | tail -n +2 | awk '{print $1}'| grep '%s'"
         for bridge in self._run_command(cmd % BRIDGE_NAME_PREFIX,
@@ -360,7 +352,3 @@ class LinuxVXLANDataplaneDriver(dp_drivers.DataplaneDriver):
                               run_as_root=True)
             self._run_command("ip link delete %s" % interface,
                               run_as_root=True)
-
-    def _cleanup_real(self):
-        # FIXME: need to refine what would be different
-        self.reset_state()
